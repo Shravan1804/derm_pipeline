@@ -192,7 +192,7 @@ class MyApp(Tk):
         #self.resizable(0,0)
 
 #MODIF
-        self.img_crop_count = 0
+        self.img_crop_count = {}
         self.label_choices = set(image_category)
 
         self.files = infiles
@@ -394,10 +394,10 @@ class MyApp(Tk):
 
     def next(self, event=None):
 #MODIF
-        self.img_crop_count = 0
         self.current += 1
         self.current = (self.current + len(self.files)) % len(self.files)
         self.load_imgfile(self.files[self.current])
+        print "image", self.current, "/", len(self.files)
 
     def copy(self):
         c = "copy \"" + os.path.join(self.inDir, self.currentName) + "\" \"" + os.path.join(self.outDir, self.currentName) + "\""
@@ -449,16 +449,19 @@ class MyApp(Tk):
         dest = os.path.join(self.custom_outDir, choice)
         if not os.path.exists(dest): os.makedirs(dest)
 
+        if self.currentName not in self.img_crop_count:
+            self.img_crop_count[self.currentName] = 0
+
         box = self.getRealBox()
         c = "convert \"" + os.path.join(self.inDir, self.currentName) + "\""
         c += " -crop " + str(box[2]-box[0]) + "x" + str(box[3]-box[1]) + "+" + str(box[0]) + "+" + str(box[1])
         pre, ext = os.path.splitext(self.currentName)
-        c += " \"" + os.path.join(dest, pre + '_' + str(self.img_crop_count) + ext) + "\""
+        c += " \"" + os.path.join(dest, pre + '_' + str(self.img_crop_count[self.currentName]) + ext) + "\""
         print c
         subprocess.Popen(c, shell=True)
         print "Running"
         #os.system(c)
-        self.img_crop_count += 1
+        self.img_crop_count[self.currentName] += 1
 
 
     def load_imgfile(self, filename):
