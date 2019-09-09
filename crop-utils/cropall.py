@@ -1,6 +1,13 @@
 #! /usr/bin/env python2
 
 #README:
+
+#MODIF
+#PARAMETER FIRST IMG DIR SECOND ROOT OUTDIR E.G. data/exp5/arme and data/exp5-crops
+#MAKE BOUNDING BOX WITH MOUSE THEN PRESS s TO SAVE
+#PREV/NEXT IMG WITH a/d
+
+
 #this script needs
 #1.  python 2.7 (or at least < 3) https://www.python.org/downloads/release/python-278/
 #        also python-tk and python-imaging-tk
