@@ -1,16 +1,17 @@
+
 import os
 import cv2
 import math
 import random
 import numpy as np
 from scipy import ndimage
-
+from tqdm import tqdm
 
 class PatchSamplerDataset(object):
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.rotate.html#scipy.ndimage.rotate
     # rotation_padding=‘reflect’ or  ‘constant’ or ‘nearest’ or ‘mirror’ or ‘wrap’
     def __init__(self, root, patch_size, patch_per_img=-1, n_rotation=6, rotation_padding='constant',
-                 seed=42, transforms=None, save_dir=None):
+                 seed=42, transforms=None, save_dir='/tmp'):
         random.seed(seed)
         self.root = root
         self.transforms = transforms
@@ -18,7 +19,6 @@ class PatchSamplerDataset(object):
         self.patch_per_img = patch_per_img
         self.rotations = np.linspace(0, 360, n_rotation, endpoint=False, dtype=np.int).tolist()
         self.rotation_padding = rotation_padding
-        save_dir = '/tmp' if save_dir is None else save_dir
         rotated_dir = type(self).__name__ + '-rotated-pad' + rotation_padding
         self.save_img_rotated = os.path.join(save_dir, rotated_dir)
         if not os.path.exists(self.save_img_rotated):
@@ -45,10 +45,10 @@ class PatchSamplerDataset(object):
         else:
             return im_arr
 
-    def prepare_patches_from_img_files(self, img_files):
+    def prepare_patches_from_img_files(self, dir_path, img_files):
         sampled_patches = []
         for img_file in tqdm(img_files):
-            img_path = os.path.join(root, c, img_file)
+            img_path = os.path.join(dir_path, img_file)
             sampled_patches.extend(self.img_as_grid_of_patches(img_path))
             sampled_patches.extend(self.sample_random_patch_from_img(img_path))
         return sampled_patches
