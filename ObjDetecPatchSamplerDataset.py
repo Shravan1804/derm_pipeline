@@ -1,135 +1,143 @@
 import os
 import cv2
-import math
 import random
 import numpy as np
-from tqdm import tqdm
 from scipy import ndimage
 
+import torch
 
-class PatchSamplerDataset(object):
-    # https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.rotate.html#scipy.ndimage.rotate
-    # rotation_padding=‘reflect’ or  ‘constant’ or ‘nearest’ or ‘mirror’ or ‘wrap’
-    def __init__(self, root, patch_size, sample_n_patch=-1, n_rotation=6, rotation_padding='constant', seed=42,
+from PatchSamplerDataset import PatchSamplerDataset
+
+
+class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
+    mask_file_ext = '.png'
+
+    def __init__(self, root, patch_size, patch_per_img=-1, n_rotation=6, rotation_padding='constant', seed=42,
                  transforms=None, save_dir=None):
-        random.seed(seed)
-        self.transforms = transforms
-        self.patch_size = patch_size
-        self.save_dir_rotation = '/tmp/img-rotation' if save_dir is None \
-            else os.path.join(save_dir, 'img-rotation')
-        if not os.path.exists(self.save_dir_rotation):
-            os.makedirs(self.save_dir_rotation)
-        self.sample_n_patch = sample_n_patch
-        self.rotations = np.linspace(0, 360, n_rotation, endpoint=False, dtype=np.int).tolist()
-        self.rotation_padding = rotation_padding
-        self.classes = [c for c in sorted(os.listdir(root)) if os.path.isdir(os.path.join(root, c))]
-        patches_file = 'patches-p' + str(patch_size) + '-n' + str(sample_n_patch) + '-r' + str(n_rotation) + \
-                       '-pad' + rotation_padding + '-seed' + str(seed) + '.npy'
-        patches_path = os.path.join('/tmp', patches_file) if save_dir is None else os.path.join(save_dir, patches_file)
-        if os.path.exists(patches_path):
-            print("loading patches from previous run, seed = ", seed)
-            self.patches = np.load(patches_path).tolist()
-        else:
-            self.patches = []
-            for c in self.classes:
-                print("Preparing patches for class", c)
-                for img_file in tqdm(list(sorted(os.listdir(os.path.join(root, c))))):
-                    self.sample_patch_from_img(os.path.join(root, c, img_file), c)
-                print()
+        super().__init__(root, patch_size, patch_per_img, n_rotation, rotation_padding, seed, transforms, save_dir)
+        self.masks_dirs = [m for m in sorted(os.listdir(self.root)) if os.path.isdir(os.path.join(root, m)
+                                                                                     and m.startswith('masks_'))]
+        if len(self.patches) == 0:
+            self.patches = self.prepare_patches_from_img_files(list(sorted(os.listdir(os.path.join(root, 'images')))))
             random.shuffle(self.patches)
-            np.save(patches_path, self.patches)
-
-    def get_sample_n_patch(self, im):
-        im_w, im_h, im_c = im.shape
-        return self.sample_n_patch if self.sample_n_patch != -1 \
-            else int(im_h * im_w / self.patch_size / self.patch_size)
-
-    def maybe_resize(self, im):
-        w, h, c = im.shape
-        smallest = min(h, w)
-        if smallest < self.patch_size:
-            ratio = self.patch_size / smallest
-            return cv2.resize(im, (max(self.patch_size, int(w * ratio)),
-                                   max(self.patch_size, int(h * ratio))))
-        else:
-            return im
-
-    def img_as_grid_of_patches(self, cl, img_path, im_arr):
-        im_h, im_w, im_c = np.shape(im_arr)
-        step_h = self.patch_size - PatchSamplerDataset.get_overlap(im_h, self.patch_size)
-        grid_h = np.arange(start=0, stop=im_h - self.patch_size, step=step_h)
-        step_w = self.patch_size - PatchSamplerDataset.get_overlap(im_w, self.patch_size)
-        grid_w = np.arange(start=0, stop=im_w - self.patch_size, step=step_w)
-        grid_idx = [PatchSamplerDataset.get_patch_map(cl, img_path, a, b) for a in grid_h for b in grid_w]
-        if not grid_idx:
-            grid_idx = [PatchSamplerDataset.get_patch_map(cl, img_path, 0, 0)]
-        self.patches.extend(grid_idx)
-
-    def sample_patch_from_img(self, img_path, cl):
-        im = self.maybe_resize(cv2.imread(img_path))
-        self.img_as_grid_of_patches(cl, img_path, im)
-        n = int(self.get_sample_n_patch(im) / len(self.rotations))
-        for rotation in self.rotations:
-            if rotation == 0:
-                im_arr_rotated = im
-                path_to_save = img_path
-            else:
-                file, ext = os.path.splitext(os.path.basename(img_path))
-                path_to_save = os.path.join(self.save_dir_rotation, file + '-r' + str(rotation) + ext)
-                if not os.path.exists(path_to_save):
-                    im_arr_rotated = ndimage.rotate(im.astype(np.int16), rotation, reshape=True,
-                                                    mode=self.rotation_padding, cval=-1)
-                    im_arr_rotated = self.maybe_resize(im_arr_rotated)
-                    cv2.imwrite(path_to_save, im_arr_rotated)
-                else:
-                    im_arr_rotated = self.maybe_resize(cv2.imread(path_to_save))
-            h, w, c = np.shape(im_arr_rotated)
-            for i in range(n):
-                patch = [-1]
-                loop_count = 0
-                while -1 in patch and loop_count < 1000:
-                    idx_h, idx_w = (np.random.randint(low=0, high=h - self.patch_size, size=1)[0],
-                                    np.random.randint(low=0, high=w - self.patch_size, size=1)[0])
-                    patch = PatchSamplerDataset.get_img_patch(im_arr_rotated, idx_h, idx_w, self.patch_size)
-                    loop_count += 1
-                if loop_count >= 1000:
-                    continue
-                self.patches.append(PatchSamplerDataset.get_patch_map(cl, path_to_save, idx_h, idx_w))
+            self.save_patches()
 
     def __getitem__(self, idx):
-        patch = self.patches[idx]
-        im = self.maybe_resize(cv2.imread(patch['path']))
-        im = im[patch['idx_h']:patch['idx_h'] + self.patch_size, patch['idx_w']:patch['idx_w'] + self.patch_size]
-        target = patch['class']
+        patch_map = self.patches[idx]
+        img = Image.fromarray(self.get_patch_from_patch_map(patch_map)).convert("RGB")
+        raw_masks = self.get_masks_from_patch_map(patch_map)
+
+        classes = masks = None
+        boxes = []
+        for i, mask in enumerate(raw_masks):
+            c, b, m = ObjDetecPatchSamplerDataset.process_mask(mask)
+            if b is None: continue  # empty mask
+            classes = c if classes is None else np.append(classes, (i + 1) * c)
+            boxes += b
+            masks = m if masks is None else np.append(masks, m, axis=0)
+
+        num_objs = len(classes)
+        # convert everything into a torch.Tensor
+        boxes = torch.as_tensor(boxes, dtype=torch.float32)
+        labels = torch.as_tensor(classes, dtype=torch.int64)
+        masks = torch.as_tensor(masks, dtype=torch.uint8)
+
+        image_id = torch.tensor([idx])
+        try:
+            area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
+        except IndexError as error:
+            print(
+            "Image", self.imgs[idx], "with mask", self.masks[idx], "and boxes", boxes, "raised an IndexError exception")
+            raise error
+        # suppose all instances are not crowd
+        iscrowd = torch.zeros((num_objs,), dtype=torch.int64)
+
+        target = {}
+        target["boxes"] = boxes
+        target["labels"] = labels
+        target["masks"] = masks
+        target["image_id"] = image_id
+        target["area"] = area
+        target["iscrowd"] = iscrowd
 
         if self.transforms is not None:
-            im, target = self.transforms(im, target)
+            img, target = self.transforms(img, target)
 
-        return im, target
+        return img, target
 
-    def __len__(self):
-        return len(self.patches)
+    def is_valid_patch(self, patch_map):
+        is_valid = False
+        for mask in self.get_masks_from_patch_map(patch_map):
+            is_valid = is_valid or np.unique(mask).size > 1
+        return is_valid
+
+    def get_rotated_img(self, img_path, im_arr, rotation):
+        im_arr_rotated, path_to_save = super().get_rotated_img(img_path, im_arr, rotation)
+        if rotation != 0:
+            mask_file = ObjDetecPatchSamplerDataset.get_mask_filename(img_path)
+            rotated_mask_file = ObjDetecPatchSamplerDataset.get_mask_filename(path_to_save)
+            for masks_dir in self.masks_dirs:
+                mask_dir_path = os.path.join(self.save_img_rotated, masks_dir)
+                if not os.path.exists(mask_dir_path):
+                    os.makedirs(mask_dir_path)
+                rotated_mask_file_path = os.path.join(mask_dir_path, rotated_mask_file)
+                if not os.path.exists(rotated_mask_file_path):
+                    mask_arr = cv2.imread(os.path.join(self.root, masks_dir, mask_file))
+                    rotated_mask_arr = ndimage.rotate(mask_arr, rotation, reshape=True,
+                                                    mode=self.rotation_padding)
+                    rotated_mask_arr = self.maybe_resize(rotated_mask_arr)
+                    cv2.imwrite(rotated_mask_file_path, rotated_mask_arr)
+
+        return im_arr_rotated, path_to_save
+
+    def get_masks_from_patch_map(self, patch_map):
+        mask_file = ObjDetecPatchSamplerDataset.get_mask_filename(patch_map['path'])
+        masks = []
+        for masks_dir in self.masks_dirs:
+            mask_dir_path = os.path.join(self.save_img_rotated, masks_dir) if patch_map['rotation'] != 0 \
+                else os.path.join(self.root, masks_dir)
+            masks.append(cv2.imread(os.path.join(mask_dir_path, mask_file)))
+        return masks
 
     @staticmethod
-    def get_overlap(n, div):
-        remainder = n % div
-        quotient = max(1, int(n / div))
-        overlap = math.ceil((div - remainder) / quotient)
-        return 0 if overlap == n else overlap
+    def process_mask(mask):
+        # instances are encoded as different colors
+        obj_ids = np.unique(mask)
+        if (len(obj_ids) < 2): return None, None, None  # no object, only background
+        # first id is the background, so remove it
+        obj_ids = obj_ids[1:]
+
+        # split the color-encoded mask into a set
+        # of binary masks
+        masks = mask == obj_ids[:, None, None]
+
+        # get bounding box coordinates for each mask
+        num_objs = len(obj_ids)
+        boxes = []
+        for i in range(num_objs):
+            pos = np.where(masks[i])
+            xmin = np.min(pos[1])
+            xmax = np.max(pos[1])
+            ymin = np.min(pos[0])
+            ymax = np.max(pos[0])
+            boxes.append([xmin, ymin, xmax, ymax])
+
+        return np.ones(num_objs, dtype=np.int), boxes, masks
 
     @staticmethod
-    def get_img_patch(im, id_h, id_w, patch_size):
-        return im[id_h:id_h + patch_size, id_w:id_w + patch_size]
-
-    @staticmethod
-    def get_patch_map(cl, img_path, idx_h, idx_w):
-        return {'class': cl, 'path': img_path, 'idx_h': idx_h, 'idx_w': idx_w}
+    def get_mask_filename(path):
+        return PatchSamplerDataset.get_filename_no_ext(path) + ObjDetecPatchSamplerDataset.mask_file_ext
 
 
 def main(args):
-    dataset = PatchSamplerDataset('/home/shravan/deep-learning/data/skin_body_location_crops/train', 256, 20,
-                                  rotation_padding='mirror')
-
+    dataset = ObjDetecPatchSamplerDataset('/home/shravan/deep-learning/data/skin_body_location_crops/train', 256)
+    c = tmp = 0
+    for d in dataset.patches:
+        print(d)
+        if "tmp" in d['path']: tmp +=1
+        else: c+=1
+    print(type(dataset).__name__)
+    print('tmp:',tmp,'vs not tmp:',c)
 
 if __name__ == "__main__":
     main(None)
