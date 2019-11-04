@@ -1,4 +1,3 @@
-
 import os
 import cv2
 import math
@@ -7,11 +6,12 @@ import numpy as np
 from scipy import ndimage
 from tqdm import tqdm
 
+
 class PatchSamplerDataset(object):
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.rotate.html#scipy.ndimage.rotate
     # rotation_padding=‘reflect’ or  ‘constant’ or ‘nearest’ or ‘mirror’ or ‘wrap’
     def __init__(self, root, patch_size, patch_per_img=-1, n_rotation=6, rotation_padding='constant',
-                 seed=42, transforms=None, save_dir='/tmp'):
+                 seed=42, transforms=None):
         random.seed(seed)
         self.root = root
         self.transforms = transforms
@@ -19,14 +19,15 @@ class PatchSamplerDataset(object):
         self.patch_per_img = patch_per_img
         self.rotations = np.linspace(0, 360, n_rotation, endpoint=False, dtype=np.int).tolist()
         self.rotation_padding = rotation_padding
-        rotated_dir = type(self).__name__ + '-rotated-pad' + rotation_padding
-        self.save_img_rotated = os.path.join(save_dir, rotated_dir)
+        rotated_dir = 'cache_' + type(self).__name__ + '-rotated-pad' + rotation_padding
+        self.save_img_rotated = os.path.join(os.path.dirname(self.root), rotated_dir)
         if not os.path.exists(self.save_img_rotated):
             os.makedirs(self.save_img_rotated)
-        patches_file = type(self).__name__ + '-patches-p' + str(patch_size) + '-n' + str(patch_per_img) + \
+        patches_file = 'cache_' + type(self).__name__ + '-patches-p' + str(patch_size) + '-n' + str(patch_per_img) + \
                        '-r' + str(n_rotation) + '-pad' + rotation_padding + '-seed' + str(seed) + '.npy'
-        self.patches_path = os.path.join(save_dir, patches_file)
-        self.patches = np.load(self.patches_path).tolist() if os.path.exists(self.patches_path) else []
+        self.patches_path = os.path.join(os.path.dirname(self.root), patches_file)
+        self.patches = np.load(self.patches_path, allow_pickle=True).tolist() if os.path.exists(self.patches_path) \
+            else []
         if len(self.patches) > 0:
             print("Loaded patches from previous run, seed = ", seed)
 
@@ -37,7 +38,7 @@ class PatchSamplerDataset(object):
         return len(self.patches)
 
     def maybe_resize(self, im_arr):
-        w, h, c = im_arr.shape
+        h, w = im_arr.shape[:2]
         smallest = min(h, w)
         if smallest < self.patch_size:
             ratio = self.patch_size / smallest
@@ -54,8 +55,8 @@ class PatchSamplerDataset(object):
         return sampled_patches
 
     def img_as_grid_of_patches(self, img_path):
-        im_arr = self.maybe_resize(cv2.imread(img_path))
-        im_h, im_w, im_c = np.shape(im_arr)
+        im_arr = self.maybe_resize(cv2.imread(img_path, cv2.IMREAD_UNCHANGED))
+        im_h, im_w = im_arr.shape[:2]
         step_h = self.patch_size - PatchSamplerDataset.get_overlap(im_h, self.patch_size)
         grid_h = np.arange(start=0, stop=im_h - self.patch_size, step=step_h)
         step_w = self.patch_size - PatchSamplerDataset.get_overlap(im_w, self.patch_size)
@@ -66,14 +67,13 @@ class PatchSamplerDataset(object):
         grid_idx = [x for x in grid_idx if self.is_valid_patch(x)]
         return grid_idx
 
-
     def sample_random_patch_from_img(self, img_path):
-        im_arr = self.maybe_resize(cv2.imread(img_path))
+        im_arr = self.maybe_resize(cv2.imread(img_path, cv2.IMREAD_UNCHANGED))
         n_samples = max(1, int(self.get_nb_patch_per_img(im_arr) / len(self.rotations)))
         sampled_patches = []
         for rotation in self.rotations:
             im_arr_rotated, path_to_save = self.get_rotated_img(img_path, im_arr, rotation)
-            h, w, c = np.shape(im_arr_rotated)
+            h, w = im_arr_rotated.shape[:2]
             for _ in range(n_samples):
                 patch = [-1]
                 loop_count = 0
@@ -92,11 +92,11 @@ class PatchSamplerDataset(object):
         raise NotImplementedError
 
     def get_nb_patch_per_img(self, im_arr):
-        im_w, im_h, im_c = im_arr.shape
+        im_h, im_w = im_arr.shape[:2]
         return self.patch_per_img if self.patch_per_img != -1 \
             else int(im_h * im_w / self.patch_size / self.patch_size)
 
-    #rotate if was not already done once and saved
+    # rotate if was not already done once and saved
     def get_rotated_img(self, img_path, im_arr, rotation):
         if rotation == 0:
             return im_arr, img_path
@@ -109,14 +109,16 @@ class PatchSamplerDataset(object):
             im_arr_rotated = self.maybe_resize(im_arr_rotated)
             cv2.imwrite(path_to_save, im_arr_rotated)
         else:
-            im_arr_rotated = self.maybe_resize(cv2.imread(path_to_save))
+            im_arr_rotated = self.maybe_resize(cv2.imread(path_to_save, cv2.IMREAD_UNCHANGED))
         return im_arr_rotated, path_to_save
 
     def get_patch_from_idx(self, im, id_h, id_w):
-        return im[id_h:id_h + patch_size, id_w:id_w + self.patch_size]
+        return im[id_h:id_h + self.patch_size, id_w:id_w + self.patch_size]
 
     def get_patch_from_patch_map(self, patch_map):
-        im = self.maybe_resize(cv2.imread(patch_map['path']))
+        im = self.maybe_resize(cv2.imread(patch_map['path'], cv2.IMREAD_UNCHANGED))
+        id_h = patch_map['idx_h']
+        id_w = patch_map['idx_w']
         return self.get_patch_from_idx(im, id_h, id_w)
 
     def save_patches(self):

@@ -3,6 +3,8 @@ import cv2
 import random
 import numpy as np
 from scipy import ndimage
+from PIL import Image
+import sys
 
 import torch
 
@@ -13,12 +15,13 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
     mask_file_ext = '.png'
 
     def __init__(self, root, patch_size, patch_per_img=-1, n_rotation=6, rotation_padding='constant', seed=42,
-                 transforms=None, save_dir=None):
-        super().__init__(root, patch_size, patch_per_img, n_rotation, rotation_padding, seed, transforms, save_dir)
-        self.masks_dirs = [m for m in sorted(os.listdir(self.root)) if os.path.isdir(os.path.join(root, m)
-                                                                                     and m.startswith('masks_'))]
+                 transforms=None):
+        super().__init__(root, patch_size, patch_per_img, n_rotation, rotation_padding, seed, transforms)
+        self.masks_dirs = [m for m in sorted(os.listdir(self.root)) if os.path.isdir(os.path.join(self.root, m))
+                        and m.startswith('masks_')]
         if len(self.patches) == 0:
-            self.patches = self.prepare_patches_from_img_files(list(sorted(os.listdir(os.path.join(root, 'images')))))
+            images_path = os.path.join(self.root, 'images')
+            self.patches.extend(self.prepare_patches_from_img_files(images_path, list(sorted(os.listdir(images_path)))))
             random.shuffle(self.patches)
             self.save_patches()
 
@@ -77,12 +80,12 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             mask_file = ObjDetecPatchSamplerDataset.get_mask_filename(img_path)
             rotated_mask_file = ObjDetecPatchSamplerDataset.get_mask_filename(path_to_save)
             for masks_dir in self.masks_dirs:
-                mask_dir_path = os.path.join(self.save_img_rotated, masks_dir)
-                if not os.path.exists(mask_dir_path):
-                    os.makedirs(mask_dir_path)
-                rotated_mask_file_path = os.path.join(mask_dir_path, rotated_mask_file)
+                rotated_mask_dir_path = os.path.join(self.save_img_rotated, masks_dir)
+                if not os.path.exists(rotated_mask_dir_path):
+                    os.makedirs(rotated_mask_dir_path)
+                rotated_mask_file_path = os.path.join(rotated_mask_dir_path, rotated_mask_file)
                 if not os.path.exists(rotated_mask_file_path):
-                    mask_arr = cv2.imread(os.path.join(self.root, masks_dir, mask_file))
+                    mask_arr = cv2.imread(os.path.join(self.root, masks_dir, mask_file), cv2.IMREAD_UNCHANGED)
                     rotated_mask_arr = ndimage.rotate(mask_arr, rotation, reshape=True,
                                                     mode=self.rotation_padding)
                     rotated_mask_arr = self.maybe_resize(rotated_mask_arr)
@@ -96,7 +99,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         for masks_dir in self.masks_dirs:
             mask_dir_path = os.path.join(self.save_img_rotated, masks_dir) if patch_map['rotation'] != 0 \
                 else os.path.join(self.root, masks_dir)
-            masks.append(cv2.imread(os.path.join(mask_dir_path, mask_file)))
+            masks.append(cv2.imread(os.path.join(mask_dir_path, mask_file), cv2.IMREAD_UNCHANGED))
         return masks
 
     @staticmethod
@@ -106,11 +109,9 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         if (len(obj_ids) < 2): return None, None, None  # no object, only background
         # first id is the background, so remove it
         obj_ids = obj_ids[1:]
-
         # split the color-encoded mask into a set
         # of binary masks
         masks = mask == obj_ids[:, None, None]
-
         # get bounding box coordinates for each mask
         num_objs = len(obj_ids)
         boxes = []
@@ -129,8 +130,9 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         return PatchSamplerDataset.get_filename_no_ext(path) + ObjDetecPatchSamplerDataset.mask_file_ext
 
 
+
 def main(args):
-    dataset = ObjDetecPatchSamplerDataset('/home/shravan/deep-learning/data/skin_body_location_crops/train', 256)
+    dataset = ClassificationPatchSamplerDataset('/home/shravan/deep-learning/data/skin_body_location_crops/train', 256)
     c = tmp = 0
     for d in dataset.patches:
         print(d)
