@@ -14,7 +14,7 @@ class ClassificationPatchSamplerDataset(PatchSamplerDataset):
             for c in self.classes:
                 print("Preparing patches for class", c)
                 class_path = os.path.join(self.root, c)
-                class_patches = self.prepare_patches_from_img_files(class_path, list(sorted(os.listdir(class_path))))
+                class_patches = self.prepare_patches_from_img_files(class_path)
                 print()
                 self.patches.extend([{'class': c, **m} for m in class_patches])
             random.shuffle(self.patches)

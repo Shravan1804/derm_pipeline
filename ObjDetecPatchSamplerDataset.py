@@ -21,7 +21,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                         and m.startswith('masks_')]
         if len(self.patches) == 0:
             images_path = os.path.join(self.root, 'images')
-            self.patches.extend(self.prepare_patches_from_img_files(images_path, list(sorted(os.listdir(images_path)))))
+            self.patches.extend(self.prepare_patches_from_img_files(images_path))
             random.shuffle(self.patches)
             self.save_patches()
 

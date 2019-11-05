@@ -5,7 +5,8 @@ import random
 import numpy as np
 from scipy import ndimage
 from tqdm import tqdm
-
+from timeit import default_timer as timer
+import datetime
 
 class PatchSamplerDataset(object):
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.rotate.html#scipy.ndimage.rotate
@@ -46,12 +47,16 @@ class PatchSamplerDataset(object):
         else:
             return im_arr
 
-    def prepare_patches_from_img_files(self, dir_path, img_files):
+    def prepare_patches_from_img_files(self, dir_path):
+        start = timer()
+        img_files = list(sorted(os.listdir(dir_path)))
         sampled_patches = []
         for img_file in tqdm(img_files):
             img_path = os.path.join(dir_path, img_file)
             sampled_patches.extend(self.img_as_grid_of_patches(img_path))
             sampled_patches.extend(self.sample_random_patch_from_img(img_path))
+        end = timer()
+        print(dir_path, "images were processed in", datetime.timedelta(seconds=end-start))
         return sampled_patches
 
     def img_as_grid_of_patches(self, img_path):
