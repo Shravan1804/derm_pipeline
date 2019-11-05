@@ -66,9 +66,9 @@ class PatchSamplerDataset(object):
         grid_h = np.arange(start=0, stop=im_h - self.patch_size, step=step_h)
         step_w = self.patch_size - PatchSamplerDataset.get_overlap(im_w, self.patch_size)
         grid_w = np.arange(start=0, stop=im_w - self.patch_size, step=step_w)
-        grid_idx = [PatchSamplerDataset.get_patch_map(img_path, 0, a, b) for a in grid_h for b in grid_w]
+        grid_idx = [self.get_patch_map(img_path, 0, a, b) for a in grid_h for b in grid_w]
         if not grid_idx:
-            grid_idx = [PatchSamplerDataset.get_patch_map(img_path, 0, 0, 0)]
+            grid_idx = [self.get_patch_map(img_path, 0, 0, 0)]
         grid_idx = [x for x in grid_idx if self.is_valid_patch(x)]
         return grid_idx
 
@@ -86,7 +86,7 @@ class PatchSamplerDataset(object):
                     idx_h, idx_w = (np.random.randint(low=0, high=h - self.patch_size, size=1)[0],
                                     np.random.randint(low=0, high=w - self.patch_size, size=1)[0])
                     patch = self.get_patch_from_idx(im_arr_rotated, idx_h, idx_w)
-                    patch_map = PatchSamplerDataset.get_patch_map(path_to_save, rotation, idx_h, idx_w)
+                    patch_map = self.get_patch_map(path_to_save, rotation, idx_h, idx_w)
                     loop_count += 1
                 if loop_count >= 1000:
                     continue
@@ -95,6 +95,9 @@ class PatchSamplerDataset(object):
 
     def is_valid_patch(self, patch_map):
         raise NotImplementedError
+
+    def save_patches(self):
+        np.save(self.patches_path, self.patches)
 
     def get_nb_patch_per_img(self, im_arr):
         im_h, im_w = im_arr.shape[:2]
@@ -121,13 +124,15 @@ class PatchSamplerDataset(object):
         return im[id_h:id_h + self.patch_size, id_w:id_w + self.patch_size]
 
     def get_patch_from_patch_map(self, patch_map):
-        im = self.maybe_resize(cv2.imread(patch_map['path'], cv2.IMREAD_UNCHANGED))
+        img_path = os.path.join(os.path.dirname(self.root), patch_map['path'])
+        im = self.maybe_resize(cv2.imread(img_path, cv2.IMREAD_UNCHANGED))
         id_h = patch_map['idx_h']
         id_w = patch_map['idx_w']
         return self.get_patch_from_idx(im, id_h, id_w)
 
-    def save_patches(self):
-        np.save(self.patches_path, self.patches)
+    def get_patch_map(self, img_path, rotation, idx_h, idx_w):
+        img_path = img_path.replace(os.path.dirname(self.root) + '/', '')
+        return {'path': img_path, 'rotation': rotation, 'idx_h': idx_h, 'idx_w': idx_w}
 
     @staticmethod
     def get_overlap(n, div):
@@ -135,10 +140,6 @@ class PatchSamplerDataset(object):
         quotient = max(1, int(n / div))
         overlap = math.ceil((div - remainder) / quotient)
         return 0 if overlap == n else overlap
-
-    @staticmethod
-    def get_patch_map(img_path, rotation, idx_h, idx_w):
-        return {'path': img_path, 'rotation': rotation, 'idx_h': idx_h, 'idx_w': idx_w}
 
     @staticmethod
     def get_filename_no_ext(path):
