@@ -13,8 +13,7 @@ class ClassificationPatchSamplerDataset(PatchSamplerDataset):
         if len(self.patches) == 0:
             for c in self.classes:
                 print("Preparing patches for class", c)
-                class_path = os.path.join(self.root, c)
-                class_patches = self.prepare_patches_from_img_files(class_path)
+                class_patches = self.prepare_patches_from_img_files(os.path.join(self.root, c))
                 print()
                 self.patches.extend([{'class': c, **m} for m in class_patches])
             random.shuffle(self.patches)
