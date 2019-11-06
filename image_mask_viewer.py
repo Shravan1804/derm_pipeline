@@ -1,3 +1,10 @@
+#FULLSCREEN
+#important to be the FIRST import
+import matplotlib
+matplotlib.use('TkAgg')
+#else can run first in bash before script
+# export MPLBACKEND=TkAgg
+
 import cv2
 import os, sys
 import argparse
@@ -7,14 +14,6 @@ from matplotlib.lines import Line2D
 MASK_EXT = '.png'
 COLORS = [(238, 130, 238),(139,69,19)]
 IMG_DIR = 'images'
-
-#before starting run in bash:
-# export MPLBACKEND=TkAgg
-
-#try the following as well
-# import matplotlib
-#matplotlib.use('Agg')
-
 
 
 def plt_set_fullscreen():
