@@ -17,7 +17,9 @@ class ClassificationPatchSamplerDataset(PatchSamplerDataset):
                 print()
                 self.patches.extend([{'class': c, **m} for m in class_patches])
             random.shuffle(self.patches)
-            self.save_patches()
+            self.save_patches_map()
+            print("Storing all patch in cache ...")
+            self.store_patches()
 
     def __getitem__(self, idx):
         patch_map = self.patches[idx]

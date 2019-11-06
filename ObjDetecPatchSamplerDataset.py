@@ -1,11 +1,11 @@
 import os
+import sys
 import cv2
 import random
 import numpy as np
 from scipy import ndimage
 from PIL import Image
-import sys
-
+from tqdm import tqdm
 import torch
 
 from PatchSamplerDataset import PatchSamplerDataset
@@ -22,7 +22,9 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         if len(self.patches) == 0:
             self.patches.extend(self.prepare_patches_from_img_files(os.path.join(self.root, 'images')))
             random.shuffle(self.patches)
-            self.save_patches()
+            self.save_patches_map()
+            print("Storing all patch in cache ...")
+            self.store_patches()
 
     def __getitem__(self, idx):
         patch_map = self.patches[idx]
@@ -69,15 +71,15 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
     def is_valid_patch(self, patch_map):
         is_valid = False
-        for mask in self.get_masks_from_patch_map(patch_map):
+        for mask in self.get_masks_from_patch_map(patch_map, dont_save=True):
             is_valid = is_valid or np.unique(mask).size > 1
         return is_valid
 
     def get_rotated_img(self, img_path, im_arr, rotation):
         im_arr_rotated, path_to_save = super().get_rotated_img(img_path, im_arr, rotation)
         if rotation != 0:
-            mask_file = ObjDetecPatchSamplerDataset.get_mask_filename(img_path)
-            rotated_mask_file = ObjDetecPatchSamplerDataset.get_mask_filename(path_to_save)
+            mask_file = ObjDetecPatchSamplerDataset.get_img_mask_fname(img_path)
+            rotated_mask_file = ObjDetecPatchSamplerDataset.get_img_mask_fname(path_to_save)
             for masks_dir in self.masks_dirs:
                 rotated_mask_dir_path = os.path.join(self.save_img_rotated, masks_dir)
                 if not os.path.exists(rotated_mask_dir_path):
@@ -92,14 +94,31 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
         return im_arr_rotated, path_to_save
 
-    def get_masks_from_patch_map(self, patch_map):
-        mask_file = ObjDetecPatchSamplerDataset.get_mask_filename(patch_map['path'])
+    def get_masks_from_patch_map(self, patch_map, dont_save=False):
+        mask_file = ObjDetecPatchSamplerDataset.get_mask_fname(patch_map)
         masks = []
-        for masks_dir in self.masks_dirs:
-            mask_dir_path = os.path.join(self.save_img_rotated, masks_dir) if patch_map['rotation'] != 0 \
-                else os.path.join(self.root, masks_dir)
-            masks.append(cv2.imread(os.path.join(mask_dir_path, mask_file), cv2.IMREAD_UNCHANGED))
+        for mask_dir in self.masks_dirs:
+            mask_path = os.path.join(self.patches_dir, mask_dir, mask_file)
+            if os.path.exists(mask_path):
+                masks.append(cv2.imread(mask_path, cv2.IMREAD_UNCHANGED))
+            else:
+                mask_dir_path = os.path.join(self.save_img_rotated, mask_dir) if patch_map['rotation'] != 0 \
+                    else os.path.join(self.root, mask_dir)
+                mask = cv2.imread(os.path.join(mask_dir_path,
+                                ObjDetecPatchSamplerDataset.get_img_mask_fname(patch_map['img_path'])),
+                                cv2.IMREAD_UNCHANGED)
+                mask = self.get_patch_from_idx(mask, patch_map['idx_h'], patch_map['idx_w'])
+                if not os.path.exists(os.path.dirname(mask_path)):
+                    os.makedirs(os.path.dirname(mask_path))
+                if not dont_save:
+                    cv2.imwrite(mask_path, mask)
+                masks.append(mask)
         return masks
+
+    def store_patches(self):
+        for patch_map in tqdm(self.patches):
+            _ = self.get_patch_from_patch_map(patch_map)
+            _ = self.get_masks_from_patch_map(patch_map)
 
     @staticmethod
     def process_mask(mask):
@@ -125,8 +144,13 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         return np.ones(num_objs, dtype=np.int), boxes, masks
 
     @staticmethod
-    def get_mask_filename(path):
-        return PatchSamplerDataset.get_filename_no_ext(path) + ObjDetecPatchSamplerDataset.mask_file_ext
+    def get_mask_fname(patch_map):
+        return ObjDetecPatchSamplerDataset.get_img_mask_fname(patch_map['patch_path'])
+
+    @staticmethod
+    def get_img_mask_fname(img_path):
+        return PatchSamplerDataset.get_fname_no_ext(os.path.basename(img_path)) \
+                    + ObjDetecPatchSamplerDataset.mask_file_ext
 
 
 
@@ -135,7 +159,7 @@ def main(args):
     c = tmp = 0
     for d in dataset.patches:
         print(d)
-        if "tmp" in d['path']: tmp +=1
+        if "tmp" in d['img_path']: tmp +=1
         else: c+=1
     print(type(dataset).__name__)
     print('tmp:',tmp,'vs not tmp:',c)
