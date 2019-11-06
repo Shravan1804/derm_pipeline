@@ -14,20 +14,21 @@ from PatchSamplerDataset import PatchSamplerDataset
 class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
     mask_file_ext = '.png'
 
-    def __init__(self, root, patch_size, patch_per_img=-1, n_rotation=6, rotation_padding='constant', seed=42,
-                 transforms=None):
-        super().__init__(root, patch_size, patch_per_img, n_rotation, rotation_padding, seed, transforms)
+    def __init__(self, root, patch_size, is_train, patch_per_img=-1, n_rotation=6, rotation_padding='constant',
+                 seed=42, test=0.15, transforms=None):
+        super().__init__(root, patch_size, is_train, patch_per_img, n_rotation, rotation_padding, seed, test, transforms)
         self.masks_dirs = [m for m in sorted(os.listdir(self.root)) if os.path.isdir(os.path.join(self.root, m))
                         and m.startswith('masks_')]
         if len(self.patches) == 0:
-            self.patches.extend(self.prepare_patches_from_img_files(os.path.join(self.root, 'images')))
+            self.patches.extend(self.prepare_patches_from_imgs(os.path.join(self.root, PatchSamplerDataset.img_dir)))
             random.shuffle(self.patches)
+            self.populate_train_test_lists()
             self.save_patches_map()
             print("Storing all patch in cache ...")
             self.store_patches()
 
     def __getitem__(self, idx):
-        patch_map = self.patches[idx]
+        patch_map = self.patches_train[idx] if self.is_train else self.patches_test[idx]
         img = Image.fromarray(self.get_patch_from_patch_map(patch_map)).convert("RGB")
         raw_masks = self.get_masks_from_patch_map(patch_map)
 
@@ -149,8 +150,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
     @staticmethod
     def get_img_mask_fname(img_path):
-        return PatchSamplerDataset.get_fname_no_ext(os.path.basename(img_path)) \
-                    + ObjDetecPatchSamplerDataset.mask_file_ext
+        return PatchSamplerDataset.get_fname_no_ext(img_path) + ObjDetecPatchSamplerDataset.mask_file_ext
 
 
 

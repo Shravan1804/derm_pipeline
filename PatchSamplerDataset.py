@@ -10,12 +10,15 @@ import datetime
 
 
 class PatchSamplerDataset(object):
+    img_dir = 'images'
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.rotate.html#scipy.ndimage.rotate
     # rotation_padding=‘reflect’ or  ‘constant’ or ‘nearest’ or ‘mirror’ or ‘wrap’
-    def __init__(self, root, patch_size, patch_per_img=-1, n_rotation=6, rotation_padding='constant',
-                 seed=42, transforms=None):
+    def __init__(self, root, patch_size, is_train, patch_per_img=-1, n_rotation=6, rotation_padding='constant',
+                 seed=42, test_prop=0.15, transforms=None):
         random.seed(seed)
         self.root = root
+        self.is_train = is_train
+        self.test_prop = test_prop
         self.transforms = transforms
         self.patch_size = patch_size
         self.patch_per_img = patch_per_img
@@ -24,16 +27,20 @@ class PatchSamplerDataset(object):
         rotated_dir = 'cache_' + os.path.basename(self.root) + '_' + type(self).__name__ + '-rpad' + rotation_padding
         self.save_img_rotated = os.path.join(os.path.dirname(self.root), rotated_dir)
         if not os.path.exists(self.save_img_rotated):
-            os.makedirs(self.save_img_rotated)
+            os.makedirs(os.path.join(self.save_img_rotated, PatchSamplerDataset.img_dir))
         patches_file = rotated_dir + '-patches-p' + str(patch_size) + '-n' + str(patch_per_img) \
                        + '-r' + str(n_rotation) + '-seed' + str(seed) + '.npy'
         self.patches_dir = os.path.join(os.path.dirname(self.root), patches_file.replace('.npy', ''))
         self.patches_path = os.path.join(self.patches_dir, patches_file)
         if not os.path.exists(self.patches_dir):
-            os.makedirs(self.patches_dir)
-            os.makedirs(os.path.join(self.patches_dir, 'images'))
-        self.patches = np.load(self.patches_path, allow_pickle=True).tolist() if os.path.exists(self.patches_path) \
-            else []
+            os.makedirs(os.path.join(self.patches_dir, PatchSamplerDataset.img_dir))
+        self.patches = []
+        self.patches_train = []
+        self.patches_test = []
+        if os.path.exists(self.patches_path):
+            self.patches = np.load(self.patches_path, allow_pickle=True).tolist()
+            self.populate_train_test_lists()
+
         if len(self.patches) > 0:
             print("Loaded patches from previous run, seed = ", seed)
 
@@ -41,7 +48,14 @@ class PatchSamplerDataset(object):
         raise NotImplementedError
 
     def __len__(self):
-        return len(self.patches)
+        return len(self.patches_train) if self.is_train else len(self.patches_test)
+
+    def populate_train_test_lists(self):
+        for patch_map in self.patches:
+            if patch_map['train_test'] == 'train':
+                self.patches_train.append(patch_map)
+            else:
+                self.patches_test.append(patch_map)
 
     def maybe_resize(self, im_arr):
         h, w = im_arr.shape[:2]
@@ -53,15 +67,18 @@ class PatchSamplerDataset(object):
         else:
             return im_arr
 
-    def prepare_patches_from_img_files(self, dir_path):
+    def prepare_patches_from_imgs(self, dir_path):
         start = timer()
         img_files = list(sorted(os.listdir(dir_path)))
         sampled_patches = []
         print("Sampling patches ...")
         for img_file in tqdm(img_files):
+            train_or_test = np.random.choice(['train', 'test'], size=1, p=[1 - self.test_prop, self.test_prop])[0]
             img_path = os.path.join(dir_path, img_file)
-            sampled_patches.extend(self.img_as_grid_of_patches(img_path))
-            sampled_patches.extend(self.sample_random_patch_from_img(img_path))
+            img_patches = []
+            img_patches.extend(self.img_as_grid_of_patches(img_path))
+            img_patches.extend(self.sample_random_patch_from_img(img_path))
+            sampled_patches.extend([{'train_test': train_or_test, **m} for m in img_patches])
         # store all patches in cache
         end = timer()
         print("Done,", dir_path, "images were processed in", datetime.timedelta(seconds=end - start))
@@ -122,7 +139,7 @@ class PatchSamplerDataset(object):
             return im_arr, img_path
         file, ext = os.path.splitext(os.path.basename(img_path))
         new_filename = file + '-r' + str(rotation)
-        path_to_save = os.path.join(self.save_img_rotated, new_filename + ext)
+        path_to_save = os.path.join(self.save_img_rotated, PatchSamplerDataset.img_dir, new_filename + ext)
         if not os.path.exists(path_to_save):
             im_arr_rotated = ndimage.rotate(im_arr.astype(np.int16), rotation, reshape=True,
                                             mode=self.rotation_padding, cval=-1)
@@ -150,7 +167,7 @@ class PatchSamplerDataset(object):
         file, ext = os.path.splitext(os.path.basename(img_path))
         if rotation == 0:  # otherwise already present in img filename
             file += '_r' + str(rotation)
-        patch_path = os.path.join(self.patches_dir, 'images', file + '_h' + str(idx_h)
+        patch_path = os.path.join(self.patches_dir, PatchSamplerDataset.img_dir, file + '_h' + str(idx_h)
                                   + '_w' + str(idx_w) + ext)
         return {'img_path': img_path, 'patch_path': patch_path, 'rotation': rotation, 'idx_h': idx_h, 'idx_w': idx_w}
 
