@@ -74,7 +74,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         is_valid = False
         for mask in self.get_masks_from_patch_map(patch_map, dont_save=True):
             is_valid = is_valid or np.unique(mask).size > 1
-        return is_valid
+        return is_valid and super().is_valid_patch(patch_map)
 
     def get_rotated_img(self, img_path, im_arr, rotation):
         im_arr_rotated, path_to_save = super().get_rotated_img(img_path, im_arr, rotation)

@@ -107,7 +107,7 @@ class PatchSamplerDataset(object):
             for _ in range(n_samples):
                 patch = [-1]
                 loop_count = 0
-                while (-1 in patch or not self.is_valid_patch(patch_map)) and loop_count < 1000:
+                while loop_count == 0 or (not self.is_valid_patch(patch_map) and loop_count < 1000):
                     idx_h, idx_w = (np.random.randint(low=0, high=1 + h - self.patch_size, size=1)[0],
                                     np.random.randint(low=0, high=1 + w - self.patch_size, size=1)[0])
                     patch = self.get_patch_from_idx(im_arr_rotated, idx_h, idx_w)
@@ -119,7 +119,8 @@ class PatchSamplerDataset(object):
         return sampled_patches
 
     def is_valid_patch(self, patch_map):
-        raise NotImplementedError
+        patch = self.get_patch_from_patch_map(patch_map)
+        return -1 not in patch
 
     def save_patches_map(self):
         np.save(self.patches_path, self.patches)

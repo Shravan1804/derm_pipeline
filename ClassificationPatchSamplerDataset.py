@@ -33,4 +33,4 @@ class ClassificationPatchSamplerDataset(PatchSamplerDataset):
         return im, target
 
     def is_valid_patch(self, patch_map):
-        return True
+        return super().is_valid_patch(patch_map)
