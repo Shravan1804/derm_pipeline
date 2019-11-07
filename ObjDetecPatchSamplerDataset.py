@@ -91,10 +91,10 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 rotated_mask_file_path = os.path.join(rotated_mask_dir_path, rotated_mask_file)
                 if not os.path.exists(rotated_mask_file_path):
                     mask_arr = cv2.imread(os.path.join(self.root, masks_dir, mask_file), cv2.IMREAD_UNCHANGED)
-                    rotated_mask_arr = ndimage.rotate(mask_arr, rotation, reshape=True,
-                                                      mode=self.rotation_padding)
+                    rotated_mask_arr = ndimage.rotate(mask_arr.astype(np.int16), rotation, reshape=False,
+                                                      mode=self.rotation_padding, cval=-1)
                     rotated_mask_arr = self.maybe_resize(rotated_mask_arr)
-                    cv2.imwrite(rotated_mask_file_path, rotated_mask_arr)
+                    cv2.imwrite(rotated_mask_file_path, rotated_mask_arr.astype(np.uint8))
 
         return im_arr_rotated, path_to_save
 

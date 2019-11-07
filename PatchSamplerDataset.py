@@ -23,6 +23,7 @@ class PatchSamplerDataset(object):
     # 'wrap'     | 6  7  8 | 1  2  3  4  5  6  7  8 | 1  2  3
 
     # TODO: check rotation_padding = constant: at rotation 240 degrees some patches with padded -1 still gets through the validation check
+    # TODO: Find why ndimage.rotate produces different sizes for img than for mask...
     def __init__(self, root, patch_size, is_train, patch_per_img=-1, n_rotation=6, rotation_padding='wrap',
                  seed=42, test_prop=0.15, transforms=None):
         random.seed(seed)
@@ -150,10 +151,12 @@ class PatchSamplerDataset(object):
         new_filename = file + '-r' + str(rotation)
         path_to_save = os.path.join(self.save_img_rotated, PatchSamplerDataset.img_dir, new_filename + ext)
         if not os.path.exists(path_to_save):
-            im_arr_rotated = ndimage.rotate(im_arr.astype(np.int16), rotation, reshape=True,
+            #convert type to int16 to have -1 values as padding
+            im_arr_rotated = ndimage.rotate(im_arr.astype(np.int16), rotation, reshape=False,
                                             mode=self.rotation_padding, cval=-1)
             im_arr_rotated = self.maybe_resize(im_arr_rotated)
-            cv2.imwrite(path_to_save, im_arr_rotated)
+            #convert back to uint8
+            cv2.imwrite(path_to_save, im_arr_rotated.astype(np.uint8))
         else:
             im_arr_rotated = self.maybe_resize(cv2.imread(path_to_save, cv2.IMREAD_UNCHANGED))
         return im_arr_rotated, path_to_save
