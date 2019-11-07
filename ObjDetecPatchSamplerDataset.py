@@ -14,11 +14,12 @@ from PatchSamplerDataset import PatchSamplerDataset
 class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
     mask_file_ext = '.png'
 
-    def __init__(self, root, patch_size, is_train, patch_per_img=-1, n_rotation=6, rotation_padding='constant',
+    def __init__(self, root, patch_size, is_train, patch_per_img=-1, n_rotation=6, rotation_padding='wrap',
                  seed=42, test=0.15, transforms=None):
-        super().__init__(root, patch_size, is_train, patch_per_img, n_rotation, rotation_padding, seed, test, transforms)
+        super().__init__(root, patch_size, is_train, patch_per_img, n_rotation, rotation_padding, seed, test,
+                         transforms)
         self.masks_dirs = [m for m in sorted(os.listdir(self.root)) if os.path.isdir(os.path.join(self.root, m))
-                        and m.startswith('masks_')]
+                           and m.startswith('masks_')]
         if len(self.patches) == 0:
             self.patches.extend(self.prepare_patches_from_imgs(os.path.join(self.root, PatchSamplerDataset.img_dir)))
             random.shuffle(self.patches)
@@ -28,7 +29,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             self.store_patches()
 
     def __getitem__(self, idx):
-        patch_map = self.patches_train[idx] if self.is_train else self.patches_test[idx]
+        patch_map = self.get_patch_list()[idx]
         img = Image.fromarray(self.get_patch_from_patch_map(patch_map)).convert("RGB")
         raw_masks = self.get_masks_from_patch_map(patch_map)
 
@@ -52,7 +53,8 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
         except IndexError as error:
             print(
-            "Image", self.imgs[idx], "with mask", self.masks[idx], "and boxes", boxes, "raised an IndexError exception")
+                "Image", self.imgs[idx], "with mask", self.masks[idx], "and boxes", boxes,
+                "raised an IndexError exception")
             raise error
         # suppose all instances are not crowd
         iscrowd = torch.zeros((num_objs,), dtype=torch.int64)
@@ -71,10 +73,12 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         return img, target
 
     def is_valid_patch(self, patch_map):
+        if not super().is_valid_patch(patch_map):
+            return False
         is_valid = False
-        for mask in self.get_masks_from_patch_map(patch_map, dont_save=True):
+        for mask in self.get_masks_from_patch_map(patch_map):
             is_valid = is_valid or np.unique(mask).size > 1
-        return is_valid and super().is_valid_patch(patch_map)
+        return is_valid
 
     def get_rotated_img(self, img_path, im_arr, rotation):
         im_arr_rotated, path_to_save = super().get_rotated_img(img_path, im_arr, rotation)
@@ -89,13 +93,13 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 if not os.path.exists(rotated_mask_file_path):
                     mask_arr = cv2.imread(os.path.join(self.root, masks_dir, mask_file), cv2.IMREAD_UNCHANGED)
                     rotated_mask_arr = ndimage.rotate(mask_arr, rotation, reshape=True,
-                                                    mode=self.rotation_padding)
+                                                      mode=self.rotation_padding)
                     rotated_mask_arr = self.maybe_resize(rotated_mask_arr)
                     cv2.imwrite(rotated_mask_file_path, rotated_mask_arr)
 
         return im_arr_rotated, path_to_save
 
-    def get_masks_from_patch_map(self, patch_map, dont_save=False):
+    def get_masks_from_patch_map(self, patch_map, cache=False):
         mask_file = ObjDetecPatchSamplerDataset.get_mask_fname(patch_map)
         masks = []
         for mask_dir in self.masks_dirs:
@@ -106,20 +110,20 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 mask_dir_path = os.path.join(self.save_img_rotated, mask_dir) if patch_map['rotation'] != 0 \
                     else os.path.join(self.root, mask_dir)
                 mask = cv2.imread(os.path.join(mask_dir_path,
-                                ObjDetecPatchSamplerDataset.get_img_mask_fname(patch_map['img_path'])),
-                                cv2.IMREAD_UNCHANGED)
+                                               ObjDetecPatchSamplerDataset.get_img_mask_fname(patch_map['img_path'])),
+                                  cv2.IMREAD_UNCHANGED)
                 mask = self.get_patch_from_idx(mask, patch_map['idx_h'], patch_map['idx_w'])
                 if not os.path.exists(os.path.dirname(mask_path)):
                     os.makedirs(os.path.dirname(mask_path))
-                if not dont_save:
+                if cache:
                     cv2.imwrite(mask_path, mask)
                 masks.append(mask)
         return masks
 
     def store_patches(self):
         for patch_map in tqdm(self.patches):
-            _ = self.get_patch_from_patch_map(patch_map)
-            _ = self.get_masks_from_patch_map(patch_map)
+            _ = self.get_patch_from_patch_map(patch_map, cache=True)
+            _ = self.get_masks_from_patch_map(patch_map, cache=True)
 
     @staticmethod
     def process_mask(mask):
@@ -151,18 +155,3 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
     @staticmethod
     def get_img_mask_fname(img_path):
         return PatchSamplerDataset.get_fname_no_ext(img_path) + ObjDetecPatchSamplerDataset.mask_file_ext
-
-
-
-def main(args):
-    dataset = ClassificationPatchSamplerDataset('/home/shravan/deep-learning/data/skin_body_location_crops/train', 256)
-    c = tmp = 0
-    for d in dataset.patches:
-        print(d)
-        if "tmp" in d['img_path']: tmp +=1
-        else: c+=1
-    print(type(dataset).__name__)
-    print('tmp:',tmp,'vs not tmp:',c)
-
-if __name__ == "__main__":
-    main(None)

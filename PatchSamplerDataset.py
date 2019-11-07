@@ -11,9 +11,19 @@ import datetime
 
 class PatchSamplerDataset(object):
     img_dir = 'images'
+
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.rotate.html#scipy.ndimage.rotate
     # rotation_padding=‘reflect’ or  ‘constant’ or ‘nearest’ or ‘mirror’ or ‘wrap’
-    def __init__(self, root, patch_size, is_train, patch_per_img=-1, n_rotation=6, rotation_padding='constant',
+    #    mode       |   Ext   |         Input          |   Ext
+    # -----------+---------+------------------------+---------
+    # 'mirror'   | 4  3  2 | 1  2  3  4  5  6  7  8 | 7  6  5
+    # 'reflect'  | 3  2  1 | 1  2  3  4  5  6  7  8 | 8  7  6
+    # 'nearest'  | 1  1  1 | 1  2  3  4  5  6  7  8 | 8  8  8
+    # 'constant' | 0  0  0 | 1  2  3  4  5  6  7  8 | 0  0  0
+    # 'wrap'     | 6  7  8 | 1  2  3  4  5  6  7  8 | 1  2  3
+
+    # TODO: check rotation_padding = constant: at rotation 240 degrees some patches with padded -1 still gets through the validation check
+    def __init__(self, root, patch_size, is_train, patch_per_img=-1, n_rotation=6, rotation_padding='wrap',
                  seed=42, test_prop=0.15, transforms=None):
         random.seed(seed)
         self.root = root
@@ -105,12 +115,10 @@ class PatchSamplerDataset(object):
             im_arr_rotated, path_to_save = self.get_rotated_img(img_path, im_arr, rotation)
             h, w = im_arr_rotated.shape[:2]
             for _ in range(n_samples):
-                patch = [-1]
                 loop_count = 0
                 while loop_count == 0 or (not self.is_valid_patch(patch_map) and loop_count < 1000):
                     idx_h, idx_w = (np.random.randint(low=0, high=1 + h - self.patch_size, size=1)[0],
                                     np.random.randint(low=0, high=1 + w - self.patch_size, size=1)[0])
-                    patch = self.get_patch_from_idx(im_arr_rotated, idx_h, idx_w)
                     patch_map = self.get_patch_map(path_to_save, rotation, idx_h, idx_w)
                     loop_count += 1
                 if loop_count >= 1000:
@@ -127,7 +135,7 @@ class PatchSamplerDataset(object):
 
     def store_patches(self):
         for patch_map in tqdm(self.patches):
-            _ = self.get_patch_from_patch_map(patch_map)
+            _ = self.get_patch_from_patch_map(patch_map, cache=True)
 
     def get_nb_patch_per_img(self, im_arr):
         im_h, im_w = im_arr.shape[:2]
@@ -153,24 +161,36 @@ class PatchSamplerDataset(object):
     def get_patch_from_idx(self, im, id_h, id_w):
         return im[id_h:id_h + self.patch_size, id_w:id_w + self.patch_size]
 
-    def get_patch_from_patch_map(self, patch_map):
-        if os.path.exists(patch_map['patch_path']):
-            return cv2.imread(patch_map['patch_path'], cv2.IMREAD_UNCHANGED)
+    def get_patch_from_patch_map(self, patch_map, cache=False):
+        patch_path = self.get_absolute_path(patch_map['patch_path'])
+        if os.path.exists(patch_path):
+            return cv2.imread(patch_path, cv2.IMREAD_UNCHANGED)
         else:
-            img_path = os.path.join(os.path.dirname(self.root), patch_map['img_path'])
+            img_path = self.get_absolute_path(patch_map['img_path'])
             im = self.maybe_resize(cv2.imread(img_path, cv2.IMREAD_UNCHANGED))
             patch = self.get_patch_from_idx(im, patch_map['idx_h'], patch_map['idx_w'])
-            cv2.imwrite(patch_map['patch_path'], patch)
+            if cache:
+                cv2.imwrite(patch_path, patch)
             return patch
 
     def get_patch_map(self, img_path, rotation, idx_h, idx_w):
-        img_path = img_path.replace(os.path.dirname(self.root) + '/', '')
+        img_path = self.get_relative_path(img_path)
         file, ext = os.path.splitext(os.path.basename(img_path))
         if rotation == 0:  # otherwise already present in img filename
             file += '_r' + str(rotation)
         patch_path = os.path.join(self.patches_dir, PatchSamplerDataset.img_dir, file + '_h' + str(idx_h)
                                   + '_w' + str(idx_w) + ext)
+        patch_path = self.get_relative_path(patch_path)
         return {'img_path': img_path, 'patch_path': patch_path, 'rotation': rotation, 'idx_h': idx_h, 'idx_w': idx_w}
+
+    def get_relative_path(self, path):
+        return path.replace(os.path.dirname(self.root) + '/', '')
+
+    def get_absolute_path(self, path):
+        return os.path.join(os.path.dirname(self.root), path)
+
+    def get_patch_list(self):
+        return self.patches_train if self.is_train else self.patches_test
 
     @staticmethod
     def get_overlap(n, div):

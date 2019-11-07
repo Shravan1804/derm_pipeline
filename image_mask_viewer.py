@@ -41,6 +41,7 @@ def show_overlayed_img(img_path, masks, classes):
         legend.append(Line2D([0], [0], marker='o', color=tuple(map(lambda x: x/255, COLORS[i])), label=classes[i], markersize=10))
 
     fig, ax = plt.subplots()
+    plt.title(os.path.basename(img_path))
     ax1=fig.add_subplot(1, 2, 1)
     plt.imshow(img_orig)
     ax2=fig.add_subplot(1, 2, 2)
@@ -76,7 +77,7 @@ def main():
     masks_dirs = [os.path.join(args.root, m) for m in sorted(os.listdir(args.root))
                   if os.path.isdir(os.path.join(args.root, m)) and m.startswith('masks_')]
 
-    classes=[m.replace(args.root + '/', '').replace('masks_', '') for m in masks_dirs]
+    classes = [m.replace(args.root, '').replace('/', '').replace('masks_', '') for m in masks_dirs]
 
     if args.img is not None:
         show_overlayed_img(args.img, get_masks(args.img, masks_dirs), classes)

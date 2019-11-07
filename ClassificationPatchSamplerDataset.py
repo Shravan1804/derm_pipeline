@@ -5,7 +5,7 @@ from PatchSamplerDataset import PatchSamplerDataset
 
 
 class ClassificationPatchSamplerDataset(PatchSamplerDataset):
-    def __init__(self, root, patch_size, is_train, patch_per_img=-1, n_rotation=6, rotation_padding='constant',
+    def __init__(self, root, patch_size, is_train, patch_per_img=-1, n_rotation=6, rotation_padding='wrap',
                  seed=42, test=0.15, transforms=None):
         super().__init__(root, patch_size, is_train, patch_per_img, n_rotation, rotation_padding, seed, test, transforms)
         self.classes = [c for c in sorted(os.listdir(self.root)) if os.path.isdir(os.path.join(self.root, c))]
@@ -23,7 +23,7 @@ class ClassificationPatchSamplerDataset(PatchSamplerDataset):
             self.store_patches()
 
     def __getitem__(self, idx):
-        patch_map = self.patches_train[idx] if self.is_train else self.patches_test[idx]
+        patch_map = self.get_patch_list()[idx]
         im = self.get_patch_from_patch_map(patch_map)
         target = patch_map['class']
 
