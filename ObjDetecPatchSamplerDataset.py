@@ -72,8 +72,6 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         return img, target
 
     def is_valid_patch(self, patch_map):
-        if not super().is_valid_patch(patch_map):
-            return False
         is_valid = False
         for mask in self.get_masks_from_patch_map(patch_map):
             is_valid = is_valid or np.unique(mask).size > 1
@@ -90,11 +88,11 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                     os.makedirs(rotated_mask_dir_path)
                 rotated_mask_file_path = os.path.join(rotated_mask_dir_path, rotated_mask_file)
                 if not os.path.exists(rotated_mask_file_path):
-                    mask_arr = cv2.imread(os.path.join(self.root, masks_dir, mask_file), cv2.IMREAD_UNCHANGED)
-                    rotated_mask_arr = ndimage.rotate(mask_arr.astype(np.int16), rotation, reshape=False,
-                                                      mode=self.rotation_padding, cval=-1)
+                    mask_arr = self.load_img_from_disk(os.path.join(self.root, masks_dir, mask_file))
+                    rotated_mask_arr = ndimage.rotate(mask_arr, rotation, reshape=True,
+                                                      mode=self.rotation_padding)
                     rotated_mask_arr = self.maybe_resize(rotated_mask_arr)
-                    cv2.imwrite(rotated_mask_file_path, rotated_mask_arr.astype(np.uint8))
+                    cv2.imwrite(rotated_mask_file_path, rotated_mask_arr)
 
         return im_arr_rotated, path_to_save
 
@@ -104,13 +102,12 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         for mask_dir in self.masks_dirs:
             mask_path = os.path.join(self.patches_dir, mask_dir, mask_file)
             if os.path.exists(mask_path):
-                masks.append(cv2.imread(mask_path, cv2.IMREAD_UNCHANGED))
+                masks.append(self.load_img_from_disk(mask_path))
             else:
                 mask_dir_path = os.path.join(self.save_img_rotated, mask_dir) if patch_map['rotation'] != 0 \
                     else os.path.join(self.root, mask_dir)
-                mask = cv2.imread(os.path.join(mask_dir_path,
-                                               ObjDetecPatchSamplerDataset.get_img_mask_fname(patch_map['img_path'])),
-                                  cv2.IMREAD_UNCHANGED)
+                mask = self.load_img_from_disk(os.path.join(mask_dir_path,
+                                               ObjDetecPatchSamplerDataset.get_img_mask_fname(patch_map['img_path'])))
                 mask = self.get_patch_from_idx(mask, patch_map['idx_h'], patch_map['idx_w'])
                 if not os.path.exists(os.path.dirname(mask_path)):
                     os.makedirs(os.path.dirname(mask_path))

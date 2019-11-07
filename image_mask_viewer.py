@@ -85,7 +85,11 @@ def main():
         img_list = list(sorted(os.listdir(os.path.join(args.root, IMG_DIR))))
         for img in img_list:
             img_path = os.path.join(args.root, IMG_DIR, img)
-            show_overlayed_img(img_path, get_masks(img_path, masks_dirs), classes)
+            try:
+                show_overlayed_img(img_path, get_masks(img_path, masks_dirs), classes)
+            except:
+                print(img_path, 'created an error, exiting ...')
+                raise
 
 
 if __name__ == '__main__':

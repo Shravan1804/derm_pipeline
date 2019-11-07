@@ -22,7 +22,6 @@ class PatchSamplerDataset(object):
     # 'constant' | 0  0  0 | 1  2  3  4  5  6  7  8 | 0  0  0
     # 'wrap'     | 6  7  8 | 1  2  3  4  5  6  7  8 | 1  2  3
 
-    # TODO: check rotation_padding = constant: at rotation 240 degrees some patches with padded -1 still gets through the validation check
     # TODO: Find why ndimage.rotate produces different sizes for img than for mask...
     def __init__(self, root, patch_size, is_train, patch_per_img=-1, n_rotation=6, rotation_padding='wrap',
                  seed=42, test_prop=0.15, transforms=None):
@@ -95,7 +94,7 @@ class PatchSamplerDataset(object):
         return sampled_patches
 
     def img_as_grid_of_patches(self, img_path):
-        im_arr = self.maybe_resize(cv2.imread(img_path, cv2.IMREAD_UNCHANGED))
+        im_arr = self.load_img_from_disk(img_path)
         im_h, im_w = im_arr.shape[:2]
         step_h = self.patch_size - PatchSamplerDataset.get_overlap(im_h, self.patch_size)
         grid_h = np.arange(start=0, stop=1 + im_h - self.patch_size, step=step_h)
@@ -108,7 +107,7 @@ class PatchSamplerDataset(object):
         return grid_idx
 
     def sample_random_patch_from_img(self, img_path):
-        im_arr = self.maybe_resize(cv2.imread(img_path, cv2.IMREAD_UNCHANGED))
+        im_arr = self.load_img_from_disk(img_path)
         n_samples = max(1, int(self.get_nb_patch_per_img(im_arr) / len(self.rotations)))
         sampled_patches = []
         for rotation in self.rotations:
@@ -127,8 +126,10 @@ class PatchSamplerDataset(object):
         return sampled_patches
 
     def is_valid_patch(self, patch_map):
-        patch = self.get_patch_from_patch_map(patch_map)
-        return -1 not in patch
+        raise NotImplementedError
+
+    def load_img_from_disk(self, img_path):
+        return self.maybe_resize(cv2.imread(img_path, cv2.IMREAD_UNCHANGED))
 
     def save_patches_map(self):
         np.save(self.patches_path, self.patches)
@@ -151,14 +152,12 @@ class PatchSamplerDataset(object):
         new_filename = file + '-r' + str(rotation)
         path_to_save = os.path.join(self.save_img_rotated, PatchSamplerDataset.img_dir, new_filename + ext)
         if not os.path.exists(path_to_save):
-            #convert type to int16 to have -1 values as padding
-            im_arr_rotated = ndimage.rotate(im_arr.astype(np.int16), rotation, reshape=False,
-                                            mode=self.rotation_padding, cval=-1)
+            im_arr_rotated = ndimage.rotate(im_arr, rotation, reshape=True,
+                                            mode=self.rotation_padding)
             im_arr_rotated = self.maybe_resize(im_arr_rotated)
-            #convert back to uint8
-            cv2.imwrite(path_to_save, im_arr_rotated.astype(np.uint8))
+            cv2.imwrite(path_to_save, im_arr_rotated)
         else:
-            im_arr_rotated = self.maybe_resize(cv2.imread(path_to_save, cv2.IMREAD_UNCHANGED))
+            im_arr_rotated = self.load_img_from_disk(path_to_save)
         return im_arr_rotated, path_to_save
 
     def get_patch_from_idx(self, im, id_h, id_w):
@@ -167,10 +166,9 @@ class PatchSamplerDataset(object):
     def get_patch_from_patch_map(self, patch_map, cache=False):
         patch_path = self.get_absolute_path(patch_map['patch_path'])
         if os.path.exists(patch_path):
-            return cv2.imread(patch_path, cv2.IMREAD_UNCHANGED)
+            return self.load_img_from_disk(patch_path)
         else:
-            img_path = self.get_absolute_path(patch_map['img_path'])
-            im = self.maybe_resize(cv2.imread(img_path, cv2.IMREAD_UNCHANGED))
+            im = self.load_img_from_disk(self.get_absolute_path(patch_map['img_path']))
             patch = self.get_patch_from_idx(im, patch_map['idx_h'], patch_map['idx_w'])
             if cache:
                 cv2.imwrite(patch_path, patch)
