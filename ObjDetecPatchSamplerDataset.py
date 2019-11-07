@@ -25,12 +25,11 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             random.shuffle(self.patches)
             self.populate_train_test_lists()
             self.save_patches_map()
-            print("Storing all patch in cache ...")
             self.store_patches()
 
     def __getitem__(self, idx):
         patch_map = self.get_patch_list()[idx]
-        img = Image.fromarray(self.get_patch_from_patch_map(patch_map)).convert("RGB")
+        img = Image.fromarray(cv2.cvtColor(self.get_patch_from_patch_map(patch_map), cv2.COLOR_BGR2RGB)).convert("RGB")
         raw_masks = self.get_masks_from_patch_map(patch_map)
 
         classes = masks = None
@@ -121,6 +120,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         return masks
 
     def store_patches(self):
+        print("Storing all patches on disk ...")
         for patch_map in tqdm(self.patches):
             _ = self.get_patch_from_patch_map(patch_map, cache=True)
             _ = self.get_masks_from_patch_map(patch_map, cache=True)

@@ -89,7 +89,6 @@ class PatchSamplerDataset(object):
             img_patches.extend(self.img_as_grid_of_patches(img_path))
             img_patches.extend(self.sample_random_patch_from_img(img_path))
             sampled_patches.extend([{'train_test': train_or_test, **m} for m in img_patches])
-        # store all patches in cache
         end = timer()
         print("Done,", dir_path, "images were processed in", datetime.timedelta(seconds=end - start))
         return sampled_patches
@@ -134,6 +133,7 @@ class PatchSamplerDataset(object):
         np.save(self.patches_path, self.patches)
 
     def store_patches(self):
+        print("Storing all patches on disk ...")
         for patch_map in tqdm(self.patches):
             _ = self.get_patch_from_patch_map(patch_map, cache=True)
 
