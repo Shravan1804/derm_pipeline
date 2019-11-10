@@ -39,6 +39,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         for i, mask in enumerate(raw_masks):
             c, b, m = ObjDetecPatchSamplerDataset.process_mask(mask)
             if b is None: continue  # empty mask
+            # all objects from one mask belong to the same class
             classes = c if classes is None else np.append(classes, (i + 1) * c)
             boxes += b
             masks = m if masks is None else np.append(masks, m, axis=0)
@@ -57,7 +58,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 "Image", self.imgs[idx], "with mask", self.masks[idx], "and boxes", boxes,
                 "raised an IndexError exception")
             raise error
-        # suppose all instances are not crowd
+        # TODO: suppose all instances are not crowd
         iscrowd = torch.zeros((num_objs,), dtype=torch.int64)
 
         target = {}
@@ -93,14 +94,16 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
             print("Cropping dataset ...")
             offset = int(self.patch_size / 2) + 1  # + 1 to comprise upper bound
+            stats = [0, 0]
             data_dirs = [os.path.join(self.root, self.root_img_dir)] + [os.path.join(self.root, masks_dir)
                                                                         for masks_dir in self.masks_dirs]
             data_files = [sorted(os.listdir(p)) for p in data_dirs]
             imgs_masks = list(map(lambda x: [os.path.join(x[0], n) for n in x[1]], zip(data_dirs, data_files)))
             # iterate over (img, mask1, mask2, ...) tuples
-            for img_masks in zip(*imgs_masks):
+            for img_masks in tqdm(zip(*imgs_masks)):
                 im = self.load_img_from_disk(img_masks[0])
                 im_h, im_w = im.shape[:2]
+                stats[0] += im_h * im_w
                 masks = list(map(self.load_img_from_disk, img_masks[1:]))
                 masks_not_bg = list(map(lambda x: x > 0, masks))
                 boxes = map(ObjDetecPatchSamplerDataset.get_bounding_box_of_true_values, masks_not_bg)
@@ -108,14 +111,17 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 box = [max(0, min(boxes[0]) - offset), max(0, min(boxes[1]) - offset),
                        min(im_w, max(boxes[2]) + offset), min(im_h, max(boxes[3]) + offset)]
                 cropped = [m[box[1]:box[3], box[0]:box[2]] for m in [im] + masks]
+                im_h, im_w = cropped[0].shape[:2]
+                stats[1] += im_h * im_w
                 dest = [m.replace(self.root, cropped_dir) for m in img_masks]
                 list(map(lambda x: cv2.imwrite(x[0], x[1]), zip(dest, cropped)))
-
+            print("Cropping completed, dataset pixels reduced by", stats[1]/stats[0], "%.")
         self.root = cropped_dir
 
     def is_valid_patch(self, patch_map):
         is_valid = False
         for mask in self.load_masks_from_patch_map(patch_map):
+            # even a single mask containing an object makes a patch valid
             is_valid = is_valid or np.unique(self.clean_mask(mask)).size > 1
         return is_valid
 
@@ -128,8 +134,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 rotated_mask_file_path = os.path.join(self.rotated_img_dir, masks_dir, rotated_mask_file)
                 if not os.path.exists(rotated_mask_file_path):
                     mask_arr = self.load_img_from_disk(os.path.join(self.root, masks_dir, mask_file))
-                    rotated_mask_arr = ndimage.rotate(mask_arr, rotation, reshape=True,
-                                                      mode=self.rotation_padding)
+                    rotated_mask_arr = ndimage.rotate(mask_arr, rotation, reshape=True, mode=self.rotation_padding)
                     rotated_mask_arr = self.clean_mask(self.maybe_resize(rotated_mask_arr))
                     cv2.imwrite(rotated_mask_file_path, rotated_mask_arr)
 
@@ -195,7 +200,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
     @staticmethod
     def get_bounding_box_of_true_values(mask_with_condition):
         pos = np.where(mask_with_condition)
-        if pos[0].size == 0:
+        if pos[0].size == 0:    # no objects
             return None
         xmin = np.min(pos[1])
         xmax = np.max(pos[1])

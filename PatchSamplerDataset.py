@@ -111,7 +111,7 @@ class PatchSamplerDataset(object):
         grid_idx = [self.get_patch_map(img_path, 0, a, b) for a in grid_h for b in grid_w]
         if not grid_idx:
             grid_idx = [self.get_patch_map(img_path, 0, 0, 0)]
-        grid_idx = [x for x in grid_idx if self.is_valid_patch(x)]
+        grid_idx = list(filter(self.is_valid_patch, grid_idx))
         return grid_idx
 
     def sample_random_patch_from_img(self, img_path):
