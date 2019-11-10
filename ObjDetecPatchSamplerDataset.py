@@ -115,7 +115,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 stats[1] += im_h * im_w
                 dest = [m.replace(self.root, cropped_dir) for m in img_masks]
                 list(map(lambda x: cv2.imwrite(x[0], x[1]), zip(dest, cropped)))
-            print("Cropping completed, dataset pixels reduced by", stats[1]/stats[0], "%.")
+            print("Cropping completed, dataset pixels reduced by", 100*stats[1]/stats[0], "%.")
         self.root = cropped_dir
 
     def is_valid_patch(self, patch_map):
