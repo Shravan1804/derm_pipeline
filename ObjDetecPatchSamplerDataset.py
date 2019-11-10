@@ -13,24 +13,26 @@ from PatchSamplerDataset import PatchSamplerDataset
 
 class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
     mask_file_ext = '.png'
+    min_object_px_size = 30
 
-    def __init__(self, root, patch_size, is_train, patch_per_img=-1, n_rotation=6, rotation_padding='wrap',
-                 seed=42, test=0.15, transforms=None):
-        super().__init__(root, patch_size, is_train, patch_per_img, n_rotation, rotation_padding, seed, test,
-                         transforms)
+    def __init__(self, root, patch_size, is_train, **kwargs):
+        self.root = root
+        self.patch_size = patch_size
         self.masks_dirs = [m for m in sorted(os.listdir(self.root)) if os.path.isdir(os.path.join(self.root, m))
                            and m.startswith('masks_')]
+        #self.crop_dataset()
+        super().__init__(root, patch_size, is_train, **kwargs)
         if len(self.patches) == 0:
             self.patches.extend(self.prepare_patches_from_imgs(os.path.join(self.root, PatchSamplerDataset.img_dir)))
             random.shuffle(self.patches)
             self.populate_train_test_lists()
-            self.save_patches_map()
-            self.store_patches()
+            self.save_patch_maps_to_disk()
+            self.save_patches_to_disk()
 
     def __getitem__(self, idx):
         patch_map = self.get_patch_list()[idx]
-        img = Image.fromarray(cv2.cvtColor(self.get_patch_from_patch_map(patch_map), cv2.COLOR_BGR2RGB)).convert("RGB")
-        raw_masks = self.get_masks_from_patch_map(patch_map)
+        img = Image.fromarray(cv2.cvtColor(self.load_patch_from_patch_map(patch_map), cv2.COLOR_BGR2RGB)).convert("RGB")
+        raw_masks = self.load_masks_from_patch_map(patch_map)
 
         classes = masks = None
         boxes = []
@@ -71,10 +73,36 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
         return img, target
 
+    def create_cache_dirs(self):
+        cropped_dataset_dir = os.path.join(os.path.dirname(self.root), 'cache_' + os.path.basename(self.root)
+                                           + '-cropped-p' + str(self.patch_size))
+        create_dirs = []
+        if not os.path.exists(cropped_dataset_dir):
+            os.makedirs(os.path.join(cropped_dataset_dir, PatchSamplerDataset.img_dir))
+            create_dirs.append(cropped_dataset_dir)
+        #self.root = cropped_dataset_dir
+        super().create_cache_dirs()
+        if not os.path.exists(os.path.join(self.rotated_img_dir, self.masks_dirs[0])):
+            create_dirs.append(self.rotated_img_dir)
+        if not os.path.exists(os.path.join(self.patches_dir, self.masks_dirs[0])):
+            create_dirs.append(self.patches_dir)
+        if create_dirs:
+            list(map(os.makedirs, [os.path.join(m, n) for m in create_dirs for n in self.masks_dirs]))
+
+    def crop_dataset(self):
+        """Prepares cropped dataset according to patch_size. Crops imgs to the bounding box encompassing objects from
+        all masks + the patch size - min_object_px_size"""
+        print("Cropping dataset ...")
+        masks_files = [list(sorted(os.listdir(os.path.join(self.root, masks_dir)))) for masks_dir in self.masks_dirs]
+        for masks_paths in zip(*masks_files):
+            for mask_path in masks_paths:
+                mask = self.load_img_from_disk(mask_path)
+                ObjDetecPatchSamplerDataset.get_bounding_box_true_values(mask > 0)
+
     def is_valid_patch(self, patch_map):
         is_valid = False
-        for mask in self.get_masks_from_patch_map(patch_map):
-            is_valid = is_valid or np.unique(mask).size > 1
+        for mask in self.load_masks_from_patch_map(patch_map):
+            is_valid = is_valid or np.unique(ObjDetecPatchSamplerDataset.clean_mask(mask)).size > 1
         return is_valid
 
     def get_rotated_img(self, img_path, im_arr, rotation):
@@ -83,20 +111,17 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             mask_file = ObjDetecPatchSamplerDataset.get_img_mask_fname(img_path)
             rotated_mask_file = ObjDetecPatchSamplerDataset.get_img_mask_fname(path_to_save)
             for masks_dir in self.masks_dirs:
-                rotated_mask_dir_path = os.path.join(self.save_img_rotated, masks_dir)
-                if not os.path.exists(rotated_mask_dir_path):
-                    os.makedirs(rotated_mask_dir_path)
-                rotated_mask_file_path = os.path.join(rotated_mask_dir_path, rotated_mask_file)
+                rotated_mask_file_path = os.path.join(self.rotated_img_dir, masks_dir, rotated_mask_file)
                 if not os.path.exists(rotated_mask_file_path):
                     mask_arr = self.load_img_from_disk(os.path.join(self.root, masks_dir, mask_file))
                     rotated_mask_arr = ndimage.rotate(mask_arr, rotation, reshape=True,
                                                       mode=self.rotation_padding)
-                    rotated_mask_arr = self.maybe_resize(rotated_mask_arr)
+                    rotated_mask_arr = ObjDetecPatchSamplerDataset.clean_mask(self.maybe_resize(rotated_mask_arr))
                     cv2.imwrite(rotated_mask_file_path, rotated_mask_arr)
 
         return im_arr_rotated, path_to_save
 
-    def get_masks_from_patch_map(self, patch_map, cache=False):
+    def load_masks_from_patch_map(self, patch_map, cache=False):
         mask_file = ObjDetecPatchSamplerDataset.get_mask_fname(patch_map)
         masks = []
         for mask_dir in self.masks_dirs:
@@ -104,23 +129,34 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             if os.path.exists(mask_path):
                 masks.append(self.load_img_from_disk(mask_path))
             else:
-                mask_dir_path = os.path.join(self.save_img_rotated, mask_dir) if patch_map['rotation'] != 0 \
+                mask_dir_path = os.path.join(self.rotated_img_dir, mask_dir) if patch_map['rotation'] != 0 \
                     else os.path.join(self.root, mask_dir)
                 mask = self.load_img_from_disk(os.path.join(mask_dir_path,
-                                               ObjDetecPatchSamplerDataset.get_img_mask_fname(patch_map['img_path'])))
-                mask = self.get_patch_from_idx(mask, patch_map['idx_h'], patch_map['idx_w'])
-                if not os.path.exists(os.path.dirname(mask_path)):
-                    os.makedirs(os.path.dirname(mask_path))
+                                                ObjDetecPatchSamplerDataset.get_img_mask_fname(patch_map['img_path'])))
+                patch_mask = self.get_patch_from_idx(mask, patch_map['idx_h'], patch_map['idx_w'])
                 if cache:
-                    cv2.imwrite(mask_path, mask)
-                masks.append(mask)
+                    cv2.imwrite(mask_path, patch_mask)
+                masks.append(patch_mask)
         return masks
 
-    def store_patches(self):
+    def save_patches_to_disk(self):
         print("Storing all patches on disk ...")
         for patch_map in tqdm(self.patches):
-            _ = self.get_patch_from_patch_map(patch_map, cache=True)
-            _ = self.get_masks_from_patch_map(patch_map, cache=True)
+            _ = self.load_patch_from_patch_map(patch_map, cache=True)
+            _ = self.load_masks_from_patch_map(patch_map, cache=True)
+
+    @staticmethod
+    def clean_mask(mask):
+        """Removes all objects smaller than minimum size"""
+        nb_obj, obj_labels = cv2.connectedComponents(mask)
+        if nb_obj < 2:
+            return mask  # only background
+        obj_ids, inverse, sizes = np.unique(obj_labels, return_inverse=True, return_counts=True)
+        for i, size in enumerate(sizes):
+            if size < ObjDetecPatchSamplerDataset.min_object_px_size:
+                obj_ids[i] = 0  # set this component to background
+        else:
+            return np.reshape(obj_ids[inverse], np.shape(mask))
 
     @staticmethod
     def process_mask(mask):
@@ -136,14 +172,18 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         num_objs = len(obj_ids)
         boxes = []
         for i in range(num_objs):
-            pos = np.where(masks[i])
-            xmin = np.min(pos[1])
-            xmax = np.max(pos[1])
-            ymin = np.min(pos[0])
-            ymax = np.max(pos[0])
-            boxes.append([xmin, ymin, xmax, ymax])
+            boxes.append(ObjDetecPatchSamplerDataset.get_bounding_box_true_values(masks[i]))
 
         return np.ones(num_objs, dtype=np.int), boxes, masks
+
+    @staticmethod
+    def get_bounding_box_true_values(mask_with_condition):
+        pos = np.where(mask_with_condition)
+        xmin = np.min(pos[1])
+        xmax = np.max(pos[1])
+        ymin = np.min(pos[0])
+        ymax = np.max(pos[0])
+        return [xmin, ymin, xmax, ymax]
 
     @staticmethod
     def get_mask_fname(patch_map):

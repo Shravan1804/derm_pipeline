@@ -60,7 +60,10 @@ def get_masks(img, masks_dirs):
     masks = []
     for mask_dir in masks_dirs:
         mask_fname = os.path.splitext(os.path.basename(img))[0] + MASK_EXT
-        mask = cv2.imread(os.path.join(mask_dir, mask_fname), cv2.IMREAD_UNCHANGED)
+        mask_path = os.path.join(mask_dir, mask_fname)
+        if not os.path.exists(mask_path):
+            raise Exception("Error:", mask_path, "doesn't exist.")
+        mask = cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
         masks.append(mask)
     return masks
 
