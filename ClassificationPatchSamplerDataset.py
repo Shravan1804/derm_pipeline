@@ -1,5 +1,4 @@
 import os
-import random
 import numpy as np
 from PatchSamplerDataset import PatchSamplerDataset
 
@@ -9,15 +8,15 @@ class ClassificationPatchSamplerDataset(PatchSamplerDataset):
         super().__init__(root, patch_size, is_train, **kwargs)
         self.classes = [c for c in sorted(os.listdir(self.root)) if os.path.isdir(os.path.join(self.root, c))]
 
-        if len(self.patches) == 0:
+        if len(self.train_patches) == 0:
             for c in self.classes:
                 print("Preparing patches for class", c)
                 class_patches = self.prepare_patches_from_imgs(os.path.join(self.root, c))
                 print()
-                self.patches.extend([{'class': c, **m} for m in class_patches])
-            random.shuffle(self.patches)
-            self.populate_train_test_lists()
-            self.save_patch_maps_to_disk()
+                self.train_patches.extend([{'class': c, **m} for m in class_patches[0]])
+                self.test_patches.extend([{'class': c, **m} for m in class_patches[1]])
+            np.random.shuffle(self.train_patches)
+            np.random.shuffle(self.test_patches)
             self.save_patches_to_disk()
 
     def __getitem__(self, idx):

@@ -6,6 +6,10 @@ from scipy import ndimage
 from tqdm import tqdm
 from timeit import default_timer as timer
 import datetime
+import pickle
+import itertools
+
+from sklearn.model_selection import train_test_split
 
 
 class PatchSamplerDataset(object):
@@ -23,32 +27,31 @@ class PatchSamplerDataset(object):
 
     # TODO: Find why ndimage.rotate produces different sizes for img than for mask...
     def __init__(self, root, patch_size, is_train, root_img_dir='images', patch_per_img=-1, n_rotation=6, rotation_padding='wrap',
-                 seed=42, test_prop=0.15, transforms=None):
-        np.random.seed(seed)
+                 seed=42, test_size=0.15, transforms=None):
         self.seed = seed
+        np.random.seed(self.seed)
         self.root = root
         self.is_train = is_train
         self.root_img_dir = root_img_dir
-        self.test_prop = test_prop
+        self.test_size = test_size
         self.transforms = transforms
         self.patch_size = patch_size
         self.patch_per_img = patch_per_img
         self.rotations = np.linspace(0, 360, n_rotation, endpoint=False, dtype=np.int).tolist()
         self.rotation_padding = rotation_padding
         self.create_cache_dirs()
-        self.patches, self.patches_train, self.patches_test = ([] for _ in range(3))
+        self.train_patches, self.test_patches = ([] for _ in range(2))
         if os.path.exists(self.patches_path):
-            self.patches = np.load(self.patches_path, allow_pickle=True).tolist()
-            self.populate_train_test_lists()
+            self.train_patches, self.test_patches = pickle.load(open(self.patches_path, "rb"))
 
-        if len(self.patches) > 0:
+        if len(self.train_patches) > 0:
             print("Loaded patches from previous run, seed = ", seed)
 
     def __getitem__(self, idx):
         raise NotImplementedError
 
     def __len__(self):
-        return len(self.patches_train) if self.is_train else len(self.patches_test)
+        return len(self.train_patches) if self.is_train else len(self.test_patches)
 
     def create_cache_dirs(self):
         """Creates the dirs where the rotated images and the patches will be saved on disk"""
@@ -58,19 +61,11 @@ class PatchSamplerDataset(object):
         if not os.path.exists(self.rotated_img_dir):
             os.makedirs(os.path.join(self.rotated_img_dir, self.root_img_dir))
         patches_file = rotated_dir + '-patches-p' + str(self.patch_size) + '-n' + str(self.patch_per_img) \
-                       + '-r' + str(len(self.rotations)) + '-seed' + str(self.seed) + '.npy'
-        self.patches_dir = os.path.join(os.path.dirname(self.root), patches_file.replace('.npy', ''))
+                       + '-r' + str(len(self.rotations)) + '-seed' + str(self.seed) + '.p'
+        self.patches_dir = os.path.join(os.path.dirname(self.root), patches_file.replace('.p', ''))
         if not os.path.exists(self.patches_dir):
             os.makedirs(os.path.join(self.patches_dir, self.root_img_dir))
         self.patches_path = os.path.join(self.patches_dir, patches_file)
-
-    def populate_train_test_lists(self):
-        """Called after patches are sampled or loaded to fill up the train and test patch lists"""
-        for patch_map in self.patches:
-            if patch_map['train_test'] == 'train':
-                self.patches_train.append(patch_map)
-            else:
-                self.patches_test.append(patch_map)
 
     def maybe_resize(self, im_arr):
         """Resize img only if one of its dimensions is smaller than the patch size otherwise returns img unchanged"""
@@ -86,22 +81,23 @@ class PatchSamplerDataset(object):
     def prepare_patches_from_imgs(self, dir_path):
         """Sample patches from imgs present in the specified directory"""
         start = timer()
-        sampled_patches = []
+        train, test = train_test_split(sorted(os.listdir(dir_path)), test_size=self.test_size, random_state=self.seed)
+        print("Test images:", test)
         print("Sampling patches ...")
-        for img_file in tqdm(sorted(os.listdir(dir_path))):
-            train_or_test = np.random.choice(['train', 'test'], size=1, p=[1 - self.test_prop, self.test_prop])[0]
-            img_path = os.path.join(dir_path, img_file)
-            img_patches = []
-            img_patches.extend(self.img_as_grid_of_patches(img_path))
-            img_patches.extend(self.sample_random_patch_from_img(img_path))
-            sampled_patches.extend([{'train_test': train_or_test, **m} for m in img_patches])
-        end = timer()
-        print("Done,", dir_path, "images were processed in", datetime.timedelta(seconds=end - start))
-        return sampled_patches
+        train_p = list(itertools.chain(*map(lambda x: self.extract_img_patches(os.path.join(dir_path, x)), tqdm(train))))
+        test_p = list(itertools.chain(*map(lambda x: self.extract_img_patches(os.path.join(dir_path, x)), tqdm(test))))
+        np.random.shuffle(train_p)
+        np.random.shuffle(test_p)
+        print("Done,", dir_path, "images were processed in", datetime.timedelta(seconds=timer() - start))
+        return train_p, test_p
 
-    def img_as_grid_of_patches(self, img_path):
-        """Converts img into a grid of patches and returns the valid patches in the grid"""
+    def extract_img_patches(self, img_path):
         im_arr = self.load_img_from_disk(img_path)
+        return self.img_as_grid_of_patches(img_path, im_arr) + self.sample_random_patch_from_img(img_path, im_arr)
+
+    def img_as_grid_of_patches(self, img_path, im_arr=None):
+        """Converts img into a grid of patches and returns the valid patches in the grid"""
+        im_arr = self.load_img_from_disk(img_path) if im_arr is None else im_arr
         im_h, im_w = im_arr.shape[:2]
         step_h = self.patch_size - PatchSamplerDataset.get_overlap(im_h, self.patch_size)
         # Don't forget + 1 in the stop argument otherwise the upper bound won't be included
@@ -114,9 +110,9 @@ class PatchSamplerDataset(object):
         grid_idx = list(filter(self.is_valid_patch, grid_idx))
         return grid_idx
 
-    def sample_random_patch_from_img(self, img_path):
+    def sample_random_patch_from_img(self, img_path, im_arr=None):
         """Samples random patches from img at all rotations"""
-        im_arr = self.load_img_from_disk(img_path)
+        im_arr = self.load_img_from_disk(img_path) if im_arr is None else im_arr
         n_samples = max(1, int(self.get_nb_patch_per_img(im_arr) / len(self.rotations)))
         sampled_patches = []
         for rotation in self.rotations:
@@ -159,11 +155,12 @@ class PatchSamplerDataset(object):
         return self.maybe_resize(cv2.imread(img_path, cv2.IMREAD_UNCHANGED))
 
     def save_patch_maps_to_disk(self):
-        np.save(self.patches_path, self.patches)
+        pickle.dump((self.train_patches, self.test_patches), open(self.patches_path, "wb"))
 
     def save_patches_to_disk(self):
         print("Saving all patches on disk ...")
-        for patch_map in tqdm(self.patches):
+        self.save_patch_maps_to_disk()
+        for patch_map in tqdm(self.train_patches + self.test_patches):
             _ = self.load_patch_from_patch_map(patch_map, cache=True)
 
     def get_nb_patch_per_img(self, im_arr):
@@ -202,7 +199,7 @@ class PatchSamplerDataset(object):
         return os.path.join(os.path.dirname(self.root), path)
 
     def get_patch_list(self):
-        return self.patches_train if self.is_train else self.patches_test
+        return self.train_patches if self.is_train else self.test_patches
 
     @staticmethod
     def get_overlap(n, div):
