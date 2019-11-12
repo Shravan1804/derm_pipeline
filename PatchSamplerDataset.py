@@ -1,5 +1,6 @@
 import os
 import cv2
+import sys
 import math
 import numpy as np
 from scipy import ndimage
@@ -13,8 +14,6 @@ from sklearn.model_selection import train_test_split
 
 
 class PatchSamplerDataset(object):
-    root_img_dir = 'images'
-
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.rotate.html#scipy.ndimage.rotate
     # rotation_padding=‘reflect’ or  ‘constant’ or ‘nearest’ or ‘mirror’ or ‘wrap’
     #    mode       |   Ext   |         Input          |   Ext
@@ -26,13 +25,15 @@ class PatchSamplerDataset(object):
     # 'wrap'     | 6  7  8 | 1  2  3  4  5  6  7  8 | 1  2  3
 
     # TODO: Find why ndimage.rotate produces different sizes for img than for mask...
-    def __init__(self, root, patch_size, is_train, root_img_dir='images', patch_per_img=-1, n_rotation=6, rotation_padding='wrap',
-                 seed=42, test_size=0.15, transforms=None):
+    def __init__(self, root, patch_size, is_test=False, patch_per_img=-1, n_rotation=6, rotation_padding='wrap',
+                 seed=42, test_size=0.15, split_data=True, root_img_dir=None, dest=None, transforms=None):
         self.seed = seed
         np.random.seed(self.seed)
         self.root = root
-        self.is_train = is_train
         self.root_img_dir = root_img_dir
+        self.is_test = is_test
+        self.split_data = split_data
+        self.dest = self.get_default_cache_root_dir() if dest is None else dest
         self.test_size = test_size
         self.transforms = transforms
         self.patch_size = patch_size
@@ -44,27 +45,27 @@ class PatchSamplerDataset(object):
         if os.path.exists(self.patches_path):
             self.train_patches, self.test_patches = pickle.load(open(self.patches_path, "rb"))
 
-        if len(self.train_patches) > 0:
+        if len(self.get_patch_list()) > 0:
             print("Loaded patches from previous run, seed = ", seed)
 
     def __getitem__(self, idx):
         raise NotImplementedError
 
     def __len__(self):
-        return len(self.train_patches) if self.is_train else len(self.test_patches)
+        return len(self.get_patch_list())
 
     def create_cache_dirs(self):
         """Creates the dirs where the rotated images and the patches will be saved on disk"""
-        rotated_dir = 'cache_' + os.path.basename(self.root) + '_' + type(self).__name__ + '-rpad' \
+        rotated_dir = 'cache_' + self.get_dataset_name() + '_' + type(self).__name__ + '-rpad' \
                       + self.rotation_padding
-        self.rotated_img_dir = os.path.join(os.path.dirname(self.root), rotated_dir)
+        self.rotated_img_dir = os.path.join(self.dest, rotated_dir)
         if not os.path.exists(self.rotated_img_dir):
-            os.makedirs(os.path.join(self.rotated_img_dir, self.root_img_dir))
+            os.makedirs(self.get_img_dir(self.rotated_img_dir))
         patches_file = rotated_dir + '-patches-p' + str(self.patch_size) + '-n' + str(self.patch_per_img) \
                        + '-r' + str(len(self.rotations)) + '-seed' + str(self.seed) + '.p'
-        self.patches_dir = os.path.join(os.path.dirname(self.root), patches_file.replace('.p', ''))
+        self.patches_dir = os.path.join(self.dest, patches_file.replace('.p', ''))
         if not os.path.exists(self.patches_dir):
-            os.makedirs(os.path.join(self.patches_dir, self.root_img_dir))
+            os.makedirs(self.get_img_dir(self.patches_dir))
         self.patches_path = os.path.join(self.patches_dir, patches_file)
 
     def maybe_resize(self, im_arr):
@@ -81,42 +82,29 @@ class PatchSamplerDataset(object):
     def prepare_patches_from_imgs(self, dir_path):
         """Sample patches from imgs present in the specified directory"""
         start = timer()
-        train, test = train_test_split(sorted(os.listdir(dir_path)), test_size=self.test_size, random_state=self.seed)
-        print("Test images:", test)
         print("Sampling patches ...")
-        train_p = list(itertools.chain(*map(lambda x: self.extract_img_patches(os.path.join(dir_path, x)), tqdm(train))))
-        test_p = list(itertools.chain(*map(lambda x: self.extract_img_patches(os.path.join(dir_path, x)), tqdm(test))))
-        np.random.shuffle(train_p)
-        np.random.shuffle(test_p)
+        img_sets = [list(map(lambda x: os.path.join(dir_path, x), sorted(os.listdir(dir_path))))]
+        if self.split_data:
+            train, test = train_test_split(img_sets[0], test_size=self.test_size, random_state=self.seed)
+            print("Test images:", list(map(os.path.basename, test)))
+            img_sets = [train, test]
+        patches = []
+        for imgs in img_sets:
+            p = list(itertools.chain(*map(self.extract_img_patches, tqdm(imgs))))
+            np.random.shuffle(p)
+            patches.append(p)
         print("Done,", dir_path, "images were processed in", datetime.timedelta(seconds=timer() - start))
-        return train_p, test_p
+        return tuple(patches)
 
     def extract_img_patches(self, img_path):
+        """Extract patches from img at all rotations"""
         im_arr = self.load_img_from_disk(img_path)
-        return self.img_as_grid_of_patches(img_path, im_arr) + self.sample_random_patch_from_img(img_path, im_arr)
-
-    def img_as_grid_of_patches(self, img_path, im_arr=None):
-        """Converts img into a grid of patches and returns the valid patches in the grid"""
-        im_arr = self.load_img_from_disk(img_path) if im_arr is None else im_arr
-        im_h, im_w = im_arr.shape[:2]
-        step_h = self.patch_size - PatchSamplerDataset.get_overlap(im_h, self.patch_size)
-        # Don't forget + 1 in the stop argument otherwise the upper bound won't be included
-        grid_h = np.arange(start=0, stop=1 + im_h - self.patch_size, step=step_h)
-        step_w = self.patch_size - PatchSamplerDataset.get_overlap(im_w, self.patch_size)
-        grid_w = np.arange(start=0, stop=1 + im_w - self.patch_size, step=step_w)
-        grid_idx = [self.get_patch_map(img_path, 0, a, b) for a in grid_h for b in grid_w]
-        if not grid_idx:
-            grid_idx = [self.get_patch_map(img_path, 0, 0, 0)]
-        grid_idx = list(filter(self.is_valid_patch, grid_idx))
-        return grid_idx
-
-    def sample_random_patch_from_img(self, img_path, im_arr=None):
-        """Samples random patches from img at all rotations"""
-        im_arr = self.load_img_from_disk(img_path) if im_arr is None else im_arr
         n_samples = max(1, int(self.get_nb_patch_per_img(im_arr) / len(self.rotations)))
         sampled_patches = []
         for rotation in self.rotations:
             im_arr_rotated, path_to_save = self.get_rotated_img(img_path, im_arr, rotation)
+            if rotation == 0:
+                sampled_patches.extend(self.img_as_grid_of_patches(im_arr_rotated, path_to_save))
             h, w = im_arr_rotated.shape[:2]
             for _ in range(n_samples):
                 loop_count = 0
@@ -131,17 +119,29 @@ class PatchSamplerDataset(object):
                 sampled_patches.append(patch_map)
         return sampled_patches
 
+    def img_as_grid_of_patches(self, im_arr, img_path):
+        """Converts img into a grid of patches and returns the valid patches in the grid"""
+        im_h, im_w = im_arr.shape[:2]
+        step_h = self.patch_size - PatchSamplerDataset.get_overlap(im_h, self.patch_size)
+        # Don't forget + 1 in the stop argument otherwise the upper bound won't be included
+        grid_h = np.arange(start=0, stop=1 + im_h - self.patch_size, step=step_h)
+        step_w = self.patch_size - PatchSamplerDataset.get_overlap(im_w, self.patch_size)
+        grid_w = np.arange(start=0, stop=1 + im_w - self.patch_size, step=step_w)
+        grid_idx = [self.get_patch_map(img_path, 0, a, b) for a in grid_h for b in grid_w]
+        if not grid_idx:
+            grid_idx = [self.get_patch_map(img_path, 0, 0, 0)]
+        grid_idx = list(filter(self.is_valid_patch, grid_idx))
+        return grid_idx
+
     def get_rotated_img(self, img_path, im_arr, rotation):
         """Rotates image if needed, loads from disk if was already rotated before.
         Returns the rotated image and the path where it was saved """
-        if rotation == 0:
-            return im_arr, img_path
         file, ext = os.path.splitext(os.path.basename(img_path))
         new_filename = file + '-r' + str(rotation)
-        rotated_img_path = os.path.join(self.rotated_img_dir, self.root_img_dir, new_filename + ext)
+        rotated_img_path = os.path.join(self.get_img_dir(self.rotated_img_dir), new_filename + ext)
         if not os.path.exists(rotated_img_path):
-            im_arr_rotated = ndimage.rotate(im_arr, rotation, reshape=True,
-                                            mode=self.rotation_padding)
+            im_arr_rotated = im_arr if rotation == 0 else \
+                ndimage.rotate(im_arr, rotation, reshape=True, mode=self.rotation_padding)
             im_arr_rotated = self.maybe_resize(im_arr_rotated)
             cv2.imwrite(rotated_img_path, im_arr_rotated)
         else:
@@ -176,30 +176,50 @@ class PatchSamplerDataset(object):
         if os.path.exists(patch_path):
             return self.load_img_from_disk(patch_path)
         else:
-            im = self.load_img_from_disk(self.get_absolute_path(patch_map['img_path']))
+            im = self.load_img_from_disk(self.get_img_path_from_patch_map(patch_map))
             patch = self.get_patch_from_idx(im, patch_map['idx_h'], patch_map['idx_w'])
             if cache:
                 cv2.imwrite(patch_path, patch)
             return patch
 
     def get_patch_map(self, img_path, rotation, idx_h, idx_w):
-        img_path = self.get_relative_path(img_path)
-        file, ext = os.path.splitext(os.path.basename(img_path))
-        if rotation == 0:  # otherwise already present in img filename
-            file += '_r' + str(rotation)
-        patch_path = os.path.join(self.patches_dir, self.root_img_dir, file + '_h' + str(idx_h)
-                                  + '_w' + str(idx_w) + ext)
+        patch_path = os.path.join(self.get_img_dir(self.patches_dir),
+                                  PatchSamplerDataset.get_patch_fname(img_path, idx_h, idx_w))
         patch_path = self.get_relative_path(patch_path)
-        return {'img_path': img_path, 'patch_path': patch_path, 'rotation': rotation, 'idx_h': idx_h, 'idx_w': idx_w}
+        return {'patch_path': patch_path, 'rotation': rotation, 'idx_h': idx_h, 'idx_w': idx_w}
+
+    def get_img_path_from_patch_map(self, patch_map):
+        patch_suffix = PatchSamplerDataset.get_patch_suffix(patch_map['idx_h'], patch_map['idx_w'])
+        img_name = os.path.basename(patch_map['patch_path']).replace(patch_suffix, '')
+        return os.path.join(self.get_img_dir(self.rotated_img_dir), img_name)
 
     def get_relative_path(self, path):
-        return path.replace(os.path.dirname(self.root) + '/', '')
+        return path.replace(self.dest + '/', '')
 
     def get_absolute_path(self, path):
-        return os.path.join(os.path.dirname(self.root), path)
+        return os.path.join(self.dest, path)
+
+    def get_img_dir(self, path):
+        """Method needed to be able to handle datasets where img are in specific subfolder"""
+        return path if self.root_img_dir is None else os.path.join(path, self.root_img_dir)
+
+    def get_dataset_name(self):
+        dataset_name = os.path.basename(self.root)
+        if self.split_data:
+            return dataset_name
+        else:
+            return dataset_name + '_' + os.path.basename(os.path.dirname(self.root))
+
+    def get_default_cache_root_dir(self):
+        """Needs self.split_data and self.root set"""
+        dir_name = os.path.dirname(self.root)
+        if self.split_data:
+            return dir_name
+        else:
+            return os.path.dirname(dir_name)
 
     def get_patch_list(self):
-        return self.train_patches if self.is_train else self.test_patches
+        return self.train_patches if not self.is_test else self.test_patches
 
     @staticmethod
     def get_overlap(n, div):
@@ -209,5 +229,18 @@ class PatchSamplerDataset(object):
         return 0 if overlap == n else overlap
 
     @staticmethod
-    def get_fname_no_ext(path):
-        return os.path.splitext(os.path.basename(path))[0]
+    def get_patch_suffix(idx_h, idx_w):
+        return '_h' + str(idx_h) + '_w' + str(idx_w)
+
+    @staticmethod
+    def get_patch_fname(img_path, idx_h, idx_w):
+        file, ext = os.path.splitext(os.path.basename(img_path))
+        return file + PatchSamplerDataset.get_patch_suffix(idx_h, idx_w) + ext
+
+
+
+
+
+
+
+

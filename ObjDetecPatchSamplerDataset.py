@@ -11,18 +11,25 @@ from PatchSamplerDataset import PatchSamplerDataset
 
 class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
-    def __init__(self, root, patch_size, is_train, mask_file_ext='.png', min_object_px_size=30, **kwargs):
+    def __init__(self, root, patch_size, mask_file_ext='.png', min_object_px_size=30, split_data=True, dest=None, **kwargs):
         self.root = root
+        self.root_img_dir = 'images'
         self.patch_size = patch_size
         self.mask_file_ext = mask_file_ext
         self.min_object_px_size = min_object_px_size
+        self.split_data = split_data
+        self.dest = self.get_default_cache_root_dir() if dest is None else dest
+
         self.masks_dirs = [m for m in sorted(os.listdir(self.root)) if os.path.isdir(os.path.join(self.root, m))
                            and m.startswith('masks_')]
         self.crop_dataset()
-        super().__init__(self.root, self.patch_size, is_train, **kwargs)
-        if len(self.train_patches) == 0:
-            self.train_patches, self.test_patches = self.prepare_patches_from_imgs(
-                os.path.join(self.root, self.root_img_dir))
+        super().__init__(self.root, self.patch_size, root_img_dir=self.root_img_dir, dest=self.dest, **kwargs)
+        if len(self.get_patch_list()) == 0:
+            patches = self.prepare_patches_from_imgs(self.get_img_dir(self.root))
+            if self.split_data:
+                self.train_patches, self.test_patches = patches
+            else:
+                self.get_patch_list().extend(patches[0])
             self.save_patches_to_disk()
 
     def __getitem__(self, idx):
@@ -83,20 +90,19 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
     def crop_dataset(self):
         """Prepares cropped dataset according to patch_size. Crops imgs to the bounding box encompassing objects from
         all masks + patch_size/2"""
-        cropped_dir = os.path.join(os.path.dirname(self.root), 'cache_' + os.path.basename(self.root) + '-cropped-p'
-                                   + str(self.patch_size))
+        cropped_dir = os.path.join(self.dest, 'cache_' + self.get_dataset_name() + '-cropped-p' + str(self.patch_size))
         if not os.path.exists(cropped_dir):
             list(map(os.makedirs, [os.path.join(cropped_dir, n) for n in self.masks_dirs + [self.root_img_dir]]))
 
             print("Cropping dataset ...")
             offset = int(self.patch_size / 2) + 1  # + 1 to comprise upper bound
             stats = [0, 0]
-            data_dirs = [os.path.join(self.root, self.root_img_dir)] + [os.path.join(self.root, masks_dir)
+            data_dirs = [self.get_img_dir(self.root)] + [os.path.join(self.root, masks_dir)
                                                                         for masks_dir in self.masks_dirs]
             data_files = [sorted(os.listdir(p)) for p in data_dirs]
             imgs_masks = list(map(lambda x: [os.path.join(x[0], n) for n in x[1]], zip(data_dirs, data_files)))
             # iterate over (img, mask1, mask2, ...) tuples
-            for img_masks in tqdm(zip(*imgs_masks)):
+            for img_masks in tqdm(list(zip(*imgs_masks))):
                 im = self.load_img_from_disk(img_masks[0])
                 im_h, im_w = im.shape[:2]
                 stats[0] += im_h * im_w
@@ -123,32 +129,28 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
     def get_rotated_img(self, img_path, im_arr, rotation):
         im_arr_rotated, path_to_save = super().get_rotated_img(img_path, im_arr, rotation)
-        if rotation != 0:
-            mask_file = self.get_img_mask_fname(img_path)
-            rotated_mask_file = self.get_img_mask_fname(path_to_save)
-            for masks_dir in self.masks_dirs:
-                rotated_mask_file_path = os.path.join(self.rotated_img_dir, masks_dir, rotated_mask_file)
-                if not os.path.exists(rotated_mask_file_path):
-                    mask_arr = self.load_img_from_disk(os.path.join(self.root, masks_dir, mask_file))
-                    rotated_mask_arr = ndimage.rotate(mask_arr, rotation, reshape=True, mode=self.rotation_padding)
-                    rotated_mask_arr = self.clean_mask(self.maybe_resize(rotated_mask_arr))
-                    cv2.imwrite(rotated_mask_file_path, rotated_mask_arr)
-
+        for masks_dir in self.masks_dirs:
+            rotated_mask_file_path = os.path.join(self.rotated_img_dir, masks_dir, self.get_mask_fname(path_to_save))
+            if not os.path.exists(rotated_mask_file_path):
+                mask_arr = self.load_img_from_disk(os.path.join(self.root, masks_dir, self.get_mask_fname(img_path)))
+                rotated_mask_arr = mask_arr if rotation == 0 else \
+                    ndimage.rotate(mask_arr, rotation, reshape=True, mode=self.rotation_padding)
+                rotated_mask_arr = self.clean_mask(self.maybe_resize(rotated_mask_arr))
+                cv2.imwrite(rotated_mask_file_path, rotated_mask_arr)
         return im_arr_rotated, path_to_save
 
     def load_masks_from_patch_map(self, patch_map, cache=False):
-        mask_file = self.get_mask_fname(patch_map)
+        mask_file = self.get_mask_fname(patch_map['patch_path'])
         masks = []
         for mask_dir in self.masks_dirs:
             mask_path = os.path.join(self.patches_dir, mask_dir, mask_file)
             if os.path.exists(mask_path):
                 masks.append(self.load_img_from_disk(mask_path))
             else:
-                mask_dir_path = os.path.join(self.rotated_img_dir, mask_dir) if patch_map['rotation'] != 0 \
-                    else os.path.join(self.root, mask_dir)
-                mask = self.load_img_from_disk(
-                    os.path.join(mask_dir_path, self.get_img_mask_fname(patch_map['img_path'])))
-                patch_mask = self.get_patch_from_idx(mask, patch_map['idx_h'], patch_map['idx_w'])
+                full_mask_file = mask_file.replace(PatchSamplerDataset.get_patch_suffix(patch_map['idx_h'],
+                                                                                        patch_map['idx_w']), '')
+                full_mask = self.load_img_from_disk(os.path.join(self.rotated_img_dir, mask_dir, full_mask_file))
+                patch_mask = self.get_patch_from_idx(full_mask, patch_map['idx_h'], patch_map['idx_w'])
                 if cache:
                     cv2.imwrite(mask_path, patch_mask)
                 masks.append(patch_mask)
@@ -173,11 +175,8 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         else:
             return np.reshape(obj_ids[inverse], np.shape(mask))
 
-    def get_mask_fname(self, patch_map):
-        return self.get_img_mask_fname(patch_map['patch_path'])
-
-    def get_img_mask_fname(self, img_path):
-        return PatchSamplerDataset.get_fname_no_ext(img_path) + self.mask_file_ext
+    def get_mask_fname(self, path):
+        return os.path.splitext(os.path.basename(path))[0] + self.mask_file_ext
 
     def get_coco_evaluation_param(self):
         if self.coco_area is None:
@@ -188,7 +187,6 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 masks = self.load_masks_from_patch_map(patch_map, cache=True)
         else:
             return self.coco_area, self.coco_maxDets
-
 
     @staticmethod
     def process_mask(mask):
