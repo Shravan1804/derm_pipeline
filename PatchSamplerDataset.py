@@ -56,8 +56,7 @@ class PatchSamplerDataset(object):
 
     def create_cache_dirs(self):
         """Creates the dirs where the rotated images and the patches will be saved on disk"""
-        rotated_dir = 'cache_' + self.get_dataset_name() + '_' + type(self).__name__ + '-rpad' \
-                      + self.rotation_padding
+        rotated_dir = 'cache_' + self.get_dataset_name() + '-rpad' + self.rotation_padding
         self.rotated_img_dir = os.path.join(self.dest, rotated_dir)
         if not os.path.exists(self.rotated_img_dir):
             os.makedirs(self.get_img_dir(self.rotated_img_dir))
@@ -90,6 +89,7 @@ class PatchSamplerDataset(object):
             img_sets = [train, test]
         patches = []
         for imgs in img_sets:
+            # merge list of list: [[img patches] * number of images]
             p = list(itertools.chain(*map(self.extract_img_patches, tqdm(imgs))))
             np.random.shuffle(p)
             patches.append(p)

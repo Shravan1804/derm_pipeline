@@ -5,6 +5,8 @@ from scipy import ndimage
 from PIL import Image
 from tqdm import tqdm
 import torch
+import pickle
+import itertools
 
 from PatchSamplerDataset import PatchSamplerDataset
 
@@ -31,6 +33,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             else:
                 self.get_patch_list().extend(patches[0])
             self.save_patches_to_disk()
+        self.compute_coco_evaluation_params()
 
     def __getitem__(self, idx):
         patch_map = self.get_patch_list()[idx]
@@ -108,7 +111,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 stats[0] += im_h * im_w
                 masks = list(map(self.load_img_from_disk, img_masks[1:]))
                 masks_not_bg = list(map(lambda x: x > 0, masks))
-                boxes = map(ObjDetecPatchSamplerDataset.get_bounding_box_of_true_values, masks_not_bg)
+                boxes = map(ObjDetecPatchSamplerDataset.get_bbox_of_true_values, masks_not_bg)
                 boxes = list(zip(*list(filter(None.__ne__, boxes))))
                 box = [max(0, min(boxes[0]) - offset), max(0, min(boxes[1]) - offset),
                        min(im_w, max(boxes[2]) + offset), min(im_h, max(boxes[3]) + offset)]
@@ -124,7 +127,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         is_valid = False
         for mask in self.load_masks_from_patch_map(patch_map):
             # even a single mask containing an object makes a patch valid
-            is_valid = is_valid or np.unique(self.clean_mask(mask)).size > 1
+            is_valid = is_valid or np.unique(mask).size > 1
         return is_valid
 
     def get_rotated_img(self, img_path, im_arr, rotation):
@@ -178,50 +181,77 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
     def get_mask_fname(self, path):
         return os.path.splitext(os.path.basename(path))[0] + self.mask_file_ext
 
-    def get_coco_evaluation_param(self):
-        if self.coco_area is None:
+    def compute_coco_evaluation_params(self):
+        metrics_path = os.path.join(self.patches_dir, 'coco-metrics.p')
+        print(metrics_path)
+        if not os.path.exists(metrics_path):
             print("Computing coco evaluation parameters")
             # area: all small medium large
             # nb of possible object detected: maxDets
-            for patch_map in tqdm([]):
-                masks = self.load_masks_from_patch_map(patch_map, cache=True)
+            metrics = []
+            for patch_map in tqdm(self.train_patches + self.test_patches):
+                metrics.append(list(map(ObjDetecPatchSamplerDataset.get_mask_metrics,
+                                        self.load_masks_from_patch_map(patch_map))))
+            pickle.dump(metrics, open(metrics_path, "wb"))
         else:
-            return self.coco_area, self.coco_maxDets
+            metrics = pickle.load(open(metrics_path, "rb"))
+        self.metrics = ObjDetecPatchSamplerDataset.analyze_mask_metrics(self.masks_dirs, metrics)
+
+    @staticmethod
+    def analyze_mask_metrics(mask_cats, raw_metrics, metrics_names=['bbox_areas', 'segm_areas', 'obj_count']):
+        # metrics contains [nb of patches * [(bbox_areas, segm_areas, [obj_count]) * nb of mask categories]]
+        # combine metrics per mask category e.g. pustules and spots
+        masks_metrics = map(lambda x: list(zip(*x)), zip(*raw_metrics))
+        # flatten list of lists
+        masks_metrics = map(lambda m: [list(itertools.chain(*n)) for n in m], masks_metrics)
+        # compute 1st, 2nd and 3rd quartiles
+        mask_quartiles = [list(map(lambda x: tuple(np.quantile(x, [0.25, 0.5, 0.75])), m)) for m in masks_metrics]
+        return dict(zip(mask_cats, [dict(zip(metrics_names, mq)) for mq in mask_quartiles]))
+
+    @staticmethod
+    def get_mask_metrics(mask):
+        """ Returns a tuple with three lists: (bbox_areas, segm_areas, [obj_count]), obj_count is a single number"""
+        obj_ids, sizes = np.unique(mask, return_counts=True)
+        if len(obj_ids) < 2:
+            return [], [], 0
+        # ignore background
+        obj_ids = obj_ids[1:]
+        obj_count = len(obj_ids)
+        segm_areas = sizes[1:]
+        masks = mask == obj_ids[:, None, None]
+        boxes = [ObjDetecPatchSamplerDataset.get_bbox_of_true_values(masks[i]) for i in range(obj_count)]
+        bbox_areas = ObjDetecPatchSamplerDataset.get_bbox_areas(list(filter(None.__ne__, boxes)))
+        return bbox_areas, segm_areas, [obj_count]
 
     @staticmethod
     def process_mask(mask):
         # instances are encoded as different colors
         obj_ids = np.unique(mask)
-        if (len(obj_ids) < 2): return None, None, None  # no object, only background
+        if len(obj_ids) < 2: return None, None, None  # no object, only background
         # first id is the background, so remove it
         obj_ids = obj_ids[1:]
         # split the color-encoded mask into a set of binary masks
         masks = mask == obj_ids[:, None, None]
         # get bounding box coordinates for each mask
         num_objs = len(obj_ids)
-        boxes = [ObjDetecPatchSamplerDataset.get_bounding_box_of_true_values(masks[i]) for i in range(num_objs)]
-        boxes = list(filter(None.__ne__, boxes))
-        return np.ones(num_objs, dtype=np.int), boxes, masks
+        boxes = [ObjDetecPatchSamplerDataset.get_bbox_of_true_values(masks[i]) for i in range(num_objs)]
+        return np.ones(num_objs, dtype=np.int), list(filter(None.__ne__, boxes)), masks
 
     @staticmethod
-    def get_bounding_box_of_true_values(mask_with_condition):
+    def get_bbox_areas(bbox_coord):
+        """Computes bbox area, input is list of bbox coordinates i.e. a list of list"""
+        bbox_coord = np.reshape(bbox_coord, (len(bbox_coord), 4))
+        return list((bbox_coord[:, 3] - bbox_coord[:, 1]) * (bbox_coord[:, 2] - bbox_coord[:, 0]))
+
+    @staticmethod
+    def get_bbox_of_true_values(mask_with_condition):
+        """Returns bbox coordinates: [xmin, ymin, xmax, ymax]. None if no objects"""
         pos = np.where(mask_with_condition)
-        if pos[0].size == 0:    # no objects
+        if pos[0].size == 0:  # no objects
             return None
         xmin = np.min(pos[1])
         xmax = np.max(pos[1])
         ymin = np.min(pos[0])
         ymax = np.max(pos[0])
         return [xmin, ymin, xmax, ymax]
-
-    @staticmethod
-    def get_mask_coco_evaluation_param(mask):
-        obj_ids, sizes = np.unique(mask, return_counts=True)
-        # ignore background
-        obj_ids = len(obj_ids[1:])
-        sizes = sizes[1:]
-        min_obj, max_obj = obj_ids[np.argin(sizes)], obj_ids[np.argmax(sizes)]
-        ObjDetecPatchSamplerDataset.get_bounding_box_of_true_values(mask == max_obj)
-        return len(obj_ids)
-
 
