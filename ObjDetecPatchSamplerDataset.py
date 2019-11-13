@@ -103,15 +103,14 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             data_dirs = [self.get_img_dir(self.root)] + [os.path.join(self.root, masks_dir)
                                                                         for masks_dir in self.masks_dirs]
             data_files = [sorted(os.listdir(p)) for p in data_dirs]
-            imgs_masks = list(map(lambda x: [os.path.join(x[0], n) for n in x[1]], zip(data_dirs, data_files)))
+            imgs_masks = [[os.path.join(x[0], n) for n in x[1]] for x in zip(data_dirs, data_files)]
             # iterate over (img, mask1, mask2, ...) tuples
             for img_masks in tqdm(list(zip(*imgs_masks))):
                 im = self.load_img_from_disk(img_masks[0])
                 im_h, im_w = im.shape[:2]
                 stats[0] += im_h * im_w
                 masks = list(map(self.load_img_from_disk, img_masks[1:]))
-                masks_not_bg = list(map(lambda x: x > 0, masks))
-                boxes = map(ObjDetecPatchSamplerDataset.get_bbox_of_true_values, masks_not_bg)
+                boxes = map(ObjDetecPatchSamplerDataset.get_bbox_of_true_values, [x > 0 for x in masks])
                 boxes = list(zip(*list(filter(None.__ne__, boxes))))
                 box = [max(0, min(boxes[0]) - offset), max(0, min(boxes[1]) - offset),
                        min(im_w, max(boxes[2]) + offset), min(im_h, max(boxes[3]) + offset)]
@@ -119,7 +118,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 im_h, im_w = cropped[0].shape[:2]
                 stats[1] += im_h * im_w
                 dest = [m.replace(self.root, cropped_dir) for m in img_masks]
-                list(map(lambda x: cv2.imwrite(x[0], x[1]), zip(dest, cropped)))
+                [cv2.imwrite(x[0], x[1]) for x in zip(dest, cropped)]
             print("Cropping completed, dataset pixels reduced by", 100 * (1 - stats[1] / stats[0]), "%.")
         self.root = cropped_dir
 
@@ -200,12 +199,10 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
     @staticmethod
     def analyze_mask_metrics(mask_cats, raw_metrics, metrics_names=['bbox_areas', 'segm_areas', 'obj_count']):
         # metrics contains [nb of patches * [(bbox_areas, segm_areas, [obj_count]) * nb of mask categories]]
-        # combine metrics per mask category e.g. pustules and spots
-        masks_metrics = map(lambda x: list(zip(*x)), zip(*raw_metrics))
-        # flatten list of lists
-        masks_metrics = map(lambda m: [list(itertools.chain(*n)) for n in m], masks_metrics)
+        # combine metrics per mask category e.g. pustules and spots then flatten list of lists
+        masks_metrics = [[list(itertools.chain(*n)) for n in m] for m in [list(zip(*x)) for x in zip(*raw_metrics)]]
         # compute 1st, 2nd and 3rd quartiles
-        mask_quartiles = [list(map(lambda x: tuple(np.quantile(x, [0.25, 0.5, 0.75])), m)) for m in masks_metrics]
+        mask_quartiles = [[tuple(np.quantile(x, [0.25, 0.5, 0.75]) for x in m)] for m in masks_metrics]
         return dict(zip(mask_cats, [dict(zip(metrics_names, mq)) for mq in mask_quartiles]))
 
     @staticmethod

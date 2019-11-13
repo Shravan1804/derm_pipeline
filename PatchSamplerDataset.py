@@ -82,7 +82,7 @@ class PatchSamplerDataset(object):
         """Sample patches from imgs present in the specified directory"""
         start = timer()
         print("Sampling patches ...")
-        img_sets = [list(map(lambda x: os.path.join(dir_path, x), sorted(os.listdir(dir_path))))]
+        img_sets = [[os.path.join(dir_path, x) for x in sorted(os.listdir(dir_path))]]
         if self.split_data:
             train, test = train_test_split(img_sets[0], test_size=self.test_size, random_state=self.seed)
             print("Test images:", list(map(os.path.basename, test)))
