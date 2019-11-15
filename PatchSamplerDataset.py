@@ -8,7 +8,6 @@ from tqdm import tqdm
 from timeit import default_timer as timer
 import datetime
 import pickle
-import itertools
 
 from sklearn.model_selection import train_test_split
 
@@ -90,7 +89,7 @@ class PatchSamplerDataset(object):
         patches = []
         for imgs in img_sets:
             # merge list of list: [[img patches] * number of images]
-            p = list(itertools.chain(*map(self.extract_img_patches, tqdm(imgs))))
+            p = [o for sublst in map(self.extract_img_patches, tqdm(imgs)) for o in sublst]
             np.random.shuffle(p)
             patches.append(p)
         print("Done,", dir_path, "images were processed in", datetime.timedelta(seconds=timer() - start))

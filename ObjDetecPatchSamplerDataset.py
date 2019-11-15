@@ -6,19 +6,21 @@ from PIL import Image
 from tqdm import tqdm
 import torch
 import pickle
-import itertools
 
 from PatchSamplerDataset import PatchSamplerDataset
 
 
 class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
-    def __init__(self, root, patch_size, mask_file_ext='.png', min_object_px_size=30, split_data=True, dest=None, **kwargs):
+    def __init__(self, root, patch_size, mask_file_ext='.png', min_object_px_size=30, quantiles=[0.25, 0.5, 0.75],
+                 metrics_names=['bbox_areas', 'segm_areas', 'obj_count'], split_data=True, dest=None, **kwargs):
         self.root = root
         self.root_img_dir = 'images'
         self.patch_size = patch_size
         self.mask_file_ext = mask_file_ext
         self.min_object_px_size = min_object_px_size
+        self.quantiles = quantiles
+        self.metrics_names = metrics_names
         self.split_data = split_data
         self.dest = self.get_default_cache_root_dir() if dest is None else dest
 
@@ -40,14 +42,15 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         img = Image.fromarray(cv2.cvtColor(self.load_patch_from_patch_map(patch_map), cv2.COLOR_BGR2RGB)).convert("RGB")
         raw_masks = self.load_masks_from_patch_map(patch_map)
 
-        classes = masks = None
+        classes = masks = segm_areas = None
         boxes = []
-        for i, mask in enumerate(raw_masks):
-            c, b, m = ObjDetecPatchSamplerDataset.process_mask(mask)
+        for i, objects in enumerate(filter(None.__ne__, map(ObjDetecPatchSamplerDataset.process_mask, raw_masks))):
+            c, b, m, s = objects
             if b is None: continue  # empty mask
             # all objects from one mask belong to the same class
             classes = c if classes is None else np.append(classes, (i + 1) * c)
             boxes += b
+            segm_areas = s if segm_areas is None else np.append(segm_areas, s)
             masks = m if masks is None else np.append(masks, m, axis=0)
 
         num_objs = len(classes)
@@ -64,8 +67,10 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 "Image", self.imgs[idx], "with mask", self.masks[idx], "and boxes", boxes,
                 "raised an IndexError exception")
             raise error
-        # TODO: suppose all instances are not crowd
-        iscrowd = torch.zeros((num_objs,), dtype=torch.int64)
+        # An instance iscrowd if it has a larger segmentation area than 75% of all objects
+        crowd_objs = segm_areas > np.array([x['segm_areas'][2] for x in map(self.metrics.__getitem__,
+                                                                            np.array(self.masks_dirs)[classes-1])])
+        iscrowd = torch.as_tensor(crowd_objs.astype(np.int), dtype=torch.int64)
 
         target = {}
         target["boxes"] = boxes
@@ -187,23 +192,30 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             print("Computing coco evaluation parameters")
             # area: all small medium large
             # nb of possible object detected: maxDets
-            metrics = []
+            raw_metrics = []
             for patch_map in tqdm(self.train_patches + self.test_patches):
-                metrics.append(list(map(ObjDetecPatchSamplerDataset.get_mask_metrics,
+                raw_metrics.append(list(map(ObjDetecPatchSamplerDataset.get_mask_metrics,
                                         self.load_masks_from_patch_map(patch_map))))
-            pickle.dump(metrics, open(metrics_path, "wb"))
+            pickle.dump(raw_metrics, open(metrics_path, "wb"))
         else:
-            metrics = pickle.load(open(metrics_path, "rb"))
-        self.metrics = ObjDetecPatchSamplerDataset.analyze_mask_metrics(self.masks_dirs, metrics)
+            raw_metrics = pickle.load(open(metrics_path, "rb"))
+        self.metrics = ObjDetecPatchSamplerDataset.analyze_mask_metrics(raw_metrics, self.masks_dirs,
+                                                                        self.metrics_names, self.quantiles)
 
     @staticmethod
-    def analyze_mask_metrics(mask_cats, raw_metrics, metrics_names=['bbox_areas', 'segm_areas', 'obj_count']):
+    def analyze_mask_metrics(raw_metrics, mask_cats, metrics_names, quantiles):
+        """Returns e.g. {'masks_pustules': {'bbox_areas': (array([143. , 323.5, 907. ]),
+        array([129.  , 268.  , 646.75]), array([ 1.75, 16.  , 27.25]))},
+                        'masks_spots': {'bbox_areas': (array([ 99. , 176. , 418.5]),
+                        array([ 97.  , 139.  , 314.25]), array([ 2. , 16. , 25.5]))}}"""
         # metrics contains [nb of patches * [(bbox_areas, segm_areas, [obj_count]) * nb of mask categories]]
-        # combine metrics per mask category e.g. pustules and spots then flatten list of lists
-        masks_metrics = [[list(itertools.chain(*n)) for n in m] for m in [list(zip(*x)) for x in zip(*raw_metrics)]]
-        # compute 1st, 2nd and 3rd quartiles
-        mask_quartiles = [[tuple(np.quantile(x, [0.25, 0.5, 0.75]) for x in m)] for m in masks_metrics]
-        return dict(zip(mask_cats, [dict(zip(metrics_names, mq)) for mq in mask_quartiles]))
+        # combine metrics per type for each mask category e.g. pustules and spots
+        grp_per_mask = [zip(*m_metrics) for m_metrics in zip(*raw_metrics)]
+        # flatten each metrics in an array
+        masks_metrics = [[[n for sublst in m_lsts for n in sublst] for m_lsts in grouped] for grouped in grp_per_mask]
+        # compute quantiles
+        mask_quantiles = [[tuple(np.quantile(x, quantiles)) for x in m_metrics] for m_metrics in masks_metrics]
+        return dict(zip(mask_cats, [dict(zip(metrics_names, mq)) for mq in mask_quantiles]))
 
     @staticmethod
     def get_mask_metrics(mask):
@@ -223,16 +235,17 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
     @staticmethod
     def process_mask(mask):
         # instances are encoded as different colors
-        obj_ids = np.unique(mask)
-        if len(obj_ids) < 2: return None, None, None  # no object, only background
+        obj_ids, sizes = np.unique(mask, return_counts=True)
+        if len(obj_ids) < 2: return None  # no object, only background
         # first id is the background, so remove it
         obj_ids = obj_ids[1:]
+        segm_areas = sizes[1:]
         # split the color-encoded mask into a set of binary masks
         masks = mask == obj_ids[:, None, None]
         # get bounding box coordinates for each mask
         num_objs = len(obj_ids)
         boxes = [ObjDetecPatchSamplerDataset.get_bbox_of_true_values(masks[i]) for i in range(num_objs)]
-        return np.ones(num_objs, dtype=np.int), list(filter(None.__ne__, boxes)), masks
+        return np.ones(num_objs, dtype=np.int), list(filter(None.__ne__, boxes)), masks, segm_areas
 
     @staticmethod
     def get_bbox_areas(bbox_coord):
