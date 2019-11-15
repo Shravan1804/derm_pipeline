@@ -142,7 +142,8 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 mask_arr = self.load_img_from_disk(os.path.join(self.root, masks_dir, self.get_mask_fname(img_path)))
                 rotated_mask_arr = mask_arr if rotation == 0 else \
                     ndimage.rotate(mask_arr, rotation, reshape=True, mode=self.rotation_padding)
-                rotated_mask_arr = self.clean_mask(self.maybe_resize(rotated_mask_arr))
+                rotated_mask_arr = ObjDetecPatchSamplerDataset.clean_mask(self.maybe_resize(rotated_mask_arr),
+                                                                          self.min_object_px_size)
                 cv2.imwrite(rotated_mask_file_path, rotated_mask_arr)
         return im_arr_rotated, path_to_save
 
@@ -169,18 +170,6 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         for patch_map in tqdm(self.train_patches + self.test_patches):
             _ = self.load_patch_from_patch_map(patch_map, cache=True)
             _ = self.load_masks_from_patch_map(patch_map, cache=True)
-
-    def clean_mask(self, mask):
-        """Removes all objects smaller than minimum size"""
-        nb_obj, obj_labels = cv2.connectedComponents(mask)
-        if nb_obj < 2:
-            return mask  # only background
-        obj_ids, inverse, sizes = np.unique(obj_labels, return_inverse=True, return_counts=True)
-        for i, size in enumerate(sizes):
-            if size < self.min_object_px_size:
-                obj_ids[i] = 0  # set this component to background
-        else:
-            return np.reshape(obj_ids[inverse], np.shape(mask))
 
     def get_mask_fname(self, path):
         return os.path.splitext(os.path.basename(path))[0] + self.mask_file_ext
@@ -246,6 +235,19 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         num_objs = len(obj_ids)
         boxes = [ObjDetecPatchSamplerDataset.get_bbox_of_true_values(masks[i]) for i in range(num_objs)]
         return np.ones(num_objs, dtype=np.int), list(filter(None.__ne__, boxes)), masks, segm_areas
+
+    @staticmethod
+    def clean_mask(mask, min_object_px_size):
+        """Removes all objects smaller than minimum size"""
+        nb_obj, obj_labels = cv2.connectedComponents(mask)
+        if nb_obj < 2:
+            return mask  # only background
+        obj_ids, inverse, sizes = np.unique(obj_labels, return_inverse=True, return_counts=True)
+        for i, size in enumerate(sizes):
+            if size < min_object_px_size:
+                obj_ids[i] = 0  # set this component to background
+        else:
+            return np.reshape(obj_ids[inverse], np.shape(mask))
 
     @staticmethod
     def get_bbox_areas(bbox_coord):
