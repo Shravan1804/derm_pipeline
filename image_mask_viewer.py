@@ -107,6 +107,7 @@ def main():
     parser.add_argument('--clean_mask', action='store_true', help="Should clean mask. App will compare masks instead of with/wihout mask pics")
     parser.add_argument('--bbox', action='store_true', help="Draws bbox")
     parser.add_argument('--from_sampler', action='store_true', help="show images from ObjDetecPatchSamplerDataset")
+    parser.add_argument('--img_ids', type=int, nargs='*', help="show only img with specified id")
 
     args = parser.parse_args()
 
@@ -129,10 +130,14 @@ def main():
             img_list = [os.path.basename(p['patch_path']) for patch_maps in datasets for p in patch_maps]
         else:
             img_list = list(sorted(os.listdir(os.path.join(args.root, IMG_DIR))))
+        img_index = range(len(img_list))
+        if args.img_ids is not None:
+            img_list = [img_list[i] for i in args.img_ids]
+            img_index = args.img_ids
         for i, img in enumerate(img_list):
             img_path = os.path.join(args.root, IMG_DIR, img)
             try:
-                show_overlayed_img(i, img_path, get_masks(img_path, masks_dirs), classes, args.clean_mask, args.bbox)
+                show_overlayed_img(img_index[i], img_path, get_masks(img_path, masks_dirs), classes, args.clean_mask, args.bbox)
             except:
                 print(img_path, 'created an error, exiting ...')
                 raise
