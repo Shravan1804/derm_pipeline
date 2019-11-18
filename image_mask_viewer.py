@@ -11,6 +11,8 @@ import argparse
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
+from ObjDetecPatchSamplerDataset import ObjDetecPatchSamplerDataset
+
 import numpy as np
 
 MASK_EXT = '.png'
@@ -34,7 +36,7 @@ def plt_set_fullscreen():
 def read_img(img_path):
     return cv2.cvtColor(cv2.imread(img_path, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB)
 
-def show_overlayed_img(img_path, masks, classes, transform_mask=False):
+def show_overlayed_img(img_path, masks, classes, transform_mask=False, bbox=False):
     img_orig = read_img(img_path)
     img = img_orig.copy()
     img_mask_cleaned = img_orig.copy()
@@ -42,10 +44,14 @@ def show_overlayed_img(img_path, masks, classes, transform_mask=False):
     for i, mask in enumerate(masks):
         img[mask!=0] = COLORS[i]
         if transform_mask:
-            mask_cleaned = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+            mask_cleaned = ObjDetecPatchSamplerDataset.clean_mask(mask, 30, 10)
+            #mask_cleaned = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
             #mask_cleaned = cv2.dilate(mask,np.ones((3, 3), np.uint8),iterations=1)
             #mask_cleaned = cv2.erode(mask_cleaned, np.ones((2, 2), np.uint8), iterations=2)
             img_mask_cleaned[mask_cleaned!=0] = COLORS[i]
+        if bbox:
+            draw_bbox(img, mask)
+            if transform_mask: draw_bbox(img_mask_cleaned, mask_cleaned)
         legend.append(Line2D([0], [0], marker='o', color=tuple(map(lambda x: x/255, COLORS[i])), label=classes[i], markersize=10))
 
     fig, ax = plt.subplots()
@@ -73,6 +79,13 @@ def show_overlayed_img(img_path, masks, classes, transform_mask=False):
     plt.waitforbuttonpress(0)  # this will wait for indefinite time
     plt.close(fig)
 
+def draw_bbox(img, mask):
+    objs = ObjDetecPatchSamplerDataset.process_mask(mask)
+    if objs is None: return
+    _, bbox, _, _ = objs
+    for b in bbox:
+        cv2.rectangle(img, (b[0], b[1]), (b[2], b[3]), (0, 255, 0), 1)
+    return img
 
 def get_masks(img, masks_dirs):
     masks = []
@@ -91,6 +104,7 @@ def main():
     parser.add_argument('--root', default='/home/shravan/deep-learning/data/PPP_orig_cleaned_sample', type=str, help="source image root directory absolute path")
     parser.add_argument('--img', type=str, help="absolute path, show only specific image")
     parser.add_argument('--clean_mask', action='store_true', help="Should clean mask. App will compare masks instead of with/wihout mask pics")
+    parser.add_argument('--bbox', action='store_true', help="Draws bbox")
 
     args = parser.parse_args()
 
@@ -106,13 +120,13 @@ def main():
     classes = [m.replace(args.root, '').replace('/', '').replace('masks_', '') for m in masks_dirs]
 
     if args.img is not None:
-        show_overlayed_img(args.img, get_masks(args.img, masks_dirs), classes, args.clean_mask)
+        show_overlayed_img(args.img, get_masks(args.img, masks_dirs), classes, args.clean_mask, args.bbox)
     else:
         img_list = list(sorted(os.listdir(os.path.join(args.root, IMG_DIR))))
         for img in img_list:
             img_path = os.path.join(args.root, IMG_DIR, img)
             try:
-                show_overlayed_img(img_path, get_masks(img_path, masks_dirs), classes, args.clean_mask)
+                show_overlayed_img(img_path, get_masks(img_path, masks_dirs), classes, args.clean_mask, args.bbox)
             except:
                 print(img_path, 'created an error, exiting ...')
                 raise
