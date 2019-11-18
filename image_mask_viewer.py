@@ -94,6 +94,9 @@ def main():
 
     args = parser.parse_args()
 
+    if args.img is not None:
+        args.root = os.path.dirname(os.path.dirname(args.img))
+
     if not os.path.exists(args.root):
         raise Exception("No correct image specified but there is an error with provided path:", args.root)
 
