@@ -7,6 +7,7 @@ matplotlib.use('TkAgg')
 
 import cv2
 import os, sys
+import pickle
 import argparse
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -36,7 +37,7 @@ def plt_set_fullscreen():
 def read_img(img_path):
     return cv2.cvtColor(cv2.imread(img_path, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB)
 
-def show_overlayed_img(img_path, masks, classes, transform_mask=False, bbox=False):
+def show_overlayed_img(id, img_path, masks, classes, transform_mask=False, bbox=False):
     img_orig = read_img(img_path)
     img = img_orig.copy()
     img_mask_cleaned = img_orig.copy()
@@ -55,7 +56,7 @@ def show_overlayed_img(img_path, masks, classes, transform_mask=False, bbox=Fals
         legend.append(Line2D([0], [0], marker='o', color=tuple(map(lambda x: x/255, COLORS[i])), label=classes[i], markersize=10))
 
     fig, ax = plt.subplots()
-    plt.title(os.path.basename(img_path))
+    plt.title(f'Image {id}: {os.path.basename(img_path)}')
     ax1=fig.add_subplot(1, 2, 1)
     if transform_mask:
         plt.imshow(img)
@@ -105,6 +106,7 @@ def main():
     parser.add_argument('--img', type=str, help="absolute path, show only specific image")
     parser.add_argument('--clean_mask', action='store_true', help="Should clean mask. App will compare masks instead of with/wihout mask pics")
     parser.add_argument('--bbox', action='store_true', help="Draws bbox")
+    parser.add_argument('--from_sampler', action='store_true', help="show images from ObjDetecPatchSamplerDataset")
 
     args = parser.parse_args()
 
@@ -122,11 +124,15 @@ def main():
     if args.img is not None:
         show_overlayed_img(args.img, get_masks(args.img, masks_dirs), classes, args.clean_mask, args.bbox)
     else:
-        img_list = list(sorted(os.listdir(os.path.join(args.root, IMG_DIR))))
-        for img in img_list:
+        if args.from_sampler:
+            datasets = pickle.load(open(os.path.join(args.root, os.path.basename(args.root) + '.p'), "rb"))
+            img_list = [os.path.basename(p['patch_path']) for patch_maps in datasets for p in patch_maps]
+        else:
+            img_list = list(sorted(os.listdir(os.path.join(args.root, IMG_DIR))))
+        for i, img in enumerate(img_list):
             img_path = os.path.join(args.root, IMG_DIR, img)
             try:
-                show_overlayed_img(img_path, get_masks(img_path, masks_dirs), classes, args.clean_mask, args.bbox)
+                show_overlayed_img(i, img_path, get_masks(img_path, masks_dirs), classes, args.clean_mask, args.bbox)
             except:
                 print(img_path, 'created an error, exiting ...')
                 raise
