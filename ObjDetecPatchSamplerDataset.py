@@ -176,7 +176,6 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
     def compute_coco_evaluation_params(self):
         metrics_path = os.path.join(self.patches_dir, 'coco-metrics.p')
-        print(metrics_path)
         if not os.path.exists(metrics_path):
             print("Computing coco evaluation parameters")
             # area: all small medium large
@@ -199,7 +198,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                         array([ 97.  , 139.  , 314.25]), array([ 2. , 16. , 25.5]))}}"""
         # metrics contains [nb of patches * [(bbox_areas, segm_areas, [obj_count]) * nb of mask categories]]
         # combine metrics per type for each mask category e.g. pustules and spots
-        grp_per_mask = [zip(*m_metrics) for m_metrics in zip(*raw_metrics)]
+        grp_per_mask = [list(zip(*filter(None.__ne__, m_metrics))) for m_metrics in zip(*raw_metrics)]
         # flatten each metrics in an array
         masks_metrics = [[[n for sublst in m_lsts for n in sublst] for m_lsts in grouped] for grouped in grp_per_mask]
         # compute quantiles
@@ -211,7 +210,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         """ Returns a tuple with three lists: (bbox_areas, segm_areas, [obj_count]), obj_count is a single number"""
         obj_ids, sizes = np.unique(mask, return_counts=True)
         if len(obj_ids) < 2:
-            return [], [], 0
+            return None
         # ignore background
         obj_ids = obj_ids[1:]
         obj_count = len(obj_ids)
@@ -219,7 +218,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         masks = mask == obj_ids[:, None, None]
         boxes = [ObjDetecPatchSamplerDataset.get_bbox_of_true_values(masks[i]) for i in range(obj_count)]
         bbox_areas = ObjDetecPatchSamplerDataset.get_bbox_areas(list(filter(None.__ne__, boxes)))
-        return bbox_areas, segm_areas, [obj_count]
+        return bbox_areas, segm_areas.tolist(), [obj_count]
 
     @staticmethod
     def process_mask(mask):
