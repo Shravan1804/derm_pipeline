@@ -12,7 +12,7 @@ from PatchSamplerDataset import PatchSamplerDataset
 
 class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
-    def __init__(self, root, patch_size, mask_file_ext='.png', min_object_px_size=30, quantiles=[0.25, 0.5, 0.75],
+    def __init__(self, root, patch_size, mask_file_ext='.png', min_object_px_size=30, quantiles=[0.25, 0.5, 0.75, 0.99],
                  metrics_names=['bbox_areas', 'segm_areas', 'obj_count'], split_data=True, dest=None, **kwargs):
         self.root = root
         self.root_img_dir = 'images'
@@ -36,10 +36,11 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 self.get_patch_list().extend(patches[0])
             self.save_patches_to_disk()
         self.compute_coco_evaluation_params()
-        print(self.metrics)
+        print(self.coco_metrics)
 
     def __getitem__(self, idx):
         patch_map = self.get_patch_list()[idx]
+        # TODO: don't use PIL but CV2
         img = Image.fromarray(cv2.cvtColor(self.load_patch_from_patch_map(patch_map), cv2.COLOR_BGR2RGB)).convert("RGB")
         gt = self.process_raw_masks(self.load_masks_from_patch_map(patch_map))
         if gt is None:
@@ -67,7 +68,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             return None
         objs[0] = tuple((i + 1) * np.ones(n_obj, dtype=np.int) for i, n_obj in enumerate(objs[0]))
         classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks = (np.concatenate(val) for val in objs)
-        crowd_objs = segm_areas > np.array([x['segm_areas'][2] for x in map(self.metrics.__getitem__,
+        crowd_objs = segm_areas > np.array([x['segm_areas'][2] for x in map(self.coco_metrics.__getitem__,
                                                                             np.array(self.masks_dirs)[classes - 1])])
         return classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks, crowd_objs
 
@@ -160,6 +161,20 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
     def get_mask_fname(self, path):
         return os.path.splitext(os.path.basename(path))[0] + self.mask_file_ext
 
+    def get_coco_params(self, key):
+        classes = [i + 1 for i in range(len(self.masks_dirs))] if key == 'ALL' else [self.masks_dirs.index(key) + 1]
+        m = self.coco_metrics[key]
+        n ='bbox_areas'
+        bbox_areas = [[0, int(1.1 * m[n][3])], [0, int(m[n][0])], [int(m[n][0]), int(m[n][2])],
+                      [int(m[n][2]), int(1.1 * m[n][3])]]   # ['all', 'small', 'medium', 'large']
+        n = 'segm_areas'
+        segm_areas = [[0, int(1.1 * m[n][3])], [0, int(m[n][0])], [int(m[n][0]), int(m[n][2])],
+                      [int(m[n][2]), int(1.1 * m[n][3])]]  # ['all', 'small', 'medium', 'large']
+        n = 'obj_count'
+        max_detections = [int(m[n][1]), int(m[n][2]), int(1.1 * m[n][3])]
+
+        return classes, bbox_areas, segm_areas, max_detections
+
     def compute_coco_evaluation_params(self):
         metrics_path = os.path.join(self.patches_dir, 'coco-metrics.p')
         if not os.path.exists(metrics_path):
@@ -173,15 +188,17 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             pickle.dump(raw_metrics, open(metrics_path, "wb"))
         else:
             raw_metrics = pickle.load(open(metrics_path, "rb"))
-        self.metrics = ObjDetecPatchSamplerDataset.analyze_mask_metrics(raw_metrics, self.masks_dirs,
-                                                                        self.metrics_names, self.quantiles)
+        self.coco_metrics = ObjDetecPatchSamplerDataset.analyze_mask_metrics(raw_metrics, self.masks_dirs,
+                                                                             self.metrics_names, self.quantiles)
 
     @staticmethod
     def analyze_mask_metrics(raw_metrics, mask_cats, metrics_names, quantiles):
-        """Returns e.g. {'masks_pustules': {'bbox_areas': (array([143. , 323.5, 907. ]),
-        array([129.  , 268.  , 646.75]), array([ 1.75, 16.  , 27.25]))},
-                        'masks_spots': {'bbox_areas': (array([ 99. , 176. , 418.5]),
-                        array([ 97.  , 139.  , 314.25]), array([ 2. , 16. , 25.5]))}}"""
+        """Returns e.g. {'masks_pustules': {'bbox_areas': (88.0, 182.0, 598.5),
+                                            'segm_areas': (79.5, 150.5, 379.0),
+                                            'obj_count': (5.0, 11.0, 27.0)},
+                        'masks_spots': {'bbox_areas': (48.0, 100.0, 287.0),
+                                        'segm_areas': (45.0, 94.0, 191.0),
+                                        'obj_count': (2.0, 5.5, 15.25)}}"""
         # metrics contains [nb of patches * [(bbox_areas, segm_areas, [obj_count]) * nb of mask categories]]
         # combine metrics per type for each mask category e.g. pustules and spots
         grp_per_mask = [list(zip(*filter(None.__ne__, m_metrics))) for m_metrics in zip(*raw_metrics)]
@@ -189,7 +206,11 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         masks_metrics = [[[n for sublst in m_lsts for n in sublst] for m_lsts in grouped] for grouped in grp_per_mask]
         # compute quantiles
         mask_quantiles = [[tuple(np.quantile(x, quantiles)) for x in m_metrics] for m_metrics in masks_metrics]
-        return dict(zip(mask_cats, [dict(zip(metrics_names, mq)) for mq in mask_quantiles]))
+        metrics = dict(zip(mask_cats, [dict(zip(metrics_names, mq)) for mq in mask_quantiles]))
+
+        all_metrics = [[y for x in m for y in x] for m in zip(*masks_metrics)]
+        metrics['ALL'] = dict(zip(metrics_names, [tuple(np.quantile(x, quantiles)) for x in all_metrics]))
+        return metrics
 
     @staticmethod
     def extract_mask_objs(mask):
