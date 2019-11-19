@@ -36,54 +36,40 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 self.get_patch_list().extend(patches[0])
             self.save_patches_to_disk()
         self.compute_coco_evaluation_params()
+        print(self.metrics)
 
     def __getitem__(self, idx):
         patch_map = self.get_patch_list()[idx]
         img = Image.fromarray(cv2.cvtColor(self.load_patch_from_patch_map(patch_map), cv2.COLOR_BGR2RGB)).convert("RGB")
-        raw_masks = self.load_masks_from_patch_map(patch_map)
+        gt = self.process_raw_masks(self.load_masks_from_patch_map(patch_map))
+        if gt is None:
+            raise Exception(f"Error with image {idx} all masks are empty. Patch map: {patch_map}")
 
-        classes = masks = segm_areas = None
-        boxes = []
-        for i, objects in enumerate(filter(None.__ne__, map(ObjDetecPatchSamplerDataset.process_mask, raw_masks))):
-            c, b, m, s = objects
-            if b is None: continue  # empty mask
-            # all objects from one mask belong to the same class
-            classes = c if classes is None else np.append(classes, (i + 1) * c)
-            boxes += b
-            segm_areas = s if segm_areas is None else np.append(segm_areas, s)
-            masks = m if masks is None else np.append(masks, m, axis=0)
-
-        num_objs = len(classes)
-        # convert everything into a torch.Tensor
+        classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks, crowd_objs = gt
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
+        areas = torch.as_tensor(bbox_areas, dtype=torch.float32)
         labels = torch.as_tensor(classes, dtype=torch.int64)
-        masks = torch.as_tensor(masks, dtype=torch.uint8)
-
-        image_id = torch.tensor([idx])
-        try:
-            area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
-        except IndexError as error:
-            print(
-                "Image", self.imgs[idx], "with mask", self.masks[idx], "and boxes", boxes,
-                "raised an IndexError exception")
-            raise error
-        # An instance iscrowd if it has a larger segmentation area than 75% of all objects
-        crowd_objs = segm_areas > np.array([x['segm_areas'][2] for x in map(self.metrics.__getitem__,
-                                                                            np.array(self.masks_dirs)[classes-1])])
+        masks = torch.as_tensor(obj_masks, dtype=torch.uint8)
         iscrowd = torch.as_tensor(crowd_objs.astype(np.int), dtype=torch.int64)
+        image_id = torch.tensor([idx])
+        gt = (boxes, labels, masks, image_id, areas, iscrowd)
 
-        target = {}
-        target["boxes"] = boxes
-        target["labels"] = labels
-        target["masks"] = masks
-        target["image_id"] = image_id
-        target["area"] = area
-        target["iscrowd"] = iscrowd
+        target = dict(zip(('boxes', 'labels', 'masks', 'image_id', 'area', 'iscrowd'), gt))
 
         if self.transforms is not None:
             img, target = self.transforms(img, target)
 
         return img, target
+
+    def process_raw_masks(self, raw_masks):
+        objs = list(zip(*filter(None.__ne__, map(ObjDetecPatchSamplerDataset.extract_mask_objs, raw_masks))))
+        if not objs:    # check list empty
+            return None
+        objs[0] = tuple((i + 1) * np.ones(n_obj, dtype=np.int) for i, n_obj in enumerate(objs[0]))
+        classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks = (np.concatenate(val) for val in objs)
+        crowd_objs = segm_areas > np.array([x['segm_areas'][2] for x in map(self.metrics.__getitem__,
+                                                                            np.array(self.masks_dirs)[classes - 1])])
+        return classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks, crowd_objs
 
     def create_cache_dirs(self):
         super().create_cache_dirs()
@@ -206,38 +192,38 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         return dict(zip(mask_cats, [dict(zip(metrics_names, mq)) for mq in mask_quantiles]))
 
     @staticmethod
+    def extract_mask_objs(mask):
+        """Returns obj_count, obj_ids, obj_segm_areas, obj_bbox, obj_bbox_areas, obj_masks (without backgroud)"""
+        obj_ids, segm_areas = np.unique(mask, return_counts=True)
+        # remove background
+        obj_ids = obj_ids[1:]
+        segm_areas = segm_areas[1:]
+        obj_count = len(obj_ids)
+        if obj_count < 1:
+            return None
+        obj_masks = mask == obj_ids[:, None, None]
+        boxes = [ObjDetecPatchSamplerDataset.get_bbox_of_true_values(obj_masks[i]) for i in range(obj_count)]
+        obj_del = [i for i, v in enumerate(boxes) if v is None]
+        obj_count -= len(obj_del)
+        if obj_count < 1:
+            return None
+        obj_ids, segm_areas, obj_masks = (np.delete(i, obj_del, axis=0) for i in [obj_ids, segm_areas, obj_masks])
+        boxes = np.reshape(list(filter(None.__ne__, boxes)), (obj_count, 4))
+        bbox_areas = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
+        return obj_count, obj_ids, segm_areas, boxes, bbox_areas, obj_masks
+
+    @staticmethod
     def get_mask_metrics(mask):
         """ Returns a tuple with three lists: (bbox_areas, segm_areas, [obj_count]), obj_count is a single number"""
-        obj_ids, sizes = np.unique(mask, return_counts=True)
-        if len(obj_ids) < 2:
+        objs = ObjDetecPatchSamplerDataset.extract_mask_objs(mask)
+        if objs is None:
             return None
-        # ignore background
-        obj_ids = obj_ids[1:]
-        obj_count = len(obj_ids)
-        segm_areas = sizes[1:]
-        masks = mask == obj_ids[:, None, None]
-        boxes = [ObjDetecPatchSamplerDataset.get_bbox_of_true_values(masks[i]) for i in range(obj_count)]
-        bbox_areas = ObjDetecPatchSamplerDataset.get_bbox_areas(list(filter(None.__ne__, boxes)))
-        return bbox_areas, segm_areas.tolist(), [obj_count]
+        obj_count, _, segm_areas, _, bbox_areas, _ = objs
+        return bbox_areas.tolist(), segm_areas.tolist(), [obj_count]
 
     @staticmethod
-    def process_mask(mask):
-        # instances are encoded as different colors
-        obj_ids, sizes = np.unique(mask, return_counts=True)
-        if len(obj_ids) < 2: return None  # no object, only background
-        # first id is the background, so remove it
-        obj_ids = obj_ids[1:]
-        segm_areas = sizes[1:]
-        # split the color-encoded mask into a set of binary masks
-        masks = mask == obj_ids[:, None, None]
-        # get bounding box coordinates for each mask
-        num_objs = len(obj_ids)
-        boxes = [ObjDetecPatchSamplerDataset.get_bbox_of_true_values(masks[i]) for i in range(num_objs)]
-        return np.ones(num_objs, dtype=np.int), list(filter(None.__ne__, boxes)), masks, segm_areas
-
-    @staticmethod
-    def clean_mask(mask, min_object_px_size):
-        """Removes all objects smaller than minimum size"""
+    def rm_small_objs_and_sep_instance(mask, min_object_px_size, check_bbox=False):
+        """Removes all objects smaller than minimum size and separate obj instance by giving them different id"""
         nb_obj, obj_labels = cv2.connectedComponents(mask)
         if nb_obj < 2:
             return mask  # only background
@@ -245,14 +231,26 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         for i, size in enumerate(sizes):
             if size < min_object_px_size:
                 obj_ids[i] = 0  # set this component to background
-        else:
-            return np.reshape(obj_ids[inverse], np.shape(mask))
+
+        mask_cleaned = np.reshape(obj_ids[inverse], np.shape(mask)).astype(np.uint8)
+        if not check_bbox:
+            return mask_cleaned
+        # Now remove object with None bbox
+        for i, obj_id in enumerate(obj_ids):
+            if i == 0:  # skip background
+                continue
+            if ObjDetecPatchSamplerDataset.get_bbox_of_true_values(mask_cleaned == obj_id) is None:
+                obj_ids[i] = 0  # set this component to background"""
+        return np.reshape(obj_ids[inverse], np.shape(mask)).astype(np.uint8)
 
     @staticmethod
-    def get_bbox_areas(bbox_coord):
-        """Computes bbox area, input is list of bbox coordinates i.e. a list of list"""
-        bbox_coord = np.reshape(bbox_coord, (len(bbox_coord), 4))
-        return list((bbox_coord[:, 3] - bbox_coord[:, 1]) * (bbox_coord[:, 2] - bbox_coord[:, 0]))
+    def clean_mask(mask, min_object_px_size, kernel_size=(3, 3)):
+        mask_cleaned = ObjDetecPatchSamplerDataset.rm_small_objs_and_sep_instance(mask, min_object_px_size)
+        # if you don't rm small elements before, you risk to enhance noise in the mask_cleaned
+        mask_cleaned = cv2.morphologyEx(mask_cleaned, cv2.MORPH_CLOSE, np.ones(kernel_size, np.uint8))
+        mask_cleaned = ObjDetecPatchSamplerDataset.rm_small_objs_and_sep_instance(mask_cleaned, min_object_px_size,
+                                                                                  check_bbox=True)
+        return mask_cleaned
 
     @staticmethod
     def get_bbox_of_true_values(mask_with_condition):
@@ -264,5 +262,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         xmax = np.max(pos[1])
         ymin = np.min(pos[0])
         ymax = np.max(pos[0])
+        if xmin == xmax or ymin == ymax:    # Faulty object
+            return None
         return [xmin, ymin, xmax, ymax]
 
