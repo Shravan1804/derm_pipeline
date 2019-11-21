@@ -16,6 +16,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                  metrics_names=['bbox_areas', 'segm_areas', 'obj_count'], split_data=True, dest=None, **kwargs):
         self.root = root
         self.root_img_dir = 'images'
+        self.all_obj_cat_key = '__ALL__'
         self.patch_size = patch_size
         self.mask_file_ext = mask_file_ext
         self.min_object_px_size = min_object_px_size
@@ -134,6 +135,9 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 cv2.imwrite(rotated_mask_file_path, rotated_mask_arr)
         return im_arr_rotated, path_to_save
 
+    def get_obj_cats_including_all_class_key(self):
+        return [self.all_obj_cat_key] + [v.replace('masks_', '').upper() for v in self.masks_dirs]
+
     def load_masks_from_patch_map(self, patch_map, cache=False):
         mask_file = self.get_mask_fname(patch_map['patch_path'])
         masks = []
@@ -161,17 +165,18 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
     def get_mask_fname(self, path):
         return os.path.splitext(os.path.basename(path))[0] + self.mask_file_ext
 
-    def get_coco_params(self, key):
-        classes = [i + 1 for i in range(len(self.masks_dirs))] if key == 'ALL' else [self.masks_dirs.index(key) + 1]
+    def get_coco_params(self, key, f=1.2):
+        classes = [i + 1 for i in range(len(self.masks_dirs))] if key == self.all_obj_cat_key \
+            else [self.masks_dirs.index(key) + 1]
         m = self.coco_metrics[key]
         n ='bbox_areas'
-        bbox_areas = [[0, int(1.1 * m[n][3])], [0, int(m[n][0])], [int(m[n][0]), int(m[n][2])],
-                      [int(m[n][2]), int(1.1 * m[n][3])]]   # ['all', 'small', 'medium', 'large']
+        bbox_areas = [[0, int(f * m[n][3])], [0, int(m[n][0])], [int(m[n][0]), int(m[n][2])],
+                      [int(m[n][2]), int(f * m[n][3])]]   # ['all', 'small', 'medium', 'large']
         n = 'segm_areas'
-        segm_areas = [[0, int(1.1 * m[n][3])], [0, int(m[n][0])], [int(m[n][0]), int(m[n][2])],
-                      [int(m[n][2]), int(1.1 * m[n][3])]]  # ['all', 'small', 'medium', 'large']
+        segm_areas = [[0, int(f * m[n][3])], [0, int(m[n][0])], [int(m[n][0]), int(m[n][2])],
+                      [int(m[n][2]), int(f * m[n][3])]]  # ['all', 'small', 'medium', 'large']
         n = 'obj_count'
-        max_detections = [int(m[n][1]), int(m[n][2]), int(1.1 * m[n][3])]
+        max_detections = [int(m[n][1]), int(m[n][2]), int(f * m[n][3])]
 
         return classes, bbox_areas, segm_areas, max_detections
 
@@ -188,11 +193,12 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             pickle.dump(raw_metrics, open(metrics_path, "wb"))
         else:
             raw_metrics = pickle.load(open(metrics_path, "rb"))
-        self.coco_metrics = ObjDetecPatchSamplerDataset.analyze_mask_metrics(raw_metrics, self.masks_dirs,
-                                                                             self.metrics_names, self.quantiles)
+        self.coco_metrics = ObjDetecPatchSamplerDataset.analyze_mask_metrics(raw_metrics, self.all_obj_cat_key,
+                                                                             self.masks_dirs, self.metrics_names,
+                                                                             self.quantiles)
 
     @staticmethod
-    def analyze_mask_metrics(raw_metrics, mask_cats, metrics_names, quantiles):
+    def analyze_mask_metrics(raw_metrics, all_cat_key, mask_cats, metrics_names, quantiles):
         """Returns e.g. {'masks_pustules': {'bbox_areas': (88.0, 182.0, 598.5),
                                             'segm_areas': (79.5, 150.5, 379.0),
                                             'obj_count': (5.0, 11.0, 27.0)},
@@ -209,7 +215,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         metrics = dict(zip(mask_cats, [dict(zip(metrics_names, mq)) for mq in mask_quantiles]))
 
         all_metrics = [[y for x in m for y in x] for m in zip(*masks_metrics)]
-        metrics['ALL'] = dict(zip(metrics_names, [tuple(np.quantile(x, quantiles)) for x in all_metrics]))
+        metrics[all_cat_key] = dict(zip(metrics_names, [tuple(np.quantile(x, quantiles)) for x in all_metrics]))
         return metrics
 
     @staticmethod
