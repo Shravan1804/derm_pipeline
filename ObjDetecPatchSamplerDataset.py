@@ -149,7 +149,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 full_mask_file = mask_file.replace(PatchSamplerDataset.get_patch_suffix(patch_map['idx_h'],
                                                                                         patch_map['idx_w']), '')
                 full_mask = self.load_img_from_disk(os.path.join(self.rotated_img_dir, mask_dir, full_mask_file))
-                patch_mask = self.get_patch_from_idx(full_mask, patch_map['idx_h'], patch_map['idx_w'])
+                patch_mask = self.clean_mask(self.get_patch_from_idx(full_mask, patch_map['idx_h'], patch_map['idx_w']))
                 if cache:
                     cv2.imwrite(mask_path, patch_mask)
                 masks.append(patch_mask)
