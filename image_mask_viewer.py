@@ -123,7 +123,7 @@ def main():
     classes = [m.replace(args.root, '').replace('/', '').replace('masks_', '') for m in masks_dirs]
 
     if args.img is not None:
-        show_overlayed_img(args.img, get_masks(args.img, masks_dirs), classes, args.clean_mask, args.bbox)
+        show_overlayed_img(-1, args.img, get_masks(args.img, masks_dirs), classes, args.clean_mask, args.bbox)
     else:
         if args.from_sampler:
             datasets = pickle.load(open(os.path.join(args.root, os.path.basename(args.root) + '.p'), "rb"))
