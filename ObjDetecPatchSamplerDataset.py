@@ -43,6 +43,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         patch_map = self.get_patch_list()[idx]
         # TODO: don't use PIL but CV2
         img = Image.fromarray(cv2.cvtColor(self.load_patch_from_patch_map(patch_map), cv2.COLOR_BGR2RGB)).convert("RGB")
+        #img = cv2.cvtColor(self.load_patch_from_patch_map(patch_map), cv2.COLOR_BGR2RGB)
         gt = self.process_raw_masks(self.load_masks_from_patch_map(patch_map))
         if gt is None:
             raise Exception(f"Error with image {idx} all masks are empty. Patch map: {patch_map}")
@@ -166,7 +167,9 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
     def get_mask_fname(self, path):
         return os.path.splitext(os.path.basename(path))[0] + self.mask_file_ext
 
-    def get_coco_params(self, key, f=1.2):
+    def get_coco_params(self, key=None, f=1.2):
+        if key is None:
+            key = self.all_obj_cat_key
         classes = [i + 1 for i in range(len(self.masks_dirs))] if key == self.all_obj_cat_key \
             else [self.masks_dirs.index(key) + 1]
         m = self.coco_metrics[key]
