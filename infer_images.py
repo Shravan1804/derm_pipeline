@@ -379,6 +379,7 @@ def main():
     parser.add_argument('--classes', type=str, nargs='*', help="classes for detections")
     parser.add_argument('--out-dir', type=str, help="if save-output set, output dir absolute path")
     parser.add_argument('--save-output', action='store_true', help="Applies object detection model")
+    parser.add_argument('--show-gt-only', action='store_true', help="Show gt of object detection dataset")
     parser.add_argument('--seed', default=42, type=int, help="batch size")
     args = parser.parse_args()
 
@@ -418,6 +419,8 @@ def main():
         file, ext = os.path.splitext(os.path.basename(img_path))
         im = patcher.load_img_from_disk(img_path)
         model.show_preds(im, [[get_img_gt(img_path)]], title=f'Ground Truth for {file}{ext}', fname=f'{file}_00_gt{ext}')
+        if args.show_gt_only:
+            continue
         print("Creating patches for", img_path)
         pm = patcher.img_as_grid_of_patches(im, img_path)
         # create batches
