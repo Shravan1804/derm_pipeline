@@ -400,7 +400,7 @@ def main():
         raise Exception("Error, neither object detection nor classification was chosen")
 
     patcher = PatchExtractor(args.patch_size)
-    for img_path in img_list[2:4]:
+    for img_path in img_list:
         file, ext = os.path.splitext(os.path.basename(img_path))
         im = patcher.load_img_from_disk(img_path)
         model.show_preds(im, [[get_img_gt(img_path)]], title=f'Ground Truth for {file}{ext}', fname=f'{file}_0_gt{ext}')
@@ -413,14 +413,15 @@ def main():
         pm_preds = [(pms, model.predict_imgs(ims)) for pms, ims in tqdm(b_patches)]
         if args.draw_patches:
             patcher.draw_patches(im, pm)
+            f_pm_preds = pm_preds
+            title = 'Body Classification Prediction'
+            plot_name = f'{file}_pred{ext}'
         if args.obj_detec:
             preds = [model.adjust_bboxes_to_full_img(pms, preds) for pms, preds in pm_preds]
             f_pm_preds = [model.filter_preds_by_conf(preds, args.conf_thresh) for preds in preds]
-            # for conf in [.25, .50, .75]:
-            #     f_pm_preds = [model.filter_preds_by_conf(preds, conf) for preds in preds]
-            #     model.show_preds(im, f_pm_preds)
-        model.show_preds(im, f_pm_preds, title=f'Prediction with confidence greater than {args.conf_thresh} for '
-                                               f'{file}{ext}', fname=f'{file}_conf_{args.conf_thresh}{ext}')
+            title = f'Prediction with confidence greater than {args.conf_thresh}'
+            plot_name = f'{file}_conf_{args.conf_thresh}{ext}'
+        model.show_preds(im, f_pm_preds, title=f'{title} for {file}{ext}', fname=plot_name)
 
 if __name__ == '__main__':
     main()
