@@ -296,12 +296,15 @@ class ObjDetecModel(CustomModel):
             ax.imshow(img_arr)
             box_w = preds['boxes'][:, 2] - preds['boxes'][:, 0]
             box_h = preds['boxes'][:, 3] - preds['boxes'][:, 1]
+            printed = {k: False for k in classes}
             for i, boxes in enumerate(preds['boxes']):
                 color = self.bbox_colors[int(np.where(classes == pred_class[i])[0])]
                 bbox = plt_patches.Rectangle((boxes[0], boxes[1]), box_w[i], box_h[i], linewidth=2, edgecolor=color,
                                              facecolor='none')
                 ax.add_patch(bbox)
-                plt.text(boxes[0], boxes[3], s=pred_class[i], color='white', verticalalignment='top',
+                if not printed[pred_class[i]]:
+                    printed[pred_class[i]] = True
+                    plt.text(boxes[0], boxes[3], s=pred_class[i], color='white', verticalalignment='top',
                          bbox={'color': color, 'pad': 0})
         plt.axis('off')
         plt.title(title)
@@ -352,6 +355,15 @@ def get_img_gt(img_path):
     objs[0] = tuple((i + 1) * np.ones(n_obj, dtype=np.int) for i, n_obj in enumerate(objs[0]))
     classes, boxes = (np.concatenate(val) for val in objs)
     return {'labels': classes, 'boxes': boxes}
+
+def plot_img(img_arr, title, output_path):
+    plt.figure()
+    fig, ax = plt.subplots(1, figsize=(12, 9))
+    ax.imshow(img_arr)
+    plt.axis('off')
+    plt.title(title)
+    plt.savefig(output_path)
+    plt.close()
 
 def main():
     parser = argparse.ArgumentParser(description="Apply model to image patches")
@@ -405,7 +417,7 @@ def main():
     for img_path in img_list:
         file, ext = os.path.splitext(os.path.basename(img_path))
         im = patcher.load_img_from_disk(img_path)
-        model.show_preds(im, [[get_img_gt(img_path)]], title=f'Ground Truth for {file}{ext}', fname=f'{file}_0_gt{ext}')
+        model.show_preds(im, [[get_img_gt(img_path)]], title=f'Ground Truth for {file}{ext}', fname=f'{file}_00_gt{ext}')
         print("Creating patches for", img_path)
         pm = patcher.img_as_grid_of_patches(im, img_path)
         # create batches
@@ -423,7 +435,7 @@ def main():
             f_pm_preds = [model.filter_preds_by_conf(preds, args.conf_thresh) for preds in preds]
             f_pm_preds = [lst for lst in f_pm_preds if len(lst) > 0 and lst[0]['labels'].size > 0]
             title = f'Prediction with confidence greater than {args.conf_thresh}'
-            plot_name = f'{file}_conf_{args.conf_thresh}{ext}'
+            plot_name = f'{file}_01_conf_{args.conf_thresh}{ext}'
         model.show_preds(im, f_pm_preds, title=f'{title} for {file}{ext}', fname=plot_name)
 
 if __name__ == '__main__':
