@@ -66,6 +66,7 @@ class DrawHelper(object):
         ax.imshow(im)
         plt.axis('off')
         plt.show()
+        plt.close()
 
 
 class PatchExtractor(object):
@@ -307,6 +308,7 @@ class ObjDetecModel(CustomModel):
         if self.output_dir is not None:
             plt.savefig(os.path.join(self.output_dir, fname))
         plt.show()
+        plt.close()
 
 def get_bbox_of_true_values(mask_with_condition):
     """Returns bbox coordinates: [xmin, ymin, xmax, ymax]. None if no objects"""
@@ -419,6 +421,7 @@ def main():
         if args.obj_detec:
             preds = [model.adjust_bboxes_to_full_img(pms, preds) for pms, preds in pm_preds]
             f_pm_preds = [model.filter_preds_by_conf(preds, args.conf_thresh) for preds in preds]
+            f_pm_preds = [lst for lst in f_pm_preds if len(lst) > 0 and lst[0]['labels'].size > 0]
             title = f'Prediction with confidence greater than {args.conf_thresh}'
             plot_name = f'{file}_conf_{args.conf_thresh}{ext}'
         model.show_preds(im, f_pm_preds, title=f'{title} for {file}{ext}', fname=plot_name)
