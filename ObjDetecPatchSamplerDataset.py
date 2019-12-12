@@ -49,7 +49,8 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
         areas = torch.as_tensor(bbox_areas, dtype=torch.float32)
         labels = torch.as_tensor(classes, dtype=torch.int64)
-        masks = torch.as_tensor(obj_masks, dtype=torch.int16)
+        #TODO: masks are in uint16, torch has torch.int16 but model produces error: Buffer dtype mismatch, expected 'uint8_t' but got 'short'
+        masks = torch.as_tensor(obj_masks, dtype=torch.uint8)
         iscrowd = torch.as_tensor(crowd_objs.astype(np.int), dtype=torch.int64)
         image_id = torch.tensor([idx])
         gt = (boxes, labels, masks, image_id, areas, iscrowd)
