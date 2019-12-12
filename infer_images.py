@@ -330,7 +330,8 @@ def get_bbox_of_true_values(mask_with_condition):
 
 def extract_mask_objs(mask):
     objs = ObjDetecPatchSamplerDataset.extract_mask_objs(mask)
-    return objs[0], objs[3]
+    if objs is None: return None
+    else: return objs[0], objs[3]
 
 def get_img_gt(img_path):
     file, ext = os.path.splitext(os.path.basename(img_path))
