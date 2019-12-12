@@ -17,6 +17,8 @@ from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 import fastai.vision as fvision
 from radam import *
 
+from ObjDetecPatchSamplerDataset import ObjDetecPatchSamplerDataset
+
 class DrawHelper(object):
     def __init__(self, thickness=1, style='dotted', gap=10):
         self.thickness = thickness
@@ -327,21 +329,8 @@ def get_bbox_of_true_values(mask_with_condition):
     return [xmin, ymin, xmax, ymax]
 
 def extract_mask_objs(mask):
-    """Returns obj_count, obj_ids, obj_segm_areas, obj_bbox, obj_bbox_areas, obj_masks (without backgroud)"""
-    obj_ids = np.unique(mask)
-    # remove background
-    obj_ids = obj_ids[1:]
-    obj_count = len(obj_ids)
-    if obj_count < 1:
-        return None
-    obj_masks = mask == obj_ids[:, None, None]
-    boxes = [get_bbox_of_true_values(obj_masks[i]) for i in range(obj_count)]
-    obj_del = [i for i, v in enumerate(boxes) if v is None]
-    obj_count -= len(obj_del)
-    if obj_count < 1:
-        return None
-    boxes = np.reshape(list(filter(None.__ne__, boxes)), (obj_count, 4))
-    return obj_count, boxes
+    objs = ObjDetecPatchSamplerDataset.extract_mask_objs(mask)
+    return objs[0], objs[3]
 
 def get_img_gt(img_path):
     file, ext = os.path.splitext(os.path.basename(img_path))

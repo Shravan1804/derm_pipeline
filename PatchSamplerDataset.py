@@ -151,6 +151,7 @@ class PatchSamplerDataset(object):
         raise NotImplementedError
 
     def load_img_from_disk(self, img_path):
+        """Load image and resize is smaller than patch size"""
         return self.maybe_resize(cv2.imread(img_path, cv2.IMREAD_UNCHANGED))
 
     def save_patch_maps_to_disk(self):

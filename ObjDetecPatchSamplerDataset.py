@@ -126,7 +126,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             rotated_mask_file_path = os.path.join(self.rotated_img_dir, masks_dir, self.get_mask_fname(path_to_save))
             if not os.path.exists(rotated_mask_file_path):
                 mask_arr = self.load_img_from_disk(os.path.join(self.root, masks_dir, self.get_mask_fname(img_path)))
-                rotated_mask_arr = mask_arr if rotation == 0 else \
+                rotated_mask_arr = ObjDetecPatchSamplerDataset.clean_mask(mask_arr) if rotation == 0 else \
                     ndimage.rotate(mask_arr, rotation, reshape=True, mode=self.rotation_padding)
                 rotated_mask_arr = ObjDetecPatchSamplerDataset.clean_mask(self.maybe_resize(rotated_mask_arr),
                                                                           self.min_object_px_size)
