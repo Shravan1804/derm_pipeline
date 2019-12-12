@@ -415,10 +415,12 @@ def main():
         raise Exception("Error, neither object detection nor classification was chosen")
 
     patcher = PatchExtractor(args.patch_size)
+    #img_list = [os.path.join('/home/shravan/deep-learning/data/PPP_orig_cleaned/images', i) for i in ['run12_00012.jpg', 'run12_00023.jpg', 'run12_00028.jpg', 'run13_00014.jpg', 'run13_00015.jpg', 'run13_00016.jpg', 'run13_00097.jpg', 'run13_00114.jpg']]
     for img_path in img_list:
         file, ext = os.path.splitext(os.path.basename(img_path))
         im = patcher.load_img_from_disk(img_path)
-        model.show_preds(im, [[get_img_gt(img_path)]], title=f'Ground Truth for {file}{ext}', fname=f'{file}_00_gt{ext}')
+        if args.obj_detec:
+            model.show_preds(im, [[get_img_gt(img_path)]], title=f'Ground Truth for {file}{ext}', fname=f'{file}_00_gt{ext}')
         if args.show_gt_only:
             continue
         print("Creating patches for", img_path)

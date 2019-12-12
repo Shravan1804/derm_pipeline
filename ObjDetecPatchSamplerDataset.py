@@ -2,7 +2,6 @@ import os
 import cv2
 import numpy as np
 from scipy import ndimage
-from PIL import Image
 from tqdm import tqdm
 import torch
 import pickle
@@ -41,9 +40,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
     def __getitem__(self, idx):
         patch_map = self.get_patch_list()[idx]
-        # TODO: don't use PIL but CV2
-        img = Image.fromarray(cv2.cvtColor(self.load_patch_from_patch_map(patch_map), cv2.COLOR_BGR2RGB)).convert("RGB")
-        #img = cv2.cvtColor(self.load_patch_from_patch_map(patch_map), cv2.COLOR_BGR2RGB)
+        img = cv2.cvtColor(self.load_patch_from_patch_map(patch_map), cv2.COLOR_BGR2RGB)
         gt = self.process_raw_masks(self.load_masks_from_patch_map(patch_map))
         if gt is None:
             raise Exception(f"Error with image {idx} all masks are empty. Patch map: {patch_map}")
@@ -52,7 +49,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
         areas = torch.as_tensor(bbox_areas, dtype=torch.float32)
         labels = torch.as_tensor(classes, dtype=torch.int64)
-        masks = torch.as_tensor(obj_masks, dtype=torch.uint8)
+        masks = torch.as_tensor(obj_masks, dtype=torch.int16)
         iscrowd = torch.as_tensor(crowd_objs.astype(np.int), dtype=torch.int64)
         image_id = torch.tensor([idx])
         gt = (boxes, labels, masks, image_id, areas, iscrowd)
@@ -263,7 +260,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             if size < min_object_px_size:
                 obj_ids[i] = 0  # set this component to background
 
-        mask_cleaned = np.reshape(obj_ids[inverse], np.shape(mask)).astype(np.uint8)
+        mask_cleaned = np.reshape(obj_ids[inverse], np.shape(mask)).astype(np.uint16)
         if not check_bbox:
             return mask_cleaned
         # Now remove object with None bbox
@@ -272,13 +269,13 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 continue
             if ObjDetecPatchSamplerDataset.get_bbox_of_true_values(mask_cleaned == obj_id) is None:
                 obj_ids[i] = 0  # set this component to background"""
-        return np.reshape(obj_ids[inverse], np.shape(mask)).astype(np.uint8)
+        return np.reshape(obj_ids[inverse], np.shape(mask)).astype(np.uint16)
 
     @staticmethod
     def clean_mask(mask, min_object_px_size, kernel_size=(3, 3)):
         mask_cleaned = ObjDetecPatchSamplerDataset.rm_small_objs_and_sep_instance(mask, min_object_px_size)
         # if you don't rm small elements before, you risk to enhance noise in the mask_cleaned
-        mask_cleaned = cv2.morphologyEx(mask_cleaned, cv2.MORPH_CLOSE, np.ones(kernel_size, np.uint8))
+        mask_cleaned = cv2.morphologyEx(mask_cleaned, cv2.MORPH_CLOSE, np.ones(kernel_size, np.uint16))
         mask_cleaned = ObjDetecPatchSamplerDataset.rm_small_objs_and_sep_instance(mask_cleaned, min_object_px_size,
                                                                                   check_bbox=True)
         return mask_cleaned

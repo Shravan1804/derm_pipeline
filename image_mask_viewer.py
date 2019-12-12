@@ -43,6 +43,8 @@ def show_overlayed_img(id, img_path, masks, classes, transform_mask=False, bbox=
     img_mask_cleaned = img_orig.copy()
     legend=[]
     for i, mask in enumerate(masks):
+        #mask[mask > 0]=1
+        #mask = ObjDetecPatchSamplerDataset.rm_small_objs_and_sep_instance(mask, 30)
         img[mask!=0] = COLORS[i]
         if transform_mask:
             mask_cleaned = ObjDetecPatchSamplerDataset.clean_mask(mask, 30, 10)
@@ -81,11 +83,11 @@ def show_overlayed_img(id, img_path, masks, classes, transform_mask=False, bbox=
     plt.close(fig)
 
 def draw_bbox(img, mask):
-    objs = ObjDetecPatchSamplerDataset.process_mask(mask)
+    objs = ObjDetecPatchSamplerDataset.extract_mask_objs(mask)
     if objs is None: return
-    _, bbox, _, _ = objs
+    _, _, _, bbox, _, _ = objs
     for b in bbox:
-        cv2.rectangle(img, (b[0], b[1]), (b[2], b[3]), (0, 255, 0), 1)
+        cv2.rectangle(img, (b[0], b[1]), (b[2], b[3]), (0, 255, 0), 2)
     return img
 
 def get_masks(img, masks_dirs):
