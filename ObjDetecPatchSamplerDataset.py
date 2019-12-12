@@ -252,7 +252,8 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
     @staticmethod
     def rm_small_objs_and_sep_instance(mask, min_object_px_size, check_bbox=False):
         """Removes all objects smaller than minimum size and separate obj instance by giving them different id"""
-        nb_obj, obj_labels = cv2.connectedComponents(mask)
+        mask[mask > 0] = 1
+        nb_obj, obj_labels = cv2.connectedComponents(mask.astype(np.uint8))
         if nb_obj < 2:
             return mask  # only background
         obj_ids, inverse, sizes = np.unique(obj_labels, return_inverse=True, return_counts=True)
@@ -268,7 +269,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             if i == 0:  # skip background
                 continue
             if ObjDetecPatchSamplerDataset.get_bbox_of_true_values(mask_cleaned == obj_id) is None:
-                obj_ids[i] = 0  # set this component to background"""
+                obj_ids[i] = 0  # set this component to background
         return np.reshape(obj_ids[inverse], np.shape(mask)).astype(np.uint16)
 
     @staticmethod
