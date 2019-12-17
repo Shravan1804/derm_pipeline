@@ -120,6 +120,26 @@ class PatchExtractor(object):
             draw.drawrect(img_arr, s, e, (255, 255, 255))
         return img_arr
 
+    def get_neighboring_patches(self, pm, img_shape, d=1, include_self=True):
+        """ Will include itself in the list of neighbors """
+        img_name = pm['patch_path'].split('_sep_')[0] + os.path.splitext(pm['patch_path'])[1]
+        max_h, max_w = img_shape[0] - self.patch_size, img_shape[1] - self.patch_size
+        step_h = self.patch_size - PatchExtractor.get_overlap(img_shape[0], self.patch_size)
+        step_w = self.patch_size - PatchExtractor.get_overlap(img_shape[1], self.patch_size)
+        scope_h = [i * step_h for i in range(-d, d+1)]
+        scope_w = [i * step_w for i in range(-d, d + 1)]
+        neighbors = [(a, b) for a, b in [(m + pm['idx_h'], n + pm['idx_w']) for m in scope_h for n in scope_w]
+                     if 0 <= a <= max_h and 0 <= b <= max_w
+                     and (include_self or not (a == pm['idx_h'] and b == pm['idx_w']))]
+        res = [PatchExtractor.get_patch_fname(img_name, h, w) for h, w in neighbors]
+        # print(pm['patch_path'], 'neighbors:', [r['patch_path'] for r in res])
+        return res
+
+    @staticmethod
+    def get_pos_from_patch_name(patch_name):
+        return tuple(int(t) for t in patch_name.replace('.jpg', '').split('_sep__h')[1].split('_w'))
+
+
     @staticmethod
     def get_overlap(n, div):
         remainder = n % div
@@ -134,7 +154,7 @@ class PatchExtractor(object):
     @staticmethod
     def get_patch_fname(img_path, idx_h, idx_w):
         file, ext = os.path.splitext(os.path.basename(img_path))
-        return file + PatchExtractor.get_patch_suffix(idx_h, idx_w) + ext
+        return file + '_sep_' + PatchExtractor.get_patch_suffix(idx_h, idx_w) + ext
 
 
 class Compose(object):
@@ -190,13 +210,15 @@ class CustomModel(object):
     def prepare_img_for_inference(self, im):
         raise NotImplementedError
 
-    def show_preds(self, img_arr, preds):
+    def show_preds(self, img_arr, preds, title, fname):
         raise NotImplementedError
 
 
 class ClassifModel(CustomModel):
-    def __init__(self, seed, classes, model_path, output_dir):
-        super().__init__(seed, classes, model_path, output_dir)
+    def __init__(self, seed, model_path, output_dir):
+        super().__init__(seed, [], model_path, output_dir)
+        self.classes = self.model.data.classes
+        self.n_classes = len(self.classes)
         fvision.defaults.device = torch.device(self.device)
 
     def load_model(self, model_path):
@@ -208,10 +230,34 @@ class ClassifModel(CustomModel):
         return t
 
     def predict_imgs(self, ims):
-        return [self.model.predict(self.convert_img(im)) for im in ims]
+        return [self.model.predict(self.prepare_img_for_inference(im)) for im in ims]
 
-    def show_preds(self, img_arr, preds):
-        print(preds)
+    def show_preds(self, img_arr, preds, title, fname):
+        plt.figure()
+        fig, ax = plt.subplots(1, figsize=(12, 9))
+        colors = [(255, 255, 0), (255, 255, 0), (0, 0, 255)]
+        for patch, pred in preds.items():
+            h, w = PatchExtractor.get_pos_from_patch_name(patch)
+            for i, p in enumerate(pred):
+                cv2.putText(img_arr, p, (50 + w, (i+1)*50 + h), cv2.FONT_HERSHEY_SIMPLEX, 1, colors[i], thickness=3)
+        ax.imshow(img_arr)
+        plt.axis('off')
+        plt.title(title)
+        if self.output_dir is not None:
+            plt.savefig(os.path.join(self.output_dir, fname))
+        plt.show()
+        plt.close()
+
+    def prediction_validation(self, preds, neighbors, consider_top=2):
+        pred_probs = {k: v[2].numpy() for k, v in preds.items()}
+        preds = {k: [f'orig: {str(v[0])}'] for k, v in preds.items()}
+        summed_neighbors_preds = {k: sum([pred_probs[p] for p in neighbors[k]]) for k in preds.keys()}
+        for patch in preds.keys():
+            neighbors_preds = summed_neighbors_preds[patch]
+            topk = neighbors_preds.argsort()[::-1][:consider_top]
+            top_preds = list(zip(np.array(self.classes)[topk], neighbors_preds[topk]))
+            preds[patch] = [f'{i+1}: {p[0]}' for i, p in enumerate(top_preds)] + preds[patch]
+        return preds
 
 
 class ObjDetecModel(CustomModel):
@@ -315,36 +361,25 @@ class ObjDetecModel(CustomModel):
         plt.show()
         plt.close()
 
-def get_bbox_of_true_values(mask_with_condition):
-    """Returns bbox coordinates: [xmin, ymin, xmax, ymax]. None if no objects"""
-    pos = np.where(mask_with_condition)
-    if pos[0].size == 0:  # no objects
-        return None
-    xmin = np.min(pos[1])
-    xmax = np.max(pos[1])
-    ymin = np.min(pos[0])
-    ymax = np.max(pos[0])
-    if xmin == xmax or ymin == ymax:    # Faulty object
-        return None
-    return [xmin, ymin, xmax, ymax]
+    @staticmethod
+    def extract_mask_objs(mask):
+        objs = ObjDetecPatchSamplerDataset.extract_mask_objs(mask)
+        if objs is None: return None
+        else: return objs[0], objs[3]
 
-def extract_mask_objs(mask):
-    objs = ObjDetecPatchSamplerDataset.extract_mask_objs(mask)
-    if objs is None: return None
-    else: return objs[0], objs[3]
-
-def get_img_gt(img_path):
-    file, ext = os.path.splitext(os.path.basename(img_path))
-    img_dir = os.path.dirname(img_path)
-    root_dir = os.path.dirname(img_dir)
-    masks = [cv2.imread(os.path.join(mask_path, file + '.png'), cv2.IMREAD_UNCHANGED) for mask_path
-             in [os.path.join(root_dir, m) for m in sorted(os.listdir(root_dir)) if m.startswith('masks_')]]
-    objs = list(zip(*filter(None.__ne__, map(extract_mask_objs, masks))))
-    if not objs:  # check list empty
-        return None
-    objs[0] = tuple((i + 1) * np.ones(n_obj, dtype=np.int) for i, n_obj in enumerate(objs[0]))
-    classes, boxes = (np.concatenate(val) for val in objs)
-    return {'labels': classes, 'boxes': boxes}
+    @staticmethod
+    def get_img_gt(img_path):
+        file, ext = os.path.splitext(os.path.basename(img_path))
+        img_dir = os.path.dirname(img_path)
+        root_dir = os.path.dirname(img_dir)
+        masks = [cv2.imread(os.path.join(mask_path, file + '.png'), cv2.IMREAD_UNCHANGED) for mask_path
+                 in [os.path.join(root_dir, m) for m in sorted(os.listdir(root_dir)) if m.startswith('masks_')]]
+        objs = list(zip(*filter(None.__ne__, map(ObjDetecModel.extract_mask_objs, masks))))
+        if not objs:  # check list empty
+            return None
+        objs[0] = tuple((i + 1) * np.ones(n_obj, dtype=np.int) for i, n_obj in enumerate(objs[0]))
+        classes, boxes = (np.concatenate(val) for val in objs)
+        return {'labels': classes, 'boxes': boxes}
 
 def plot_img(img_arr, title, output_path):
     plt.figure()
@@ -400,38 +435,43 @@ def main():
         classes = ['__background__', 'pustule', 'brown_spot'] if args.classes is None else args.classes
         model = ObjDetecModel(args.seed, classes, args.model, args.out_dir)
     elif args.classif:
-        model = ClassifModel(args.seed, args.classes, args.model, args.out_dir)
+        model = ClassifModel(args.seed, args.model, args.out_dir)
     else:
         raise Exception("Error, neither object detection nor classification was chosen")
-
     patcher = PatchExtractor(args.patch_size)
     #img_list = [os.path.join('/home/shravan/deep-learning/data/PPP_orig_cleaned/images', i) for i in ['run12_00012.jpg', 'run12_00023.jpg', 'run12_00028.jpg', 'run13_00014.jpg', 'run13_00015.jpg', 'run13_00016.jpg', 'run13_00097.jpg', 'run13_00114.jpg']]
     for img_path in img_list:
         file, ext = os.path.splitext(os.path.basename(img_path))
         im = patcher.load_img_from_disk(img_path)
         if args.obj_detec:
-            model.show_preds(im, [[get_img_gt(img_path)]], title=f'Ground Truth for {file}{ext}', fname=f'{file}_00_gt{ext}')
+            model.show_preds(im, [[ObjDetecModel.get_img_gt(img_path)]], title=f'Ground Truth for {file}{ext}', fname=f'{file}_00_gt{ext}')
         if args.show_gt_only:
             continue
         print("Creating patches for", img_path)
         pm = patcher.img_as_grid_of_patches(im, img_path)
         # create batches
         b_pm = [pm[i:min(len(pm), i+args.batch_size)] for i in range(0, len(pm), args.batch_size)]
+        # lst of batches with a batch being a tuple containing lst of patch maps and lst of corresponding image patches
         b_patches = [(b, [patcher.get_patch_from_idx(im, pms['idx_h'], pms['idx_w']) for pms in b]) for b in b_pm]
         print("Applying model to patches")
         pm_preds = [(pms, model.predict_imgs(ims)) for pms, ims in tqdm(b_patches)]
-        if args.draw_patches:
-            patcher.draw_patches(im, pm)
-            f_pm_preds = pm_preds
-            title = 'Body Classification Prediction'
-            plot_name = f'{file}_pred{ext}'
         if args.obj_detec:
             preds = [model.adjust_bboxes_to_full_img(pms, preds) for pms, preds in pm_preds]
-            f_pm_preds = [model.filter_preds_by_conf(preds, args.conf_thresh) for preds in preds]
-            f_pm_preds = [lst for lst in f_pm_preds if len(lst) > 0 and lst[0]['labels'].size > 0]
+            im_preds = [model.filter_preds_by_conf(preds, args.conf_thresh) for preds in preds]
+            im_preds = [lst for lst in im_preds if len(lst) > 0 and lst[0]['labels'].size > 0]
             title = f'Prediction with confidence greater than {args.conf_thresh}'
             plot_name = f'{file}_01_conf_{args.conf_thresh}{ext}'
-        model.show_preds(im, f_pm_preds, title=f'{title} for {file}{ext}', fname=plot_name)
+        elif args.classif:
+            neighbors = {p['patch_path']: patcher.get_neighboring_patches(p, im.shape, d=1) for p in pm}
+            #DEBUG NEIGHBORS:
+            #[print("Error", p, "does not seem correct") for neigh in neighbors.values() for p in neigh if p not in [a['patch_path'] for a in pm]]
+            predictions = {pm['patch_path']: pred for batch in pm_preds for pm, pred in zip(*batch)}
+            im_preds = model.prediction_validation(predictions, neighbors)
+            title = f'Body localization'
+            plot_name = f'{file}_body_loc_{ext}'
+        if args.draw_patches:
+            patcher.draw_patches(im, pm)
+        model.show_preds(im, im_preds, title=f'{title} for {file}{ext}', fname=plot_name)
 
 if __name__ == '__main__':
     main()
