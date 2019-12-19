@@ -1,7 +1,6 @@
 import os
 import cv2
 import sys
-import math
 import random
 import argparse
 import numpy as np
@@ -9,7 +8,6 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import matplotlib.patches as plt_patches
 
-import torch
 import torchvision
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
@@ -18,6 +16,7 @@ import fastai.vision as fvision
 from radam import *
 
 from ObjDetecPatchSamplerDataset import ObjDetecPatchSamplerDataset
+
 
 class DrawHelper(object):
     def __init__(self, thickness=1, style='dotted', gap=10):
@@ -321,18 +320,22 @@ class ObjDetecModel(CustomModel):
         # pred_t = pred_t[-1]
         # return pred_class[:pred_t + 1], pred_boxes[:pred_t + 1], pred_score[:pred_t + 1]
 
-    def adjust_bboxes_to_full_img(self, patch_maps, preds):
+    def adjust_bboxes_to_full_img(self, im, patch_maps, preds, patch_size):
         for i, pred in enumerate(preds):
             if len(pred['labels']) == 0:
                 continue
             y, x = patch_maps[i]['idx_h'], patch_maps[i]['idx_w']
+            empty_mask = np.zeros((pred['masks'].shape[0], 1, *im.shape[:-1]))
+            empty_mask[:, :, y:y+patch_size, x:x+patch_size] = pred['masks']
+            pred['masks'] = empty_mask
             pred['boxes'] += np.ones(pred['boxes'].shape) * np.array([x, y, x, y])
         return preds
 
-    def show_preds(self, img_arr, preds, title='Predictions', fname='predictions.jpg'):
-        plt.figure()
-        fig, ax = plt.subplots(1, figsize=(12, 9))
 
+    def show_preds(self, im, preds, title='Predictions', fname='predictions.jpg', show_bbox=False, transparency=True):
+        plt.figure()
+        fig, ax = plt.subplots(1, figsize=(20, 20))
+        img_arr = np.copy(im)
         if len(preds) == 0:
             cv2.putText(img_arr, 'NOTHING DETECTED', (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), thickness=3)
             ax.imshow(img_arr)
@@ -341,6 +344,22 @@ class ObjDetecModel(CustomModel):
                                              if pred['labels'].size > 0), axis=0) for k in preds[0][0].keys()}
             classes = np.array(self.classes)
             pred_class = classes[preds['labels']]
+            if transparency:
+                alpha = .3
+                for i, mask in enumerate(preds['masks']):
+                    thresh = cv2.threshold(mask[0], 0.5, 255, cv2.THRESH_BINARY)[1].astype(np.uint8)
+                    contours = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[1]
+                    color = tuple(int(i * 255) for i in self.bbox_colors[int(np.where(classes == pred_class[i])[0])][:-1])
+                    cv2.drawContours(img_arr, contours, 0, color, 2)
+                mask = np.sum(preds['masks'], axis=0)[0]
+                mask = np.dstack([cv2.threshold(mask, 0.5, 255, cv2.THRESH_BINARY)[1].astype(np.uint8)] * 3)
+                img_arr = cv2.addWeighted(img_arr, 1 - alpha, mask, alpha, 0)
+                #img_arr = img_arr * (1.0 - alpha) + mask * alpha
+            else:
+                for i, mask in enumerate(preds['masks']):
+                    color = tuple(int(i*255) for i in self.bbox_colors[int(np.where(classes == pred_class[i])[0])][:-1])
+                    mask = mask[0]
+                    img_arr[mask > .8] = color
             ax.imshow(img_arr)
             box_w = preds['boxes'][:, 2] - preds['boxes'][:, 0]
             box_h = preds['boxes'][:, 3] - preds['boxes'][:, 1]
@@ -349,15 +368,16 @@ class ObjDetecModel(CustomModel):
                 color = self.bbox_colors[int(np.where(classes == pred_class[i])[0])]
                 bbox = plt_patches.Rectangle((boxes[0], boxes[1]), box_w[i], box_h[i], linewidth=2, edgecolor=color,
                                              facecolor='none')
-                ax.add_patch(bbox)
-                if not printed[pred_class[i]]:
-                    printed[pred_class[i]] = True
-                    plt.text(boxes[0], boxes[3], s=pred_class[i], color='white', verticalalignment='top',
-                         bbox={'color': color, 'pad': 0})
+                if show_bbox or not printed[pred_class[i]]:
+                    ax.add_patch(bbox)
+                    if not printed[pred_class[i]]:
+                        printed[pred_class[i]] = True
+                        plt.text(boxes[0], boxes[3], s=pred_class[i], color='white', verticalalignment='top',
+                             bbox={'color': color, 'pad': 0})
         plt.axis('off')
-        plt.title(title)
+        plt.title(title, fontsize=42)
         if self.output_dir is not None:
-            plt.savefig(os.path.join(self.output_dir, fname))
+            plt.savefig(os.path.join(self.output_dir, fname), dpi=300)
         plt.show()
         plt.close()
 
@@ -365,7 +385,7 @@ class ObjDetecModel(CustomModel):
     def extract_mask_objs(mask):
         objs = ObjDetecPatchSamplerDataset.extract_mask_objs(mask)
         if objs is None: return None
-        else: return objs[0], objs[3]
+        else: return objs[0], objs[3], objs[5]
 
     @staticmethod
     def get_img_gt(img_path):
@@ -378,8 +398,8 @@ class ObjDetecModel(CustomModel):
         if not objs:  # check list empty
             return None
         objs[0] = tuple((i + 1) * np.ones(n_obj, dtype=np.int) for i, n_obj in enumerate(objs[0]))
-        classes, boxes = (np.concatenate(val) for val in objs)
-        return {'labels': classes, 'boxes': boxes}
+        classes, boxes, masks = (np.concatenate(val) for val in objs)
+        return {'labels': classes, 'boxes': boxes, 'masks': masks.reshape((masks.shape[0], 1, *masks.shape[1:])).astype(np.float)}
 
 def plot_img(img_arr, title, output_path):
     plt.figure()
@@ -456,7 +476,7 @@ def main():
         print("Applying model to patches")
         pm_preds = [(pms, model.predict_imgs(ims)) for pms, ims in tqdm(b_patches)]
         if args.obj_detec:
-            preds = [model.adjust_bboxes_to_full_img(pms, preds) for pms, preds in pm_preds]
+            preds = [model.adjust_bboxes_to_full_img(im, pms, preds, patcher.patch_size) for pms, preds in pm_preds]
             im_preds = [model.filter_preds_by_conf(preds, args.conf_thresh) for preds in preds]
             im_preds = [lst for lst in im_preds if len(lst) > 0 and lst[0]['labels'].size > 0]
             title = f'Prediction with confidence greater than {args.conf_thresh}'
