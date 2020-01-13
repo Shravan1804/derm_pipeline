@@ -233,17 +233,17 @@ class ClassifModel(CustomModel):
 
     def show_preds(self, img_arr, preds, title, fname):
         plt.figure()
-        fig, ax = plt.subplots(1, figsize=(12, 9))
+        fig, ax = plt.subplots(1, figsize=(20, 20))
         colors = [(255, 255, 0), (255, 255, 0), (0, 0, 255)]
         for patch, pred in preds.items():
             h, w = PatchExtractor.get_pos_from_patch_name(patch)
             for i, p in enumerate(pred):
-                cv2.putText(img_arr, p, (50 + w, (i+1)*50 + h), cv2.FONT_HERSHEY_SIMPLEX, 1, colors[i], thickness=3)
+                cv2.putText(img_arr, p, (50 + w, (i+1)*50 + h), cv2.FONT_HERSHEY_SIMPLEX, 2, colors[i], thickness=3)
         ax.imshow(img_arr)
         plt.axis('off')
-        plt.title(title)
+        plt.title(title, fontsize=42)
         if self.output_dir is not None:
-            plt.savefig(os.path.join(self.output_dir, fname))
+            plt.savefig(os.path.join(self.output_dir, fname), dpi=300)
         plt.show()
         plt.close()
 
@@ -330,7 +330,6 @@ class ObjDetecModel(CustomModel):
             pred['masks'] = empty_mask
             pred['boxes'] += np.ones(pred['boxes'].shape) * np.array([x, y, x, y])
         return preds
-
 
     def show_preds(self, im, preds, title='Predictions', fname='predictions.jpg', show_bbox=False, transparency=True):
         plt.figure()
