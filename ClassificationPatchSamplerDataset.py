@@ -5,25 +5,21 @@ from PatchSamplerDataset import PatchSamplerDataset
 
 
 class ClassificationPatchSamplerDataset(PatchSamplerDataset):
-    def __init__(self, root, patch_size, is_test, split_data=False, **kwargs):
-        self.root = root
+    def __init__(self, root, patch_size, **kwargs):
+        self.root = self.validate_path(root)
         self.classes = [c for c in sorted(os.listdir(self.root)) if os.path.isdir(os.path.join(self.root, c))]
-        super().__init__(self.root, patch_size, is_test=is_test, split_data=split_data, **kwargs)
+        super().__init__(self.root, patch_size, **kwargs)
 
-        if len(self.train_patches) == 0:
+        if len(self.get_patch_list()) == 0:
             for c in self.classes:
                 print("Class", c)
                 self.root_img_dir = c
                 class_patches = self.prepare_patches_from_imgs(os.path.join(self.root, c))
-                class_patches = [[{'class': c, **m} for m in n] for n in class_patches]
-                if self.split_data:
-                    self.train_patches.extend(class_patches[0])
-                    self.test_patches.extend(class_patches[1])
-                else:
-                    self.get_patch_list().extend(class_patches[0])
+                for key in self.patches_keys:
+                    self.patches[key].extend([{'class': c, **m} for m in class_patches[key]])
             self.root_img_dir = None
-            np.random.shuffle(self.train_patches)
-            np.random.shuffle(self.test_patches)
+            for key in self.patches_keys:
+                np.random.shuffle(self.patches[key])
             self.save_patches_to_disk()
 
     def __getitem__(self, idx):

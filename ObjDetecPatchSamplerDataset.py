@@ -11,16 +11,16 @@ from PatchSamplerDataset import PatchSamplerDataset
 
 class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
-    def __init__(self, root, patch_size, mask_file_ext='.png', min_object_px_size=30, quantiles=[0.25, 0.5, 0.75, 0.99],
-                 metrics_names=['bbox_areas', 'segm_areas', 'obj_count'], split_data=True, dest=None, **kwargs):
-        self.root = root
+    def __init__(self, root, patch_size, mask_file_ext='.png', min_object_px_size=30, quantiles=None,
+                 metrics_names=None, split_data=True, dest=None, **kwargs):
+        self.root = self.validate_path(root)
         self.root_img_dir = 'images'
         self.all_obj_cat_key = '__ALL__'
         self.patch_size = patch_size
         self.mask_file_ext = mask_file_ext
         self.min_object_px_size = min_object_px_size
-        self.quantiles = quantiles
-        self.metrics_names = metrics_names
+        self.quantiles = [0.25, 0.5, 0.75, 0.99] if quantiles is None else quantiles
+        self.metrics_names = ['bbox_areas', 'segm_areas', 'obj_count'] if metrics_names is None else metrics_names
         self.split_data = split_data
         self.dest = self.get_default_cache_root_dir() if dest is None else dest
 
@@ -29,11 +29,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         self.crop_dataset()
         super().__init__(self.root, self.patch_size, root_img_dir=self.root_img_dir, dest=self.dest, **kwargs)
         if len(self.get_patch_list()) == 0:
-            patches = self.prepare_patches_from_imgs(self.get_img_dir(self.root))
-            if self.split_data:
-                self.train_patches, self.test_patches = patches
-            else:
-                self.get_patch_list().extend(patches[0])
+            self.patches = self.prepare_patches_from_imgs(self.get_img_dir(self.root))
             self.save_patches_to_disk()
         self.compute_coco_evaluation_params()
         print(self.coco_metrics)
@@ -158,7 +154,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
     def save_patches_to_disk(self):
         print("Saving all patches on disk ...")
         self.save_patch_maps_to_disk()
-        for patch_map in tqdm(self.train_patches + self.test_patches):
+        for patch_map in tqdm(self.get_all_patches()):
             _ = self.load_patch_from_patch_map(patch_map, cache=True)
             _ = self.load_masks_from_patch_map(patch_map, cache=True)
 
@@ -189,7 +185,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             # area: all small medium large
             # nb of possible object detected: maxDets
             raw_metrics = []
-            for patch_map in tqdm(self.train_patches + self.test_patches):
+            for patch_map in tqdm(self.get_all_patches()):
                 raw_metrics.append(list(map(ObjDetecPatchSamplerDataset.get_mask_metrics,
                                         self.load_masks_from_patch_map(patch_map))))
             pickle.dump(raw_metrics, open(metrics_path, "wb"))

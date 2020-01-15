@@ -9,7 +9,7 @@ from timeit import default_timer as timer
 import datetime
 import pickle
 
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, KFold
 
 
 class PatchSamplerDataset(object):
@@ -24,28 +24,56 @@ class PatchSamplerDataset(object):
     # 'wrap'     | 6  7  8 | 1  2  3  4  5  6  7  8 | 1  2  3
 
     # TODO: Find why ndimage.rotate produces different sizes for img than for mask...
-    def __init__(self, root, patch_size, is_test=False, patch_per_img=-1, n_rotation=6, rotation_padding='wrap',
-                 seed=42, test_size=0.15, split_data=True, root_img_dir=None, dest=None, transforms=None):
+    def __init__(self, root, patch_size, is_val=False, is_test=False, patch_per_img=-1, n_rotation=6, rotation_padding='wrap',
+                 seed=42, test_size=0.15, fold=0, nfolds=5, cross_val=False, split_data=True, root_img_dir=None, dest=None, transforms=None):
         self.seed = seed
         np.random.seed(self.seed)
-        self.root = root
+        self.root = self.validate_path(root)
         self.root_img_dir = root_img_dir
-        self.is_test = is_test
+
+        self.cross_val = cross_val
+        if not self.cross_val:
+            self.is_val = False
+            self.patches_keys = ['train']
+        else:
+            self.is_val = is_val
+            self.nfolds = nfolds
+            if fold > self.nfolds:
+                raise Exception(f"Error, fold={fold} is greater than nfolds={self.nfolds}")
+            else:
+                self.fold = fold
+            self.patches_keys = [lab + str(i) for lab in ['train', 'val'] for i in range(nfolds)]
+
         self.split_data = split_data
+        if not self.split_data:
+            self.is_test = False
+        else:
+            self.is_test = is_test
+            self.test_size = test_size
+            self.patches_keys += ['test']
+
+
         self.dest = self.get_default_cache_root_dir() if dest is None else dest
-        self.test_size = test_size
         self.transforms = transforms
         self.patch_size = patch_size
         self.patch_per_img = patch_per_img
         self.rotations = np.linspace(0, 360, n_rotation, endpoint=False, dtype=np.int).tolist()
         self.rotation_padding = rotation_padding
         self.create_cache_dirs()
-        self.train_patches, self.test_patches = ([] for _ in range(2))
+
         if os.path.exists(self.patches_path):
-            self.train_patches, self.test_patches = pickle.load(open(self.patches_path, "rb"))
+            self.patches = pickle.load(open(self.patches_path, "rb"))
+        else:
+            self.patches = {key: [] for key in self.patches_keys}
 
         if len(self.get_patch_list()) > 0:
             print("Loaded patches from previous run, seed = ", seed)
+
+    def validate_path(self, path):
+        if path.endswith('/'):
+            return path[:-1]
+        else:
+            return path
 
     def __getitem__(self, idx):
         raise NotImplementedError
@@ -81,19 +109,33 @@ class PatchSamplerDataset(object):
         """Sample patches from imgs present in the specified directory"""
         start = timer()
         print("Sampling patches ...")
-        img_sets = [[os.path.join(dir_path, x) for x in sorted(os.listdir(dir_path))]]
+        img_sets = {'train': [os.path.join(dir_path, x) for x in sorted(os.listdir(dir_path))]}
         if self.split_data:
-            train, test = train_test_split(img_sets[0], test_size=self.test_size, random_state=self.seed)
+            train, test = train_test_split(img_sets.pop('train'), test_size=self.test_size, random_state=self.seed)
             print("Test images:", list(map(os.path.basename, test)))
-            img_sets = [train, test]
-        patches = []
-        for imgs in img_sets:
-            # merge list of list: [[img patches] * number of images]
-            p = [o for sublst in map(self.extract_img_patches, tqdm(imgs)) for o in sublst]
+            img_sets = {'train': train, 'test': test}
+        ps = {}
+        for key in img_sets.keys():
+            imgs = img_sets[key]
+            # merge list of lists: [[img patches] * number of images]
+            p = PatchSamplerDataset.flatten(map(self.extract_img_patches, tqdm(imgs)))
             np.random.shuffle(p)
-            patches.append(p)
+            ps[key] = p
+        if self.cross_val:
+            data = ps.pop('train')
+            imgs = np.array(img_sets['train'])
+            kf = KFold(n_splits=self.nfolds, shuffle=True, random_state=self.seed)
+            for i, idx in enumerate(kf.split(imgs)):
+                val = [os.path.splitext(os.path.basename(x))[0] for x in imgs[idx[1]]]
+                ps['train' + str(i)], ps['val' + str(i)] = [], []
+                for d in data:
+                    base_img = os.path.basename(self.get_img_path_from_patch_map(d)).split('-r')[0]
+                    if base_img in val:
+                        ps['val' + str(i)].append(d)
+                    else:
+                        ps['train' + str(i)].append(d)
         print("Done,", dir_path, "images were processed in", datetime.timedelta(seconds=timer() - start))
-        return tuple(patches)
+        return ps
 
     def extract_img_patches(self, img_path):
         """Extract patches from img at all rotations"""
@@ -150,17 +192,24 @@ class PatchSamplerDataset(object):
     def is_valid_patch(self, patch_map):
         raise NotImplementedError
 
+    def print_patches_overview(self):
+        for k, v in self.patches.items():
+            print(k, 'contains', len(v), 'patches')
+
     def load_img_from_disk(self, img_path):
         """Load image and resize is smaller than patch size"""
         return self.maybe_resize(cv2.imread(img_path, cv2.IMREAD_UNCHANGED))
 
     def save_patch_maps_to_disk(self):
-        pickle.dump((self.train_patches, self.test_patches), open(self.patches_path, "wb"))
+        pickle.dump((self.patches), open(self.patches_path, "wb"))
+
+    def get_all_patches(self):
+        return [elem for lst in [self.patches[k] for k in self.patches_keys] for elem in lst]
 
     def save_patches_to_disk(self):
         print("Saving all patches on disk ...")
         self.save_patch_maps_to_disk()
-        for patch_map in tqdm(self.train_patches + self.test_patches):
+        for patch_map in tqdm(self.get_all_patches()):
             _ = self.load_patch_from_patch_map(patch_map, cache=True)
 
     def get_nb_patch_per_img(self, im_arr):
@@ -183,10 +232,12 @@ class PatchSamplerDataset(object):
             return patch
 
     def get_patch_map(self, img_path, rotation, idx_h, idx_w):
-        patch_path = os.path.join(self.get_img_dir(self.patches_dir),
-                                  PatchSamplerDataset.get_patch_fname(img_path, idx_h, idx_w))
+        patch_path = self.create_patch_path(img_path, idx_h, idx_w)
         patch_path = self.get_relative_path(patch_path)
         return {'patch_path': patch_path, 'rotation': rotation, 'idx_h': idx_h, 'idx_w': idx_w}
+
+    def create_patch_path(self, img_path, h, w):
+        return os.path.join(self.get_img_dir(self.patches_dir), PatchSamplerDataset.get_patch_fname(img_path, h, w))
 
     def get_img_path_from_patch_map(self, patch_map):
         patch_suffix = PatchSamplerDataset.get_patch_suffix(patch_map['idx_h'], patch_map['idx_w'])
@@ -200,7 +251,7 @@ class PatchSamplerDataset(object):
         return os.path.join(self.dest, path)
 
     def get_img_dir(self, path):
-        """Method needed to be able to handle datasets where img are in specific subfolder"""
+        """Method needed to be able to handle datasets where imgs are in specific subfolder"""
         return path if self.root_img_dir is None else os.path.join(path, self.root_img_dir)
 
     def get_dataset_name(self):
@@ -211,7 +262,7 @@ class PatchSamplerDataset(object):
             return dataset_name + '_' + os.path.basename(os.path.dirname(self.root))
 
     def get_default_cache_root_dir(self):
-        """Needs self.split_data and self.root set"""
+        """Needs self.split_data and self.root set. If not self.split_data assumes data already separated in e.g. train, valid dir"""
         dir_name = os.path.dirname(self.root)
         if self.split_data:
             return dir_name
@@ -219,7 +270,20 @@ class PatchSamplerDataset(object):
             return os.path.dirname(dir_name)
 
     def get_patch_list(self):
-        return self.train_patches if not self.is_test else self.test_patches
+        if self.is_test:
+            return self.patches['test']
+        elif self.cross_val:
+            if self.is_val:
+                return self.patches['val' + str(self.fold)]
+            else:
+                return self.patches['train' + str(self.fold)]
+        else:
+            return self.patches['train']
+
+    @staticmethod
+    def flatten(lst):
+        """Flattens lst of lsts"""
+        return [elem for sublst in lst for elem in sublst]
 
     @staticmethod
     def get_overlap(n, div):
