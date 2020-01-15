@@ -25,7 +25,7 @@ class PatchSamplerDataset(object):
 
     # TODO: Find why ndimage.rotate produces different sizes for img than for mask...
     def __init__(self, root, patch_size, is_val=False, is_test=False, patch_per_img=-1, n_rotation=6, rotation_padding='wrap',
-                 seed=42, test_size=0.15, fold=0, nfolds=5, cross_val=False, split_data=True, root_img_dir=None, dest=None, transforms=None):
+                 seed=42, test_size=0.15, cross_val_bypass=False, fold=0, nfolds=5, cross_val=False, split_data=True, root_img_dir=None, dest=None, transforms=None):
         self.seed = seed
         np.random.seed(self.seed)
         self.root = self.validate_path(root)
@@ -34,8 +34,10 @@ class PatchSamplerDataset(object):
         self.cross_val = cross_val
         if not self.cross_val:
             self.is_val = False
+            self.cross_val_bypass = False
             self.patches_keys = ['train']
         else:
+            self.cross_val_bypass = cross_val_bypass
             self.is_val = is_val
             self.nfolds = nfolds
             if fold > self.nfolds:
@@ -273,7 +275,9 @@ class PatchSamplerDataset(object):
         if self.is_test:
             return self.patches['test']
         elif self.cross_val:
-            if self.is_val:
+            if self.cross_val_bypass:
+                return self.patches['train' + str(self.fold)] + self.patches['val' + str(self.fold)]
+            elif self.is_val:
                 return self.patches['val' + str(self.fold)]
             else:
                 return self.patches['train' + str(self.fold)]
