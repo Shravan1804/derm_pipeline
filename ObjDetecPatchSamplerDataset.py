@@ -35,8 +35,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         print(self.coco_metrics)
 
     def __getitem__(self, idx):
-        patch_map = self.get_patch_list()[idx]
-        img = cv2.cvtColor(self.load_patch_from_patch_map(patch_map), cv2.COLOR_BGR2RGB)
+        img, patch_map = super().__getitem__(idx)
         gt = self.process_raw_masks(self.load_masks_from_patch_map(patch_map))
         if gt is None:
             raise Exception(f"Error with image {idx} all masks are empty. Patch map: {patch_map}")

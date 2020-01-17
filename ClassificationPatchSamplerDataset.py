@@ -1,5 +1,4 @@
 import os
-import sys
 import numpy as np
 from PatchSamplerDataset import PatchSamplerDataset
 
@@ -23,8 +22,7 @@ class ClassificationPatchSamplerDataset(PatchSamplerDataset):
             self.save_patches_to_disk()
 
     def __getitem__(self, idx):
-        patch_map = self.get_patch_list()[idx]
-        im = self.load_patch_from_patch_map(patch_map)
+        im, patch_map = super().__getitem__(idx)
         target = patch_map['class']
 
         if self.transforms is not None:

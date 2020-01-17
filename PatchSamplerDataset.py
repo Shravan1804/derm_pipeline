@@ -1,6 +1,5 @@
 import os
 import cv2
-import sys
 import math
 import numpy as np
 from scipy import ndimage
@@ -65,6 +64,11 @@ class PatchSamplerDataset(object):
 
         if os.path.exists(self.patches_path):
             self.patches = pickle.load(open(self.patches_path, "rb"))
+            self.patches_keys = list(self.patches.keys())
+            if (not self.cross_val) and ('train' not in self.patches_keys):
+                self.cross_val = True
+                self.cross_val_bypass = True
+                print("Loaded dataset was built with cross-val => setting cross-val and bypass to true")
         else:
             self.patches = {key: [] for key in self.patches_keys}
 
@@ -77,8 +81,14 @@ class PatchSamplerDataset(object):
         else:
             return path
 
+    def get_height_and_width(self, idx):
+        im, pm = self[idx]
+        return im.shape[:-1]
+
     def __getitem__(self, idx):
-        raise NotImplementedError
+        patch_map = self.get_patch_list()[idx]
+        img = cv2.cvtColor(self.load_patch_from_patch_map(patch_map), cv2.COLOR_BGR2RGB)
+        return img, patch_map
 
     def __len__(self):
         return len(self.get_patch_list())
