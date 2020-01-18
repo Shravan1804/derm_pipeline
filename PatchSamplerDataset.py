@@ -23,7 +23,7 @@ class PatchSamplerDataset(object):
     # 'wrap'     | 6  7  8 | 1  2  3  4  5  6  7  8 | 1  2  3
 
     # TODO: Find why ndimage.rotate produces different sizes for img than for mask...
-    def __init__(self, root, patch_size, is_val=False, is_test=False, patch_per_img=-1, n_rotation=6, rotation_padding='wrap',
+    def __init__(self, root, patch_size, is_val=False, is_test=False, patch_per_img=-1, n_rotation=6, rotation_padding='reflect',
                  seed=42, test_size=0.15, cross_val_bypass=False, fold=0, nfolds=5, cross_val=False, split_data=True, root_img_dir=None, dest=None, transforms=None):
         self.seed = seed
         np.random.seed(self.seed)
