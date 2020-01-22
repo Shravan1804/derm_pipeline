@@ -69,6 +69,8 @@ class PatchSamplerDataset(object):
                 self.cross_val = True
                 self.cross_val_bypass = True
                 print("Loaded dataset was built with cross-val => setting cross-val and bypass to true")
+            elif self.cross_val and 'train' + str(self.fold) not in self.patches_keys:
+                raise Exception("Loaded dataset is not compatible with specified params")
         else:
             self.patches = {key: [] for key in self.patches_keys}
 
