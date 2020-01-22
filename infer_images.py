@@ -333,7 +333,17 @@ class ObjDetecModel(CustomModel):
 
     def show_preds(self, im, preds, title='Predictions', fname='predictions.jpg', show_bbox=False, transparency=True):
         plt.figure()
-        fig, ax = plt.subplots(1, figsize=(20, 20))
+        fig, ax = plt.subplots(figsize=(20, 20))
+        ax.set_axis_off()
+        ax = fig.add_subplot(1, 2, 1)
+        ax.set_axis_off()
+        ax.title.set_text('Original image')
+        ax.title.set_fontsize(24)
+        ax.imshow(im)
+        ax = fig.add_subplot(1, 2, 2)
+        ax.set_axis_off()
+        ax.title.set_text('Predictions')
+        ax.title.set_fontsize(24)
         img_arr = np.copy(im)
         if len(preds) == 0:
             cv2.putText(img_arr, 'NOTHING DETECTED', (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), thickness=3)
@@ -374,7 +384,7 @@ class ObjDetecModel(CustomModel):
                         plt.text(boxes[0], boxes[3], s=pred_class[i], color='white', verticalalignment='top',
                              bbox={'color': color, 'pad': 0})
         plt.axis('off')
-        plt.title(title, fontsize=42)
+        plt.title(title, fontsize=42, pad=80)
         if self.output_dir is not None:
             plt.savefig(os.path.join(self.output_dir, fname), dpi=300)
         plt.show()
