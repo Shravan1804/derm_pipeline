@@ -334,6 +334,8 @@ class ObjDetecModel(CustomModel):
     def show_preds(self, im, preds, title='Predictions', fname='predictions.jpg', show_bbox=False, transparency=True):
         plt.figure()
         fig, ax = plt.subplots(figsize=(20, 20))
+        plt.axis('off')
+        plt.title(title, fontsize=40, pad=80)
         ax.set_axis_off()
         ax = fig.add_subplot(1, 2, 1)
         ax.set_axis_off()
@@ -383,8 +385,6 @@ class ObjDetecModel(CustomModel):
                         printed[pred_class[i]] = True
                         plt.text(boxes[0], boxes[3], s=pred_class[i], color='white', verticalalignment='top',
                              bbox={'color': color, 'pad': 0})
-        plt.axis('off')
-        plt.title(title, fontsize=42, pad=80)
         if self.output_dir is not None:
             plt.savefig(os.path.join(self.output_dir, fname), dpi=300)
         plt.show()
@@ -486,7 +486,7 @@ def main():
             preds = [model.adjust_bboxes_to_full_img(im, pms, preds, patcher.patch_size) for pms, preds in pm_preds]
             im_preds = [model.filter_preds_by_conf(preds, args.conf_thresh) for preds in preds]
             im_preds = [lst for lst in im_preds if len(lst) > 0 and lst[0]['labels'].size > 0]
-            title = f'Prediction with confidence greater than {args.conf_thresh}'
+            title = f'Predictions with confidence > {args.conf_thresh}'
             plot_name = f'{file}_01_conf_{args.conf_thresh}{ext}'
         elif args.classif:
             neighbors = {p['patch_path']: patcher.get_neighboring_patches(p, im.shape, d=1) for p in pm}
