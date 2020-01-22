@@ -16,9 +16,17 @@ from ObjDetecPatchSamplerDataset import ObjDetecPatchSamplerDataset
 
 import numpy as np
 
+import random
+
+SEED = 42
 MASK_EXT = '.png'
-COLORS = [(238, 130, 238),(139,69,19)]
+#COLORS = [(238, 130, 238),(139,69,19)]
 IMG_DIR = 'images'
+
+random.seed(SEED)
+cmap = plt.get_cmap('tab20b')
+COLORS = random.sample([cmap(i) for i in np.linspace(0, 1, 3)], 3)
+COLORS = [tuple(int(i * 255) for i in c[:-1]) for c in COLORS]
 
 
 def plt_set_fullscreen():
@@ -37,28 +45,43 @@ def plt_set_fullscreen():
 def read_img(img_path):
     return cv2.cvtColor(cv2.imread(img_path, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB)
 
-def show_overlayed_img(id, img_path, masks, classes, transform_mask=False, bbox=False):
+def show_overlayed_img(id, img_path, masks, classes, transparency=True, transform_mask=False, bbox=False):
     img_orig = read_img(img_path)
     img = img_orig.copy()
     img_mask_cleaned = img_orig.copy()
     legend=[]
+    alpha = .3
     for i, mask in enumerate(masks):
         #mask[mask > 0]=1
         #mask = ObjDetecPatchSamplerDataset.rm_small_objs_and_sep_instance(mask, 30)
-        img[mask!=0] = COLORS[i]
+        if transparency:
+            objs = ObjDetecPatchSamplerDataset.extract_mask_objs(mask)
+            if not objs:  # check list empty
+                continue
+            obj_masks = objs[-1]
+            for j, m in enumerate(obj_masks):
+                thresh = cv2.threshold(m.astype(np.uint8), 0.5, 255, cv2.THRESH_BINARY)[1].astype(np.uint8)
+                contours = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[1]
+                cv2.drawContours(img, contours, 0, COLORS[i+1], 2)
+            ms = np.sum(obj_masks, axis=0)
+            ms = np.dstack([cv2.threshold(ms.astype(np.uint8), 0.5, 255, cv2.THRESH_BINARY)[1].astype(np.uint8)] * 3)
+            img = cv2.addWeighted(img, 1 - alpha, ms, alpha, 0)
+        else:
+            img[mask!=0] = COLORS[i+1]
         if transform_mask:
             mask_cleaned = ObjDetecPatchSamplerDataset.clean_mask(mask, 30, 10)
             #mask_cleaned = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
             #mask_cleaned = cv2.dilate(mask,np.ones((3, 3), np.uint8),iterations=1)
             #mask_cleaned = cv2.erode(mask_cleaned, np.ones((2, 2), np.uint8), iterations=2)
-            img_mask_cleaned[mask_cleaned!=0] = COLORS[i]
+            img_mask_cleaned[mask_cleaned!=0] = COLORS[i+1]
         if bbox:
             draw_bbox(img, mask)
             if transform_mask: draw_bbox(img_mask_cleaned, mask_cleaned)
-        legend.append(Line2D([0], [0], marker='o', color=tuple(map(lambda x: x/255, COLORS[i])), label=classes[i], markersize=10))
+        legend.append(Line2D([0], [0], marker='o', color=tuple(map(lambda x: x/255, COLORS[i+1])), label=classes[i], markersize=10))
 
     fig, ax = plt.subplots()
-    plt.title(f'Image {id}: {os.path.basename(img_path)}')
+    #plt.title(f'Image {id}: {os.path.basename(img_path)}')
+    plt.title(f'Image example', fontsize=20,pad=40)
     ax1=fig.add_subplot(1, 2, 1)
     if transform_mask:
         plt.imshow(img)
@@ -66,13 +89,15 @@ def show_overlayed_img(id, img_path, masks, classes, transform_mask=False, bbox=
     else:
         plt.imshow(img_orig)
         ax1.title.set_text('Original image')
+        ax1.title.set_fontsize(14)
     ax2=fig.add_subplot(1, 2, 2)
     if transform_mask:
         plt.imshow(img_mask_cleaned)
         ax2.title.set_text('Image with transformed mask')
     else:
         plt.imshow(img)
-        ax2.title.set_text('Image with mask')
+        ax2.title.set_text('Image with labeled pustules and brown spots')
+        ax2.title.set_fontsize(14)
     ax.legend(handles=legend, loc='lower center')
     ax.set_axis_off()
     for axi in [ax1,ax2]:
@@ -125,7 +150,7 @@ def main():
     classes = [m.replace(args.root, '').replace('/', '').replace('masks_', '') for m in masks_dirs]
 
     if args.img is not None:
-        show_overlayed_img(-1, args.img, get_masks(args.img, masks_dirs), classes, args.clean_mask, args.bbox)
+        show_overlayed_img(-1, args.img, get_masks(args.img, masks_dirs), classes, transform_mask=args.clean_mask, bbox=args.bbox)
     else:
         if args.from_sampler:
             datasets = pickle.load(open(os.path.join(args.root, os.path.basename(args.root) + '.p'), "rb"))
@@ -139,7 +164,7 @@ def main():
         for i, img in enumerate(img_list):
             img_path = os.path.join(args.root, IMG_DIR, img)
             try:
-                show_overlayed_img(img_index[i], img_path, get_masks(img_path, masks_dirs), classes, args.clean_mask, args.bbox)
+                show_overlayed_img(img_index[i], img_path, get_masks(img_path, masks_dirs), classes, transform_mask=args.clean_mask, bbox=args.bbox)
             except:
                 print(img_path, 'created an error, exiting ...')
                 raise
