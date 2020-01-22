@@ -335,7 +335,7 @@ class ObjDetecModel(CustomModel):
         plt.figure()
         fig, ax = plt.subplots(figsize=(20, 20))
         plt.axis('off')
-        plt.title(title, fontsize=40, pad=30)
+        plt.title(title, fontsize=40, pad=10)
         ax.set_axis_off()
         ax = fig.add_subplot(1, 2, 1)
         ax.set_axis_off()
