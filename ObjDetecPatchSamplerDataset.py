@@ -11,7 +11,7 @@ from PatchSamplerDataset import PatchSamplerDataset
 
 class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
-    def __init__(self, root, patch_size, mask_file_ext='.png', min_object_px_size=30, quantiles=None,
+    def __init__(self, root, patch_size, mask_file_ext='.png', min_object_px_size=30, dilate_small=False, quantiles=None,
                  metrics_names=None, split_data=True, dest=None, **kwargs):
         self.root = self.validate_path(root)
         self.root_img_dir = 'images'
@@ -19,6 +19,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         self.patch_size = patch_size
         self.mask_file_ext = mask_file_ext
         self.min_object_px_size = min_object_px_size
+        self.dilate_small = dilate_small
         self.quantiles = [0.25, 0.5, 0.75, 0.99] if quantiles is None else quantiles
         self.metrics_names = ['bbox_areas', 'segm_areas', 'obj_count'] if metrics_names is None else metrics_names
         self.split_data = split_data
@@ -39,8 +40,9 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         gt = self.process_raw_masks(self.load_masks_from_patch_map(patch_map))
         if gt is None:
             raise Exception(f"Error with image {idx} all masks are empty. Patch map: {patch_map}")
-
         classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks, crowd_objs = gt
+        if self.dilate_small:
+            self.dilate_small_objs(classes, segm_areas, boxes, bbox_areas, obj_masks)
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
         areas = torch.as_tensor(bbox_areas, dtype=torch.float32)
         labels = torch.as_tensor(classes, dtype=torch.int64)
@@ -58,6 +60,18 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             img, target = self.transforms(img, target)
 
         return img, target
+
+    def dilate_small_objs(self, classes, segm_areas, boxes, bbox_areas, obj_masks):
+        target_area = {m: self.coco_metrics[m]['segm_areas'][1] for m in self.masks_dirs}
+        kernel = np.ones((3, 3), np.uint8)
+        for i, obj_mask in enumerate(obj_masks):
+            while segm_areas[i] < target_area[self.masks_dirs[classes[i]-1]]:
+                obj_mask = cv2.dilate(obj_mask.astype(np.uint8), kernel, iterations=1)
+                segm_areas[i] = np.count_nonzero(obj_mask)
+            obj_masks[i] = obj_mask > 0
+            boxes[i] = np.array(ObjDetecPatchSamplerDataset.get_bbox_of_true_values(obj_masks[i]))
+            bbox_areas[i] = (boxes[i, 3] - boxes[i, 1]) * (boxes[i, 2] - boxes[i, 0])
+
 
     def process_raw_masks(self, raw_masks):
         objs = list(zip(*filter(None.__ne__, map(ObjDetecPatchSamplerDataset.extract_mask_objs, raw_masks))))
