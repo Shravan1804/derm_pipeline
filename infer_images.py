@@ -390,6 +390,59 @@ class ObjDetecModel(CustomModel):
         plt.show()
         plt.close()
 
+    def merge_overlapping_dets(self, preds):
+        preds_overlap_merged = {k: [] for k in preds.keys()}
+        merged = []
+        for i in range(len(preds['labels'])):
+            if i in merged:
+                continue
+            b1 = preds['boxes'][i]
+            overlap = [i]
+            for j in range(len(preds['labels'])):
+                if preds['labels'][i] != preds['labels'][j] or j in overlap:
+                    continue
+                b2 = preds['boxes'][j]
+                if ObjDetecModel.intersect(b1, b2):
+                    b1 = [*[min(b1[i], b2[i]) for i in range(2)], *[max(b1[i+2], b2[i+2]) for i in range(2)]]
+                    overlap.append(j)
+            preds_overlap_merged['labels'].append(preds['labels'][i])
+            preds_overlap_merged['boxes'].append(b1)
+            preds_overlap_merged['scores'].append(np.mean([preds['scores'][n] for n in overlap]))
+            preds_overlap_merged['masks'].append(sum([preds['masks'][n] for n in overlap]))
+            merged.extend(overlap)
+        return preds_overlap_merged
+
+    def save_dets(self, img_id, all_preds, gt=None, merge_overlapping=False):
+        preds = [elem for lst in all_preds for elem in lst]
+        merged_preds = {k: [] for k in preds[0].keys()}
+        for pred in preds:
+            for k in merged_preds.keys():
+                merged_preds[k].extend(list(pred[k]))
+        if merge_overlapping:
+            merged_preds = self.merge_overlapping_dets(merged_preds)
+        gt_pred = ((gt[0][0]['labels'], gt[0][0]['boxes']), (merged_preds['labels'], merged_preds['scores'], merged_preds['boxes']))
+        self.write_gt_pred(str(img_id)+'.txt', gt_pred)
+
+    def write_gt_pred(self, filename, gt_pred):
+        gt_dir = os.path.join(self.output_dir, 'groundtruths')
+        det_dir = os.path.join(self.output_dir, 'detections')
+        if not os.path.exists(gt_dir):
+            os.makedirs(gt_dir)
+            os.makedirs(det_dir)
+        gts, preds = gt_pred
+        with open(os.path.join(gt_dir, filename), "w") as file:
+            for label, bbox in zip(gts[0], gts[1]):
+                file.write(f'{self.classes[int(label)]} {" ".join(map(str, bbox))}\n')
+        with open(os.path.join(det_dir, filename), "w") as file:
+            for label, score, bbox in zip(preds[0], preds[1], preds[2]):
+                file.write(f'{self.classes[int(label)]} {score} {" ".join(map(str, bbox))}\n')
+
+    @staticmethod
+    def intersect(box1, box2):
+        xmin, ymin, xmax, ymax = box1
+        xmin2, ymin2, xmax2, ymax2 = box2
+        return not (xmin > xmax2 or xmin2 > xmax or ymin > ymax2 or ymin2 > ymax)
+
     @staticmethod
     def extract_mask_objs(mask):
         objs = ObjDetecPatchSamplerDataset.extract_mask_objs(mask)
@@ -432,7 +485,9 @@ def main():
     parser.add_argument('--classif', action='store_true', help="Applies classification model")
     parser.add_argument('--classes', type=str, nargs='*', help="classes for detections")
     parser.add_argument('--out-dir', type=str, help="if save-output set, output dir absolute path")
-    parser.add_argument('--save-output', action='store_true', help="Applies object detection model")
+    parser.add_argument('--save-output', action='store_true', help="Save graphs")
+    parser.add_argument('--save-dets', action='store_true', help="Save detections")
+    parser.add_argument('--no-graphs', action='store_true', help="Do not create graphs")
     parser.add_argument('--show-gt', action='store_true', help="Show gt of object detection dataset")
     parser.add_argument('--seed', default=42, type=int, help="batch size")
     args = parser.parse_args()
@@ -450,9 +505,9 @@ def main():
             raise Exception("Error, both --img and --img-dir are invalid")
         img_list = [os.path.join(args.img_dir, img) for img in sorted(os.listdir(args.img_dir))]
 
-    if args.save_output:
+    if args.save_output or args.save_dets:
         if args.out_dir is None:
-            raise Exception("Error, --save-output is set but no --out-dir")
+            raise Exception("Error, --save-output (or --save-dets) is set but no --out-dir")
         elif not os.path.exists(args.out_dir):
             os.makedirs(args.out_dir)
     else:
@@ -468,11 +523,14 @@ def main():
     else:
         raise Exception("Error, neither object detection nor classification was chosen")
     patcher = PatchExtractor(args.patch_size)
+    # pics problem causing pics
     #img_list = [os.path.join('/home/shravan/deep-learning/data/PPP_orig_cleaned/images', i) for i in ['run12_00012.jpg', 'run12_00023.jpg', 'run12_00028.jpg', 'run13_00014.jpg', 'run13_00015.jpg', 'run13_00016.jpg', 'run13_00097.jpg', 'run13_00114.jpg']]
-    for img_path in img_list:
+    # test set pics
+    #img_list = [os.path.join('/home/shravan/deep-learning/data/PPP_orig_cleaned/images', i) for i in ['run13_00099.jpg', 'run13_00016.jpg', 'run13_00083.jpg', 'run13_00014.jpg', 'run13_00123.jpg', 'run13_00073.jpg', 'run13_00143.jpg', 'run13_00064.jpg', 'run13_00117.jpg', 'run13_00150.jpg', 'run13_00002.jpg', 'run13_00110.jpg', 'run13_00028.jpg', 'run13_00032.jpg', 'run13_00074.jpg']]
+    for img_id, img_path in enumerate(img_list):
         file, ext = os.path.splitext(os.path.basename(img_path))
         im = patcher.load_img_from_disk(img_path)
-        if args.obj_detec and args.show_gt:
+        if args.obj_detec and args.show_gt and not args.no_graphs:
             model.show_preds(im, [[ObjDetecModel.get_img_gt(img_path)]], title=f'Ground Truth for {file}{ext}', fname=f'{file}_00_gt{ext}')
         print("Creating patches for", img_path)
         pm = patcher.img_as_grid_of_patches(im, img_path)
@@ -498,7 +556,10 @@ def main():
             plot_name = f'{file}_body_loc_{ext}'
         if args.draw_patches:
             patcher.draw_patches(im, pm)
-        model.show_preds(im, im_preds, title=f'{title} for {file}{ext}', fname=plot_name)
+        if not args.no_graphs:
+            model.show_preds(im, im_preds, title=f'{title} for {file}{ext}', fname=plot_name)
+        if args.save_dets:
+            model.save_dets(img_id, im_preds, gt=[[ObjDetecModel.get_img_gt(img_path)]], merge_overlapping=True)
 
 if __name__ == '__main__':
     main()
