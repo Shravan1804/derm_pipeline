@@ -315,19 +315,10 @@ class ObjDetecModel(CustomModel):
         #        if pred['labels'].size > 0]
         res = []
         for pred in preds:
-            if pred['labels'].size > 0:
-                idx = np.where(pred['scores'] >= min_conf)
-                if len(pred['labels'][idx]) > 0:
-                    res += [{k: v[idx] for k, v in pred.items()}]
+            idx = np.where(pred['scores'] >= min_conf)
+            if pred['labels'][idx].size > 0:
+                res += [{k: v[idx] for k, v in pred.items()}]
         return res
-
-        # if predictions is None: return None
-        # pred_class, pred_boxes, pred_score = self.preds_to_cpu(predictions)
-        # if not pred_score: return None  # nothing was detected
-        # pred_t = [pred_score.index(x) for x in pred_score if x > thresh]
-        # if not pred_t: return None  # no detection is confident enough
-        # pred_t = pred_t[-1]
-        # return pred_class[:pred_t + 1], pred_boxes[:pred_t + 1], pred_score[:pred_t + 1]
 
     def adjust_bboxes_to_full_img(self, im, patch_maps, preds, patch_size):
         for i, pred in enumerate(preds):
@@ -360,8 +351,7 @@ class ObjDetecModel(CustomModel):
             cv2.putText(img_arr, 'NOTHING DETECTED', (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), thickness=3)
             ax.imshow(img_arr)
         else:
-            preds = {k: np.concatenate(tuple(pred[k] for batch in preds for pred in batch
-                                             if pred['labels'].size > 0), axis=0) for k in preds[0][0].keys()}
+            preds = {k: np.concatenate(tuple(pred[k] for pred in preds), axis=0) for k in preds[0].keys()}
             classes = np.array(self.classes)
             pred_class = classes[preds['labels']]
             if transparency:
@@ -421,15 +411,17 @@ class ObjDetecModel(CustomModel):
             merged.extend(overlap)
         return preds_overlap_merged
 
-    def save_dets(self, img_id, all_preds, gt=None, merge_overlapping=False):
-        preds = [elem for lst in all_preds for elem in lst]
-        merged_preds = {k: [] for k in preds[0].keys()}
-        for pred in preds:
-            for k in merged_preds.keys():
-                merged_preds[k].extend(list(pred[k]))
-        if merge_overlapping:
-            merged_preds = self.merge_overlapping_dets(merged_preds)
-        gt_pred = ((gt[0][0]['labels'], gt[0][0]['boxes']), (merged_preds['labels'], merged_preds['scores'], merged_preds['boxes']))
+    def save_dets(self, img_id, preds, gt=None, merge_overlapping=False):
+        if len(preds) == 0:
+            gt_pred = ((gt[0][0]['labels'], gt[0][0]['boxes']), ([], [], []))
+        else:
+            merged_preds = {k: [] for k in preds[0].keys()}
+            for pred in preds:
+                for k in merged_preds.keys():
+                    merged_preds[k].extend(list(pred[k]))
+            if merge_overlapping:
+                merged_preds = self.merge_overlapping_dets(merged_preds)
+            gt_pred = ((gt[0][0]['labels'], gt[0][0]['boxes']), (merged_preds['labels'], merged_preds['scores'], merged_preds['boxes']))
         self.write_gt_pred(str(img_id)+'.txt', gt_pred)
 
     def write_gt_pred(self, filename, gt_pred):
@@ -443,8 +435,9 @@ class ObjDetecModel(CustomModel):
             for label, bbox in zip(gts[0], gts[1]):
                 file.write(f'{self.classes[int(label)]} {" ".join(map(str, bbox))}\n')
         with open(os.path.join(det_dir, filename), "w") as file:
-            for label, score, bbox in zip(preds[0], preds[1], preds[2]):
-                file.write(f'{self.classes[int(label)]} {score} {" ".join(map(str, bbox))}\n')
+            if len(preds[0]) > 0:
+                for label, score, bbox in zip(preds[0], preds[1], preds[2]):
+                    file.write(f'{self.classes[int(label)]} {score} {" ".join(map(str, bbox))}\n')
 
     @staticmethod
     def intersect(box1, box2):
@@ -535,7 +528,7 @@ def main():
     # pics problem causing pics
     #img_list = [os.path.join(args.img_dir, i) for i in ['run12_00012.jpg', 'run12_00023.jpg', 'run12_00028.jpg', 'run13_00014.jpg', 'run13_00015.jpg', 'run13_00016.jpg', 'run13_00097.jpg', 'run13_00114.jpg']]
     # test set pics
-    img_list = [os.path.join(args.img_dir, i) for i in ['run13_00099.jpg', 'run13_00016.jpg', 'run13_00083.jpg', 'run13_00014.jpg', 'run13_00123.jpg', 'run13_00073.jpg', 'run13_00143.jpg', 'run13_00064.jpg', 'run13_00117.jpg', 'run13_00150.jpg', 'run13_00002.jpg', 'run13_00110.jpg', 'run13_00028.jpg', 'run13_00032.jpg', 'run13_00074.jpg']]
+    # img_list = [os.path.join(args.img_dir, i) for i in ['run13_00099.jpg', 'run13_00016.jpg', 'run13_00083.jpg', 'run13_00014.jpg', 'run13_00123.jpg', 'run13_00073.jpg', 'run13_00143.jpg', 'run13_00064.jpg', 'run13_00117.jpg', 'run13_00150.jpg', 'run13_00002.jpg', 'run13_00110.jpg', 'run13_00028.jpg', 'run13_00032.jpg', 'run13_00074.jpg']]
     for img_id, img_path in enumerate(img_list):
         file, ext = os.path.splitext(os.path.basename(img_path))
         im = patcher.load_img_from_disk(img_path)
@@ -551,24 +544,24 @@ def main():
         pm_preds = [(pms, model.predict_imgs(ims)) for pms, ims in tqdm(b_patches)]
         if args.obj_detec:
             preds = [model.adjust_bboxes_to_full_img(im, pms, preds, patcher.patch_size) for pms, preds in pm_preds]
-            im_preds = [model.filter_preds_by_conf(preds, args.conf_thresh) for preds in preds]
-            im_preds = [lst for lst in im_preds if len(lst) > 0 and lst[0]['labels'].size > 0]
+            preds = [pred for batch in preds for pred in batch if pred['labels'].size > 0]
+            preds = model.filter_preds_by_conf(preds, args.conf_thresh)
             title = f'Predictions with confidence > {args.conf_thresh}'
             plot_name = f'{file}_01_conf_{args.conf_thresh}{ext}'
         elif args.classif:
             neighbors = {p['patch_path']: patcher.get_neighboring_patches(p, im.shape, d=1) for p in pm}
             #DEBUG NEIGHBORS:
             #[print("Error", p, "does not seem correct") for neigh in neighbors.values() for p in neigh if p not in [a['patch_path'] for a in pm]]
-            predictions = {pm['patch_path']: pred for batch in pm_preds for pm, pred in zip(*batch)}
-            im_preds = model.prediction_validation(predictions, neighbors)
+            preds = {pm['patch_path']: pred for batch in pm_preds for pm, pred in zip(*batch)}
+            preds = model.prediction_validation(preds, neighbors)
             title = f'Body localization'
             plot_name = f'{file}_body_loc_{ext}'
         if args.draw_patches:
             patcher.draw_patches(im, pm)
         if not args.no_graphs:
-            model.show_preds(im, im_preds, title=f'{title} for {file}{ext}', fname=plot_name)
+            model.show_preds(im, preds, title=f'{title} for {file}{ext}', fname=plot_name)
         if args.save_dets:
-            model.save_dets(img_id, im_preds, gt=[[ObjDetecModel.get_img_gt(img_path)]], merge_overlapping=True)
+            model.save_dets(img_id, preds, gt=[[ObjDetecModel.get_img_gt(img_path)]], merge_overlapping=True)
 
 if __name__ == '__main__':
     main()
