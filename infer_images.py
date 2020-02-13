@@ -310,8 +310,17 @@ class ObjDetecModel(CustomModel):
         return [{k: v.cpu().detach().numpy() for k, v in pred.items()} for pred in preds]
 
     def filter_preds_by_conf(self, preds, min_conf):
-        return [{k: v[np.where(pred['scores'] >= min_conf)] for k, v in pred.items()} for pred in preds
-                if pred['labels'].size > 0]
+        # memory error
+        #return [{k: v[np.where(pred['scores'] >= min_conf)] for k, v in pred.items()} for pred in preds
+        #        if pred['labels'].size > 0]
+        res = []
+        for pred in preds:
+            if pred['labels'].size > 0:
+                idx = np.where(pred['scores'] >= min_conf)
+                if len(pred['labels'][idx]) > 0:
+                    res += [{k: v[idx] for k, v in pred.items()}]
+        return res
+
         # if predictions is None: return None
         # pred_class, pred_boxes, pred_score = self.preds_to_cpu(predictions)
         # if not pred_score: return None  # nothing was detected
