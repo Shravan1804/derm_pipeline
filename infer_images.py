@@ -313,22 +313,15 @@ class ObjDetecModel(CustomModel):
         # memory error
         #return [{k: v[np.where(pred['scores'] >= min_conf)] for k, v in pred.items()} for pred in preds
         #        if pred['labels'].size > 0]
-        res = []
-        for pred in preds:
-            idx = np.where(pred['scores'] >= min_conf)
-            if pred['labels'][idx].size > 0:
-                res += [{k: v[idx] for k, v in pred.items()}]
-        return res
-
-    def adjust_bboxes_to_full_img(self, im, patch_maps, preds, patch_size):
-        for i, pred in enumerate(preds):
-            if len(pred['labels']) == 0:
-                continue
-            y, x = patch_maps[i]['idx_h'], patch_maps[i]['idx_w']
-            empty_mask = np.zeros((pred['masks'].shape[0], 1, *im.shape[:-1]))
-            empty_mask[:, :, y:y+patch_size, x:x+patch_size] = pred['masks']
-            pred['masks'] = empty_mask
-            pred['boxes'] += np.ones(pred['boxes'].shape) * np.array([x, y, x, y])
+        idx = np.where(preds['scores'] >= min_conf)
+        if preds['obj_ids'][idx].size == 0:
+            return []
+        remaining_objs = preds['obj_ids'][idx]
+        preds['masks'] = {c: sum([self.get_obj_mask(obj_id, preds['masks'][c], sub_obj_id=False)
+                            for obj_id in remaining_objs]) for c in preds['masks'].keys()}
+        for k in preds.keys():
+            if k != 'masks':
+                preds[k] = preds[k][idx]
         return preds
 
     def show_preds(self, im, preds, title='Predictions', fname='predictions.jpg', show_bbox=False, transparency=True):
@@ -351,24 +344,28 @@ class ObjDetecModel(CustomModel):
             cv2.putText(img_arr, 'NOTHING DETECTED', (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), thickness=3)
             ax.imshow(img_arr)
         else:
-            preds = {k: np.concatenate(tuple(pred[k] for pred in preds), axis=0) for k in preds[0].keys()}
+            preds = preds[0]
             classes = np.array(self.classes)
             pred_class = classes[preds['labels']]
             if transparency:
                 alpha = .3
-                for i, mask in enumerate(preds['masks']):
-                    thresh = cv2.threshold(mask[0], 0.5, 255, cv2.THRESH_BINARY)[1].astype(np.uint8)
+                for i, tup in enumerate(zip(preds['labels'], preds['obj_ids'])):
+                    c, obj_id = tup
+                    mask = self.get_obj_mask(obj_id, preds['masks'][c])[0][0]
+                    thresh = cv2.threshold(mask, 0.5, 255, cv2.THRESH_BINARY)[1].astype(np.uint8)
                     contours = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[1]
-                    color = tuple(int(i * 255) for i in self.bbox_colors[int(np.where(classes == pred_class[i])[0])][:-1])
+                    color = tuple(int(j * 255) for j in self.bbox_colors[int(np.where(classes == pred_class[i])[0])][:-1])
                     cv2.drawContours(img_arr, contours, 0, color, 2)
-                mask = np.sum(preds['masks'], axis=0)[0]
-                mask = np.dstack([cv2.threshold(mask, 0.5, 255, cv2.THRESH_BINARY)[1].astype(np.uint8)] * 3)
+                mask = sum([self.get_obj_mask(obj_id, preds['masks'][c]) for obj_id in preds['obj_ids']])
+                mask = np.dstack([cv2.threshold(mask[0][0], 0.5, 255, cv2.THRESH_BINARY)[1].astype(np.uint8)] * 3)
                 img_arr = cv2.addWeighted(img_arr, 1 - alpha, mask, alpha, 0)
                 #img_arr = img_arr * (1.0 - alpha) + mask * alpha
             else:
-                for i, mask in enumerate(preds['masks']):
+                for i, tup in enumerate(zip(preds['labels'], preds['obj_ids'])):
+                    c, obj_id = tup
+                    mask = self.get_obj_mask(obj_id, preds['masks'][c])[0][0]
                     color = tuple(int(i*255) for i in self.bbox_colors[int(np.where(classes == pred_class[i])[0])][:-1])
-                    mask = mask[0]
+                    mask = mask
                     img_arr[mask > .8] = color
             ax.imshow(img_arr)
             box_w = preds['boxes'][:, 2] - preds['boxes'][:, 0]
@@ -389,39 +386,75 @@ class ObjDetecModel(CustomModel):
         plt.show()
         plt.close()
 
-    def merge_overlapping_dets(self, preds):
-        preds_overlap_merged = {k: [] for k in preds.keys()}
+    def adjust_bboxes_to_full_img(self, im, pm_preds, patch_size):
+        preds = []
+        for pm, pred in pm_preds:
+            y, x = pm['idx_h'], pm['idx_w']
+            empty_mask = np.zeros((pred['masks'].shape[0], 1, *im.shape[:-1]))
+            empty_mask[:, :, y:y+patch_size, x:x+patch_size] = pred['masks']
+            pred['masks'] = empty_mask
+            pred['boxes'] += np.ones(pred['boxes'].shape) * np.array([x, y, x, y])
+            preds.append(pred)
+        return preds
+
+    def merge_preds(self, preds):
+        merged_preds = {k: [] for k in preds[0].keys()}
+        for pred in preds:
+            for k in merged_preds.keys():
+                merged_preds[k].extend(list(pred[k]))
+
+        merged_preds = self.merge_overlapping_dets(merged_preds)
+        merged_preds['obj_ids'] = list(range(1, np.array(merged_preds['labels']).size+1))
+        merged_mask = {k: np.zeros((1, 1, *merged_preds['masks'][0].shape[1:]), dtype=np.float64) for k in np.unique(merged_preds['labels'])}
+        for i, obj_id in enumerate(merged_preds['obj_ids']):
+            idx = np.where(merged_preds['masks'][i] > 0)
+            merged_mask[merged_preds['labels'][i]][0][idx] = merged_preds['masks'][i][idx] + obj_id
+        merged_preds['masks'] = merged_mask
+        merged_preds = {k: np.array(v) if k != 'masks' else v for k, v in merged_preds.items()}
+        return merged_preds
+
+    def get_obj_mask(self, obj_id, merged_mask, sub_obj_id=True):
+        idx = np.where(np.logical_and(0 <= (merged_mask - obj_id), (merged_mask - obj_id) < 1))
+        mask = np.zeros((merged_mask.shape))
+        if sub_obj_id:
+            mask[idx] = merged_mask[idx] - obj_id
+        else:
+            mask[idx] = merged_mask[idx]
+        return mask
+
+    def merge_overlapping_dets(self, merged_preds):
+        preds_overlap_merged = {k: [] for k in merged_preds.keys()}
         merged = []
-        for i in range(len(preds['labels'])):
+        for i in range(len(merged_preds['labels'])):
             if i in merged:
                 continue
-            b1 = preds['boxes'][i]
+            b1 = merged_preds['boxes'][i]
             overlap = [i]
-            for j in range(len(preds['labels'])):
-                if preds['labels'][i] != preds['labels'][j] or j in overlap:
-                    continue
-                b2 = preds['boxes'][j]
-                if ObjDetecModel.intersect(b1, b2):
-                    b1 = [*[min(b1[i], b2[i]) for i in range(2)], *[max(b1[i+2], b2[i+2]) for i in range(2)]]
-                    overlap.append(j)
-            preds_overlap_merged['labels'].append(preds['labels'][i])
+            has_merged = True
+            while has_merged:
+                has_merged = False
+                for j in range(len(merged_preds['labels'])):
+                    if merged_preds['labels'][i] != merged_preds['labels'][j] or j in overlap:
+                        continue
+                    b2 = merged_preds['boxes'][j]
+                    if ObjDetecModel.intersect(b1, b2):
+                        b1 = [*[min(b1[i], b2[i]) for i in range(2)], *[max(b1[i+2], b2[i+2]) for i in range(2)]]
+                        overlap.append(j)
+                        has_merged = True
+            preds_overlap_merged['labels'].append(merged_preds['labels'][i])
             preds_overlap_merged['boxes'].append(b1)
-            preds_overlap_merged['scores'].append(np.mean([preds['scores'][n] for n in overlap]))
-            preds_overlap_merged['masks'].append(sum([preds['masks'][n] for n in overlap]))
+            preds_overlap_merged['scores'].append(np.mean([merged_preds['scores'][n] for n in overlap]))
+            preds_overlap_merged['masks'].append(sum([merged_preds['masks'][n] for n in overlap]))
+            # not 1 because otherwise, may confuse with next obj_id
+            preds_overlap_merged['masks'][-1][preds_overlap_merged['masks'][-1] > 1] = .999
             merged.extend(overlap)
         return preds_overlap_merged
 
-    def save_dets(self, img_id, preds, gt=None, merge_overlapping=False):
+    def save_dets(self, img_id, preds, gt=None):
         if len(preds) == 0:
-            gt_pred = ((gt[0][0]['labels'], gt[0][0]['boxes']), ([], [], []))
+            gt_pred = ((gt['labels'], gt['boxes']), ([], [], []))
         else:
-            merged_preds = {k: [] for k in preds[0].keys()}
-            for pred in preds:
-                for k in merged_preds.keys():
-                    merged_preds[k].extend(list(pred[k]))
-            if merge_overlapping:
-                merged_preds = self.merge_overlapping_dets(merged_preds)
-            gt_pred = ((gt[0][0]['labels'], gt[0][0]['boxes']), (merged_preds['labels'], merged_preds['scores'], merged_preds['boxes']))
+            gt_pred = ((gt['labels'], gt['boxes']), tuple(preds[k] for k in ['labels', 'scores', 'boxes']))
         self.write_gt_pred(str(img_id)+'.txt', gt_pred)
 
     def write_gt_pred(self, filename, gt_pred):
@@ -473,6 +506,12 @@ def plot_img(img_arr, title, output_path):
     plt.title(title)
     plt.savefig(output_path)
     plt.close()
+
+def unbatch(pm_preds):
+    pms, preds = zip(*pm_preds)
+    pms = [p for pm in pms for p in pm]
+    preds = [p for pred in preds for p in pred]
+    return zip(pms, preds)
 
 def main():
     parser = argparse.ArgumentParser(description="Apply model to image patches")
@@ -532,8 +571,9 @@ def main():
     for img_id, img_path in enumerate(img_list):
         file, ext = os.path.splitext(os.path.basename(img_path))
         im = patcher.load_img_from_disk(img_path)
+        gt = ObjDetecModel.get_img_gt(img_path)
         if args.obj_detec and args.show_gt and not args.no_graphs:
-            model.show_preds(im, [[ObjDetecModel.get_img_gt(img_path)]], title=f'Ground Truth for {file}{ext}', fname=f'{file}_00_gt{ext}')
+            model.show_preds(im, [gt], title=f'Ground Truth for {file}{ext}', fname=f'{file}_00_gt{ext}')
         print("Creating patches for", img_path)
         pm = patcher.img_as_grid_of_patches(im, img_path)
         # create batches
@@ -541,18 +581,27 @@ def main():
         # lst of batches with a batch being a tuple containing lst of patch maps and lst of corresponding image patches
         b_patches = [(b, [patcher.get_patch_from_idx(im, pms['idx_h'], pms['idx_w']) for pms in b]) for b in b_pm]
         print("Applying model to patches")
-        pm_preds = [(pms, model.predict_imgs(ims)) for pms, ims in tqdm(b_patches)]
+        pm_preds = unbatch([(pms, model.predict_imgs(ims)) for pms, ims in tqdm(b_patches)])
         if args.obj_detec:
-            preds = [model.adjust_bboxes_to_full_img(im, pms, preds, patcher.patch_size) for pms, preds in pm_preds]
-            preds = [pred for batch in preds for pred in batch if pred['labels'].size > 0]
-            preds = model.filter_preds_by_conf(preds, args.conf_thresh)
+            pm_preds = [p for p in pm_preds if p[1]['labels'].size > 0]
+            if len(pm_preds) > 0:
+                preds = model.adjust_bboxes_to_full_img(im, pm_preds, patcher.patch_size)
+                preds = [model.merge_preds(preds)]
+            else:
+                preds = []
+            if args.save_dets:
+                if gt is None:
+                    raise Exception("No ground truth available")
+                model.save_dets(img_id, preds[0], gt=gt)
+            if len(pm_preds) > 0:
+                preds = [model.filter_preds_by_conf(preds[0], args.conf_thresh)]
             title = f'Predictions with confidence > {args.conf_thresh}'
             plot_name = f'{file}_01_conf_{args.conf_thresh}{ext}'
         elif args.classif:
             neighbors = {p['patch_path']: patcher.get_neighboring_patches(p, im.shape, d=1) for p in pm}
             #DEBUG NEIGHBORS:
             #[print("Error", p, "does not seem correct") for neigh in neighbors.values() for p in neigh if p not in [a['patch_path'] for a in pm]]
-            preds = {pm['patch_path']: pred for batch in pm_preds for pm, pred in zip(*batch)}
+            preds = {pm['patch_path']: pred for pm, pred in pm_preds}
             preds = model.prediction_validation(preds, neighbors)
             title = f'Body localization'
             plot_name = f'{file}_body_loc_{ext}'
@@ -560,8 +609,6 @@ def main():
             patcher.draw_patches(im, pm)
         if not args.no_graphs:
             model.show_preds(im, preds, title=f'{title} for {file}{ext}', fname=plot_name)
-        if args.save_dets:
-            model.save_dets(img_id, preds, gt=[[ObjDetecModel.get_img_gt(img_path)]], merge_overlapping=True)
 
 if __name__ == '__main__':
     main()
