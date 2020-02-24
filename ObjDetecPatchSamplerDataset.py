@@ -12,7 +12,11 @@ from PatchSamplerDataset import PatchSamplerDataset
 class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
     def __init__(self, root, patch_size, mask_file_ext='.png', min_object_px_size=30, dilate_small=False, quantiles=None,
-                 metrics_names=None, split_data=True, dest=None, **kwargs):
+                 metrics_names=None, split_data=True, dest=None, filter_obj_size="all", **kwargs):
+        if filter_obj_size not in ["small", "medium", "large", "all"]:
+            raise Exception("filter_by_size argument should be either small, medium, large or all")
+        else:
+            self.filter_obj_size = filter_obj_size
         self.root = self.validate_path(root)
         self.root_img_dir = 'images'
         self.all_obj_cat_key = '__ALL__'
@@ -40,6 +44,8 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         gt = self.process_raw_masks(self.load_masks_from_patch_map(patch_map))
         if gt is None:
             raise Exception(f"Error with image {idx} all masks are empty. Patch map: {patch_map}")
+        if self.filter_obj_size != "all":
+            gt = self.filter_obj_by_size(gt)
         classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks, crowd_objs = gt
         if self.dilate_small:
             self.dilate_small_objs(classes, segm_areas, boxes, bbox_areas, obj_masks)
@@ -49,6 +55,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         #TODO: masks are in uint16, torch has torch.int16 but model produces error: Buffer dtype mismatch, expected 'uint8_t' but got 'short'
         masks = torch.as_tensor(obj_masks, dtype=torch.uint8)
         # instances with iscrowd=True are ignored during evaluation which decreases both precision and recall
+        # thus consider no objects as crowd
         crowd_objs = np.zeros(crowd_objs.shape)
         iscrowd = torch.as_tensor(crowd_objs.astype(np.int), dtype=torch.int64)
         image_id = torch.tensor([idx])
@@ -61,17 +68,38 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
         return img, target
 
+    def filter_obj_by_size(self, gt):
+        classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks, _ = gt
+        if self.filter_obj_size == "all":
+            return gt
+        sizes = ['all', 'small', 'medium', 'large']
+        coco = {m: list(zip(sizes, self.get_coco_params(key=m)[2])) for m in self.masks_dirs}
+        target_area = {s: {m: tuple(*[r[1] for r in coco[m] if r[0] == s]) for m in self.masks_dirs} for s in sizes}
+        rm_index = []
+        largest = (0,0)
+        # iterate over all obj areas
+        for i, area in enumerate(segm_areas):
+            if largest[1] < area:
+                largest = (i, area)
+            low, high = target_area[self.filter_obj_size][self.masks_dirs[classes[i] - 1]]
+            if not(low <= area <= high):
+                rm_index.append(i)
+        #TODO: improve, dilates largest obj to prevent patch becoming empty without object and causing errors
+        if len(rm_index) == obj_ids.size:
+            i = largest[0]
+            min_size = target_area[self.filter_obj_size][self.masks_dirs[classes[i] - 1]][0]
+            obj_masks[i], segm_areas[i], boxes[i], bbox_areas[i] = ObjDetecPatchSamplerDataset.dilate_obj(obj_masks[i],
+                                                                                                          min_size)
+            rm_index.remove(largest[0])
+        return tuple([np.delete(item, rm_index, axis=0) for item in gt])
+
+
     def dilate_small_objs(self, classes, segm_areas, boxes, bbox_areas, obj_masks):
         target_area = {m: self.coco_metrics[m]['segm_areas'][1] for m in self.masks_dirs}
         kernel = np.ones((3, 3), np.uint8)
         for i, obj_mask in enumerate(obj_masks):
-            while segm_areas[i] < target_area[self.masks_dirs[classes[i]-1]]:
-                obj_mask = cv2.dilate(obj_mask.astype(np.uint8), kernel, iterations=1)
-                segm_areas[i] = np.count_nonzero(obj_mask)
-            obj_masks[i] = obj_mask > 0
-            boxes[i] = np.array(ObjDetecPatchSamplerDataset.get_bbox_of_true_values(obj_masks[i]))
-            bbox_areas[i] = (boxes[i, 3] - boxes[i, 1]) * (boxes[i, 2] - boxes[i, 0])
-
+            dilated = ObjDetecPatchSamplerDataset.dilate_obj(obj_mask, target_area[self.masks_dirs[classes[i]-1]])
+            obj_masks[i], segm_areas[i], boxes[i], bbox_areas[i] = dilated
 
     def process_raw_masks(self, raw_masks):
         objs = list(zip(*filter(None.__ne__, map(ObjDetecPatchSamplerDataset.extract_mask_objs, raw_masks))))
@@ -306,4 +334,16 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         if xmin == xmax or ymin == ymax:    # Faulty object
             return None
         return [xmin, ymin, xmax, ymax]
+
+    @staticmethod
+    def dilate_obj(obj_mask, target_area):
+        kernel = np.ones((3, 3), np.uint8)
+        segm_areas = np.count_nonzero(obj_mask)
+        while segm_areas < target_area:
+            obj_mask = cv2.dilate(obj_mask.astype(np.uint8), kernel, iterations=1)
+            segm_areas = np.count_nonzero(obj_mask)
+        obj_masks = obj_mask > 0
+        box = np.array(ObjDetecPatchSamplerDataset.get_bbox_of_true_values(obj_masks))
+        box_area = (box[3] - box[1]) * (box[2] - box[0])
+        return obj_mask, segm_areas, box, box_area
 
