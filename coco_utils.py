@@ -156,7 +156,7 @@ def convert_to_coco_api(ds):
         img_dict = {}
         img_dict['id'] = image_id
         img_dict['height'] = img.shape[-2]
-        img_dict['width'] = img.shape[-1]
+        img_dict['width'] = img.shape[-3]
         dataset['images'].append(img_dict)
         bboxes = targets["boxes"]
         bboxes[:, 2:] -= bboxes[:, :2]
