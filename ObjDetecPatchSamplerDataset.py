@@ -101,6 +101,53 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             dilated = ObjDetecPatchSamplerDataset.dilate_obj(obj_mask, target_area[self.masks_dirs[classes[i]-1]])
             obj_masks[i], segm_areas[i], boxes[i], bbox_areas[i] = dilated
 
+    def save_as_COCO_json(self, path):
+        from pycocotools import mask as coco_mask
+        import json
+        dataset = {'info': {'year': 2020, 'description': 'PPP data'},
+                   'licenses': [{'id': 1, 'name': 'confidential, cannot be shared'}],
+                   'images': [], 'categories': [], 'annotations': []}
+        categories = set()
+        ann_id = 0
+        for img_idx in range(len(self)):
+            img, targets = self[img_idx]
+            image_id = targets["image_id"].item()
+            dataset['images'].append({
+                'id': image_id,
+                'file_name': os.path.basename(self.get_patch_list()[img_idx]),
+                'license': dataset['licenses'][0]['id'],
+                'height': img.shape[-2],
+                'width': img.shape[-3]
+            })
+            bboxes = targets["boxes"]
+            bboxes[:, 2:] -= bboxes[:, :2]
+            bboxes = bboxes.tolist()
+            labels = targets['labels'].tolist()
+            areas = targets['area'].tolist()
+            iscrowd = targets['iscrowd'].tolist()
+            if 'masks' in targets:
+                masks = targets['masks']
+                # make masks Fortran contiguous for coco_mask
+                masks = masks.permute(0, 2, 1).contiguous().permute(0, 2, 1)
+            num_objs = len(bboxes)
+            for i in range(num_objs):
+                categories.add(labels[i])
+                dataset['annotations'].append({
+                    'image_id': image_id,
+                    'bbox': bboxes[i],
+                    'category_id': labels[i],
+                    'area': areas[i],
+                    'iscrowd': iscrowd[i],
+                    'id': ann_id,
+                    'segmentation': coco_mask.encode(masks[i].numpy())
+                })
+                ann_id += 1
+        classes = [v.replace('masks_', '').upper() for v in self.masks_dirs]
+        dataset['categories'] = [{'id': i, 'name': classes[i-1], 'supercategory': classes[i-1]}
+                                 for i in sorted(categories)]
+        with open(path, 'w') as json_file:
+            json.dump(dataset, json_file)
+
     def process_raw_masks(self, raw_masks):
         objs = list(zip(*filter(None.__ne__, map(ObjDetecPatchSamplerDataset.extract_mask_objs, raw_masks))))
         if not objs:    # check list empty
