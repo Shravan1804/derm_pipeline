@@ -114,7 +114,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             image_id = targets["image_id"].item()
             dataset['images'].append({
                 'id': image_id,
-                'file_name': os.path.basename(self.get_patch_list()[img_idx]),
+                'file_name': os.path.basename(self.get_patch_list()[img_idx]['patch_path']),
                 'license': dataset['licenses'][0]['id'],
                 'height': img.shape[-2],
                 'width': img.shape[-3]
@@ -131,6 +131,8 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                 masks = masks.permute(0, 2, 1).contiguous().permute(0, 2, 1)
             num_objs = len(bboxes)
             for i in range(num_objs):
+                rle = coco_mask.encode(masks[i].numpy())
+                rle['counts'] = str(rle['counts'], 'utf-8')
                 categories.add(labels[i])
                 dataset['annotations'].append({
                     'image_id': image_id,
@@ -139,7 +141,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
                     'area': areas[i],
                     'iscrowd': iscrowd[i],
                     'id': ann_id,
-                    'segmentation': coco_mask.encode(masks[i].numpy())
+                    'segmentation': rle
                 })
                 ann_id += 1
         classes = [v.replace('masks_', '').upper() for v in self.masks_dirs]
