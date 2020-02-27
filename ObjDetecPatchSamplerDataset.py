@@ -101,7 +101,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             obj_masks[i], segm_areas[i], boxes[i], bbox_areas[i] = dilated
 
     def get_patch_image_root(self):
-        return os.path.join(self.patch_dir, self.root_img_dir)
+        return os.path.join(self.patches_dir, self.root_img_dir)
 
     def save_as_COCO_json(self, path):
         from pycocotools import mask as coco_mask
