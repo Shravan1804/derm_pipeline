@@ -96,10 +96,12 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
     def dilate_small_objs(self, classes, segm_areas, boxes, bbox_areas, obj_masks):
         target_area = {m: self.coco_metrics[m]['segm_areas'][1] for m in self.masks_dirs}
-        kernel = np.ones((3, 3), np.uint8)
         for i, obj_mask in enumerate(obj_masks):
             dilated = ObjDetecPatchSamplerDataset.dilate_obj(obj_mask, target_area[self.masks_dirs[classes[i]-1]])
             obj_masks[i], segm_areas[i], boxes[i], bbox_areas[i] = dilated
+
+    def get_patch_image_root(self):
+        return os.path.join(self.patch_dir, self.root_img_dir)
 
     def save_as_COCO_json(self, path):
         from pycocotools import mask as coco_mask
