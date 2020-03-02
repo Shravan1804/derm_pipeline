@@ -6,9 +6,8 @@ import matplotlib.pyplot as plt
 from radam import *
 import argparse
 import pickle
-import time
-import queue
 import multiprocessing as mp
+import concurrency
 
 class DrawHelper(object):
     def __init__(self, thickness=1, style='dotted', gap=10):
@@ -183,22 +182,6 @@ def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest):
         pms.append((c, grids))
     pmq.put(pms)
 
-def unload_mpqueue(pmq, processes):
-    #https://stackoverflow.com/questions/31708646/process-join-and-queue-dont-work-with-large-numbers
-    pms = []
-    liveprocs = list(processes)
-    while liveprocs:
-        try:
-            while 1:
-                pms.extend(pmq.get(False))
-        except queue.Empty:
-            pass
-        time.sleep(.5)  # Give tasks a chance to put more data in
-        if not pmq.empty():
-            continue
-        liveprocs = [p for p in liveprocs if p.is_alive()]
-    return pms
-
 def main():
     parser = argparse.ArgumentParser(description="Converts dataset to a patch dataset without data augmentation")
     parser.add_argument('--data', type=str, required=True, help="source data root directory absolute path")
@@ -216,18 +199,14 @@ def main():
     if not os.path.exists(args.dest):
         os.makedirs(args.dest)
 
-    all_dirs = sorted(os.listdir(args.data))
-    workers = min(mp.cpu_count(), len(all_dirs))
-    batch_size = math.ceil(len(all_dirs) / workers)
-    batched_dirs = [all_dirs[i:min(len(all_dirs), i+batch_size)] for i in range(0, len(all_dirs), batch_size)]
-
+    workers, batch_size, batched_dirs = concurrency.batch_dirs(sorted(os.listdir(args.data)))
     patcher = PatchExtractor(args.patch_size)
     pmq = mp.Queue()
     jobs, pms = [], []
     for i, dirs in zip(range(workers), batched_dirs):
         jobs.append(mp.Process(target=multiprocess_patching, args=(i, pmq, patcher, args.data, dirs, args.dest)))
         jobs[i].start()
-    pms.extend(unload_mpqueue(pmq, jobs))
+    pms.extend(concurrency.unload_mpqueue(pmq, jobs))
     for j in jobs:
         j.join()
     pickle.dump(pms, open(os.path.join(args.dest, "patches.p"), "wb"))
