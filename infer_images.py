@@ -15,146 +15,8 @@ from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 import fastai.vision as fvision
 from radam import *
 
+from PatchExtractor import PatchExtractor, DrawHelper
 from ObjDetecPatchSamplerDataset import ObjDetecPatchSamplerDataset
-
-
-class DrawHelper(object):
-    def __init__(self, thickness=1, style='dotted', gap=10):
-        self.thickness = thickness
-        self.style = style
-        self.gap = gap
-
-    def drawline(self, im, pt1, pt2, color):
-        dist = ((pt1[0] - pt2[0]) ** 2 + (pt1[1] - pt2[1]) ** 2) ** .5  # pythagoras hypotenuse
-        pts = []
-        for i in np.arange(0, dist, self.gap):
-            r = i / dist
-            x = int((pt1[0] * (1 - r) + pt2[0] * r) + .5)
-            y = int((pt1[1] * (1 - r) + pt2[1] * r) + .5)
-            p = (x, y)
-            pts.append(p)
-
-        if self.style == 'dotted':
-            for p in pts:
-                cv2.circle(im, p, self.thickness, color, -1)
-        else:
-            e = pts[0]
-            for i, p in enumerate(pts):
-                s = e
-                e = p
-                if i % 2 == 1:
-                    cv2.line(im, s, e, color, self.thickness)
-
-    def drawpoly(self, im, pts, color):
-        e = pts[0]
-        pts.append(pts.pop(0))
-        for p in pts:
-            s = e
-            e = p
-            self.drawline(im, s, e, color)
-
-    def drawrect(self, im, pt1, pt2, color):
-        pts = [pt1, (pt2[0], pt1[1]), pt2, (pt1[0], pt2[1])]
-        self.drawpoly(im, pts, color)
-
-    def test(self):
-        im = np.zeros((800, 800, 3), dtype='uint8')
-        patcher = PatchExtractor(256)
-        patch_maps = patcher.img_as_grid_of_patches(im, 'test.jpg')
-        patcher.draw_patches(im, patch_maps)
-        plt.figure()
-        fig, ax = plt.subplots(1, figsize=(12, 9))
-        ax.imshow(im)
-        plt.axis('off')
-        plt.show()
-        plt.close()
-
-
-class PatchExtractor(object):
-    def __init__(self, patch_size):
-        self.patch_size = patch_size
-
-    # TODO: filter grid_idx in in Datasets classes
-    def img_as_grid_of_patches(self, im_arr, img_path):
-        """Converts img into a grid of patches and returns the valid patches in the grid"""
-        im_h, im_w = im_arr.shape[:2]
-        if im_h < self.patch_size or im_w < self.patch_size:
-            raise Exception(f'Error, patch size {self.patch_size} do not fit img shape {im_arr.shape}')
-        step_h = self.patch_size - PatchExtractor.get_overlap(im_h, self.patch_size)
-        # Don't forget + 1 in the stop argument otherwise the upper bound won't be included
-        grid_h = np.arange(start=0, stop=1 + im_h - self.patch_size, step=step_h)
-        step_w = self.patch_size - PatchExtractor.get_overlap(im_w, self.patch_size)
-        grid_w = np.arange(start=0, stop=1 + im_w - self.patch_size, step=step_w)
-        grid_idx = [self.get_patch_map(img_path, 0, a, b) for a in grid_h for b in grid_w]
-        if not grid_idx:
-            grid_idx = [self.get_patch_map(img_path, 0, 0, 0)]
-        return grid_idx
-
-    def maybe_resize(self, im_arr):
-        """Resize img only if one of its dimensions is smaller than the patch size otherwise returns img unchanged"""
-        h, w = im_arr.shape[:2]
-        smallest = min(h, w)
-        if smallest < self.patch_size:
-            ratio = self.patch_size / smallest
-            # resize new dim takes first w then h!
-            return cv2.resize(im_arr, (max(self.patch_size, int(w * ratio)), max(self.patch_size, int(h * ratio))))
-        else:
-            return im_arr
-
-    def load_img_from_disk(self, img_path):
-        return self.maybe_resize(cv2.cvtColor(cv2.imread(img_path, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB))
-
-    def get_patch_from_idx(self, im, id_h, id_w):
-        return im[id_h:id_h + self.patch_size, id_w:id_w + self.patch_size]
-
-    def get_patch_map(self, img_path, rotation, idx_h, idx_w):
-        patch_name = PatchExtractor.get_patch_fname(img_path, idx_h, idx_w)
-        return {'patch_path': patch_name, 'rotation': rotation, 'idx_h': idx_h, 'idx_w': idx_w}
-
-    def draw_patches(self, img_arr, pm):
-        draw = DrawHelper()
-        for p in pm:
-            s = (p['idx_w'], p['idx_h'])
-            e = (p['idx_w'] + self.patch_size, p['idx_h'] + self.patch_size)
-            draw.drawrect(img_arr, s, e, (255, 255, 255))
-        return img_arr
-
-    def get_neighboring_patches(self, pm, img_shape, d=1, include_self=True):
-        """ Will include itself in the list of neighbors """
-        img_name = pm['patch_path'].split('_sep_')[0] + os.path.splitext(pm['patch_path'])[1]
-        max_h, max_w = img_shape[0] - self.patch_size, img_shape[1] - self.patch_size
-        step_h = self.patch_size - PatchExtractor.get_overlap(img_shape[0], self.patch_size)
-        step_w = self.patch_size - PatchExtractor.get_overlap(img_shape[1], self.patch_size)
-        scope_h = [i * step_h for i in range(-d, d+1)]
-        scope_w = [i * step_w for i in range(-d, d + 1)]
-        neighbors = [(a, b) for a, b in [(m + pm['idx_h'], n + pm['idx_w']) for m in scope_h for n in scope_w]
-                     if 0 <= a <= max_h and 0 <= b <= max_w
-                     and (include_self or not (a == pm['idx_h'] and b == pm['idx_w']))]
-        res = [PatchExtractor.get_patch_fname(img_name, h, w) for h, w in neighbors]
-        # print(pm['patch_path'], 'neighbors:', [r['patch_path'] for r in res])
-        return res
-
-    @staticmethod
-    def get_pos_from_patch_name(patch_name):
-        return tuple(int(t) for t in patch_name.replace('.jpg', '').split('_sep__h')[1].split('_w'))
-
-
-    @staticmethod
-    def get_overlap(n, div):
-        remainder = n % div
-        quotient = max(1, int(n / div))
-        overlap = math.ceil((div - remainder) / quotient)
-        return 0 if overlap == n else overlap
-
-    @staticmethod
-    def get_patch_suffix(idx_h, idx_w):
-        return '_h' + str(idx_h) + '_w' + str(idx_w)
-
-    @staticmethod
-    def get_patch_fname(img_path, idx_h, idx_w):
-        file, ext = os.path.splitext(os.path.basename(img_path))
-        return file + '_sep_' + PatchExtractor.get_patch_suffix(idx_h, idx_w) + ext
-
 
 class Compose(object):
     def __init__(self, transforms):
@@ -606,7 +468,7 @@ def main():
             title = f'Body localization'
             plot_name = f'{file}_body_loc_{ext}'
         if args.draw_patches:
-            patcher.draw_patches(im, pm)
+            DrawHelper().draw_patches(im, pm, patcher.patch_size)
         if not args.no_graphs:
             model.show_preds(im, preds, title=f'{title} for {file}{ext}', fname=plot_name)
 
