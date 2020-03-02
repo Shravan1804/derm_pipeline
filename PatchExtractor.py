@@ -107,11 +107,8 @@ class PatchExtractor(object):
         else:
             return im_arr
 
-    def load_img_from_disk(self, img_path, to_rgb=True):
-        im = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
-        if(to_rgb):
-            im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-        return self.maybe_resize(im)
+    def load_img_from_disk(self, img_path):
+        return self.maybe_resize(cv2.imread(img_path, cv2.IMREAD_UNCHANGED))
 
     def get_patch_from_patch_map(self, im, pm):
         return self.get_patch_from_idx(im, pm['idx_h'], pm['idx_w'])
@@ -143,20 +140,9 @@ class PatchExtractor(object):
         if not os.path.exists(dest):
             os.makedirs(dest)
         for img, patches in grids.items():
-            im = self.load_img_from_disk(os.path.join(source, dirname, img), to_rgb=False)
+            im = self.load_img_from_disk(os.path.join(source, dirname, img))
             for pm in patches:
                 cv2.imwrite(os.path.join(dest, pm['patch_path']), self.get_patch_from_patch_map(im, pm))
-
-    def save_masks(self, source, dest, masks, grids, mext='.png'):
-        for m in masks:
-            mdest = os.path.join(dest, m)
-            if not os.path.exists(mdest):
-                os.makedirs(mdest)
-            for img, patches in grids.items():
-                ext = os.path.splitext(img)[1]
-                mask = self.load_img_from_disk(os.path.join(source, m, img.replace(ext, mext)), to_rgb=False)
-                for pm in patches:
-                    cv2.imwrite(os.path.join(dest, m, pm['patch_path'].replace(ext, mext)), self.get_patch_from_patch_map(mask, pm))
 
     @staticmethod
     def get_pos_from_patch_name(patch_name):
@@ -190,20 +176,14 @@ def main():
     parser = argparse.ArgumentParser(description="Converts dataset to a patch dataset without data augmentation")
     parser.add_argument('--data', type=str, required=True, help="source data root directory absolute path")
     parser.add_argument('--dest', type=str, required=True, help="directory where the patches should be saved")
-    parser.add_argument('--obj-detec', action='store_true', help='Object detection dataset => by default imgs are in "images" dir and the other dirs are masks')
-    parser.add_argument('--classif', action='store_true', help="Classification dataset => expects multiples imgs dirs")
     parser.add_argument('-p', '--patch-size', default=512, type=int, help="patch size")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
-    parser.add_argument('--obj-detec-img-dir', default='images', type=str, help="default obj detec img dir")
-    parser.add_argument('--mask_ext', default='.png', type=str, help="obj detec mask file extension")
     args = parser.parse_args()
 
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
 
-    if not (args.classif or args.obj_detec):
-        raise Exception("Please specify either --classif or --obj-detec")
     if args.data is None or not os.path.exists(args.data):
         raise Exception("Error, --data invalid")
     if not os.path.exists(args.dest):
@@ -212,15 +192,10 @@ def main():
     patcher = PatchExtractor(args.patch_size)
 
     pms = []
-    dirnames = sorted(os.listdir(args.data)) if args.classif else [args.obj_detec_img_dir]
-    for c in dirnames:
+    for c in sorted(os.listdir(args.data)):
         grids = patcher.imgs_to_patches(os.path.join(args.data, c))
         print(f"Saving {c} patches")
         patcher.save_patches(args.data, args.dest, c, grids)
-        if args.obj_detec:
-            print(f"Saving {c} mask patches")
-            masks = [m for m in os.listdir(args.data) if m != args.obj_detec_img_dir]
-            patcher.save_masks(args.data, args.dest, masks, grids, args.mask_ext)
         pms.append((c, grids))
     pickle.dump(pms, open(os.path.join(args.dest, "patches.p"), "wb"))
 
