@@ -108,6 +108,7 @@ def main():
         jobs.append(mp.Process(target=extract_annos, args=(i, q_annos, args.data, dirs)))
         jobs[i].start()
     annos = concurrency.unload_mpqueue(q_annos, jobs)
+    print("Processes completed work, merging results ...")
     merged_annos = {k: {dirname: None for dirname in mask_dirs} for anno in annos for k in anno.keys()}
     for anno in annos:
         for mask_file, v in anno.items():
@@ -118,7 +119,7 @@ def main():
 
     for j in jobs:
         j.join()
-
+    print("Converting and saving as coco json")
     json.dump(to_coco_format(args.data, args.img_dir, merged_annos, args.mext, classes), open(json_path, 'w'))
     print("done")
 
