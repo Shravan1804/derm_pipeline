@@ -46,7 +46,8 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             raise Exception(f"Error with image {idx} all masks are empty. Patch map: {patch_map}")
         if self.filter_obj_size != "all":
             gt = self.filter_obj_by_size(gt)
-        classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks, crowd_objs = gt
+        classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks, crowd_objs = [gt[k] for k in['classes', 'obj_ids',
+                                                        'segm_areas', 'boxes', 'bbox_areas', 'obj_masks', 'iscrowd']]
         if self.dilate_small:
             self.dilate_small_objs(classes, segm_areas, boxes, bbox_areas, obj_masks)
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
@@ -69,9 +70,10 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         return img, target
 
     def filter_obj_by_size(self, gt):
-        classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks, _ = gt
         if self.filter_obj_size == "all":
             return gt
+        classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks = (gt[k] for k in ['classes', 'segm_areas', 'boxes',
+                                                                                      'bbox_areas', 'obj_masks'])
         sizes = ['all', 'small', 'medium', 'large']
         coco = {m: list(zip(sizes, self.get_coco_params(key=m)[2])) for m in self.masks_dirs}
         target_area = {s: {m: tuple(*[r[1] for r in coco[m] if r[0] == s]) for m in self.masks_dirs} for s in sizes}
@@ -91,7 +93,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             obj_masks[i], segm_areas[i], boxes[i], bbox_areas[i] = ObjDetecPatchSamplerDataset.dilate_obj(obj_masks[i],
                                                                                                           min_size)
             rm_index.remove(largest[0])
-        return tuple([np.delete(item, rm_index, axis=0) for item in gt])
+        return tuple([np.delete(item, rm_index, axis=0) for item in gt.items()])
 
 
     def dilate_small_objs(self, classes, segm_areas, boxes, bbox_areas, obj_masks):
@@ -153,14 +155,14 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             json.dump(dataset, json_file)
 
     def process_raw_masks(self, raw_masks):
-        objs = list(zip(*filter(None.__ne__, map(ObjDetecPatchSamplerDataset.extract_mask_objs, raw_masks))))
-        if not objs:    # check list empty
+        objs_in_masks = [ObjDetecPatchSamplerDataset.extract_mask_objs(raw_mask) for raw_mask in raw_masks]
+        objs = ObjDetecPatchSamplerDataset.merge_all_masks_objs(objs_in_masks)
+        if not objs:
             return None
-        objs[0] = tuple((i + 1) * np.ones(n_obj, dtype=np.int) for i, n_obj in enumerate(objs[0]))
-        classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks = (np.concatenate(val) for val in objs)
-        crowd_objs = segm_areas > np.array([x['segm_areas'][2] for x in map(self.coco_metrics.__getitem__,
-                                                                            np.array(self.masks_dirs)[classes - 1])])
-        return classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks, crowd_objs
+        class_metrics = [self.coco_metrics[x] for x in np.array(self.masks_dirs)[objs['classes'] - 1]]
+        objs['iscrowd'] = objs['segm_areas'] > np.array([x['segm_areas'][2] for x in class_metrics])
+        return objs
+        #return classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks, crowd_objs
 
     def create_cache_dirs(self):
         super().create_cache_dirs()
@@ -311,6 +313,21 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         return metrics
 
     @staticmethod
+    def merge_all_masks_objs(objs_in_masks):
+        objs = {}
+        for c, objs_in_masks in enumerate(objs_in_masks):
+            if objs_in_masks is None:
+                continue
+            objs_in_masks['classes'] = (c + 1) * np.ones(objs_in_masks['obj_count'], dtype=np.int)
+            del objs_in_masks['obj_count']
+            if not objs:
+                objs = {k: v for k, v in objs_in_masks.items()}
+            else:
+                for k in objs.keys():
+                    objs[k] = np.concatenate([objs[k], objs_in_masks[k]])
+        return objs
+
+    @staticmethod
     def extract_mask_objs(mask):
         """Returns obj_count, obj_ids, obj_segm_areas, obj_bbox, obj_bbox_areas, obj_masks (without backgroud)"""
         obj_ids, segm_areas = np.unique(mask, return_counts=True)
@@ -329,7 +346,9 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         obj_ids, segm_areas, obj_masks = (np.delete(i, obj_del, axis=0) for i in [obj_ids, segm_areas, obj_masks])
         boxes = np.reshape(list(filter(None.__ne__, boxes)), (obj_count, 4))
         bbox_areas = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
-        return obj_count, obj_ids, segm_areas, boxes, bbox_areas, obj_masks
+        iscrowd = np.zeros(obj_ids.shape)
+        return {'obj_count': obj_count, 'obj_ids': obj_ids, 'segm_areas': segm_areas, 'boxes': boxes,
+                'bbox_areas': bbox_areas, 'obj_masks': obj_masks, 'iscrowd': iscrowd}
 
     @staticmethod
     def get_mask_metrics(mask):
@@ -337,7 +356,7 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         objs = ObjDetecPatchSamplerDataset.extract_mask_objs(mask)
         if objs is None:
             return None
-        obj_count, _, segm_areas, _, bbox_areas, _ = objs
+        obj_count, segm_areas, bbox_areas = (objs[k] for k in ['obj_count', 'segm_areas', 'bbox_areas'])
         return bbox_areas.tolist(), segm_areas.tolist(), [obj_count]
 
     @staticmethod

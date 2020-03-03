@@ -202,11 +202,11 @@ def main():
     workers, batch_size, batched_dirs = concurrency.batch_dirs(sorted(os.listdir(args.data)))
     patcher = PatchExtractor(args.patch_size)
     pmq = mp.Queue()
-    jobs, pms = [], []
+    jobs = []
     for i, dirs in zip(range(workers), batched_dirs):
         jobs.append(mp.Process(target=multiprocess_patching, args=(i, pmq, patcher, args.data, dirs, args.dest)))
         jobs[i].start()
-    pms.extend(concurrency.unload_mpqueue(pmq, jobs))
+    pms = concurrency.unload_mpqueue(pmq, jobs)
     for j in jobs:
         j.join()
     pickle.dump(pms, open(os.path.join(args.dest, "patches.p"), "wb"))

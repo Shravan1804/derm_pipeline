@@ -344,7 +344,7 @@ class ObjDetecModel(CustomModel):
     def extract_mask_objs(mask):
         objs = ObjDetecPatchSamplerDataset.extract_mask_objs(mask)
         if objs is None: return None
-        else: return objs[0], objs[3], objs[5]
+        else: return objs['obj_count'], objs['boxes'], objs['obj_masks']
 
     @staticmethod
     def get_img_gt(img_path):

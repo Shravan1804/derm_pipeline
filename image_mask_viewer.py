@@ -58,7 +58,7 @@ def show_overlayed_img(id, img_path, masks, classes, transparency=True, transfor
             objs = ObjDetecPatchSamplerDataset.extract_mask_objs(mask)
             if not objs:  # check list empty
                 continue
-            obj_masks = objs[-1]
+            obj_masks = objs['obj_masks']
             for j, m in enumerate(obj_masks):
                 thresh = cv2.threshold(m.astype(np.uint8), 0.5, 255, cv2.THRESH_BINARY)[1].astype(np.uint8)
                 contours = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[1]
@@ -110,7 +110,7 @@ def show_overlayed_img(id, img_path, masks, classes, transparency=True, transfor
 def draw_bbox(img, mask):
     objs = ObjDetecPatchSamplerDataset.extract_mask_objs(mask)
     if objs is None: return
-    _, _, _, bbox, _, _ = objs
+    bbox = objs['boxes']
     for b in bbox:
         cv2.rectangle(img, (b[0], b[1]), (b[2], b[3]), (0, 255, 0), 2)
     return img
