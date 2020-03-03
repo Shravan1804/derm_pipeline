@@ -3,12 +3,12 @@ import cv2
 import json
 import random
 import numpy as np
-from radam import *
 import argparse
 import multiprocessing as mp
 from pycocotools import mask as coco_mask
 import concurrency
 from ObjDetecPatchSamplerDataset import ObjDetecPatchSamplerDataset
+import torch
 
 def load_img_from_disk(img_path):
     return cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
@@ -17,13 +17,13 @@ def extract_annos(proc_id, q_annos, data, dirs):
     objs = {}
     for dirname in dirs:
         print(f"Process {proc_id}: extracting {dirname} objects")
-        for idx, mask_file in enumerate(sorted(os.path.listdir(os.path.join(data, dirname)))):
+        for idx, mask_file in enumerate(sorted(os.listdir(os.path.join(data, dirname)))):
             mask = load_img_from_disk(os.path.join(data, dirname, mask_file))
             mask = ObjDetecPatchSamplerDataset.rm_small_objs_and_sep_instance(mask, 30, check_bbox=True)
             if mask_file not in objs:
                 objs[mask_file] = {}
             objs[mask_file][dirname] = ObjDetecPatchSamplerDataset.extract_mask_objs(mask)
-    q_annos.put(objs)
+    q_annos.put([objs])
 
 def combine_class_annos(img_objs, mask_dirs):
     targets = ObjDetecPatchSamplerDataset.merge_all_masks_objs([img_objs[mdir] for mdir in mask_dirs])
@@ -39,7 +39,7 @@ def to_coco_format(data, img_dir, annos, mext, classes):
                'images': [], 'categories': [], 'annotations': []}
     categories = set()
     ann_id = 0
-    for idx, img in sorted(os.listdir(os.path.join(data, img_dir))):
+    for idx, img in enumerate(sorted(os.listdir(os.path.join(data, img_dir)))):
         im = load_img_from_disk(os.path.join(data, img_dir, img))
         dataset['images'].append({
             'id': idx,
@@ -58,7 +58,7 @@ def to_coco_format(data, img_dir, annos, mext, classes):
         areas = targets['area'].tolist()
         iscrowd = targets['iscrowd'].tolist()
         if 'masks' in targets:
-            masks = targets['masks']
+            masks = torch.as_tensor(targets['masks'], dtype=torch.uint8)
             # make masks Fortran contiguous for coco_mask
             masks = masks.permute(0, 2, 1).contiguous().permute(0, 2, 1)
         num_objs = len(bboxes)
@@ -98,7 +98,7 @@ def main():
     if args.data is None or not os.path.exists(args.data):
         raise Exception("Error, --data invalid")
 
-    mask_dirs = [d for d in sorted(os.listdir(args.data)) if d != args.img_dir]
+    mask_dirs = [d for d in sorted(os.listdir(args.data)) if d != args.img_dir and os.path.isdir(os.path.join(args.data, d))]
     classes = [m.replace(args.mdir_prefix, '') for m in mask_dirs]
 
     workers, batch_size, batched_dirs = concurrency.batch_dirs(mask_dirs)

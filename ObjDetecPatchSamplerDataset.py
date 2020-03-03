@@ -46,8 +46,8 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             raise Exception(f"Error with image {idx} all masks are empty. Patch map: {patch_map}")
         if self.filter_obj_size != "all":
             gt = self.filter_obj_by_size(gt)
-        classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks, crowd_objs = [gt[k] for k in['classes', 'obj_ids',
-                                                        'segm_areas', 'boxes', 'bbox_areas', 'obj_masks', 'iscrowd']]
+        classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks, crowd_objs = (gt[k] for k in ['classes', 'obj_ids',
+                                                        'segm_areas', 'boxes', 'bbox_areas', 'obj_masks', 'iscrowd'])
         if self.dilate_small:
             self.dilate_small_objs(classes, segm_areas, boxes, bbox_areas, obj_masks)
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
@@ -72,8 +72,8 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
     def filter_obj_by_size(self, gt):
         if self.filter_obj_size == "all":
             return gt
-        classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks = (gt[k] for k in ['classes', 'segm_areas', 'boxes',
-                                                                                      'bbox_areas', 'obj_masks'])
+        classes, obj_ids, segm_areas, boxes, bbox_areas, obj_masks = (gt[k] for k in['classes', 'obj_ids', 'segm_areas',
+                                                                                     'boxes', 'bbox_areas', 'obj_masks'])
         sizes = ['all', 'small', 'medium', 'large']
         coco = {m: list(zip(sizes, self.get_coco_params(key=m)[2])) for m in self.masks_dirs}
         target_area = {s: {m: tuple(*[r[1] for r in coco[m] if r[0] == s]) for m in self.masks_dirs} for s in sizes}
@@ -93,7 +93,9 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
             obj_masks[i], segm_areas[i], boxes[i], bbox_areas[i] = ObjDetecPatchSamplerDataset.dilate_obj(obj_masks[i],
                                                                                                           min_size)
             rm_index.remove(largest[0])
-        return tuple([np.delete(item, rm_index, axis=0) for item in gt.items()])
+            for k in gt.keys():
+                gt[k] = np.delete(gt[k], rm_index, axis=0)
+        return gt
 
 
     def dilate_small_objs(self, classes, segm_areas, boxes, bbox_areas, obj_masks):
