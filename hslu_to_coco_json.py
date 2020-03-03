@@ -14,6 +14,8 @@ import torch
 
 def maybe_simplify_poly(poly):
     simpler_poly = poly.simplify(1.0, preserve_topology=False)
+    if type(simpler_poly) is not Polygon:   # Multipolygon case
+        return poly
     segmentation = np.array(simpler_poly.exterior.coords).ravel().tolist()
     # CVAT requirements
     return simpler_poly if len(segmentation) % 2 == 0 and 3 <= len(segmentation) // 2 else poly
