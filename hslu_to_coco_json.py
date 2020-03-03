@@ -12,6 +12,12 @@ import concurrency
 from ObjDetecPatchSamplerDataset import ObjDetecPatchSamplerDataset
 import torch
 
+def maybe_simplify_poly(poly):
+    simpler_poly = poly.simplify(1.0, preserve_topology=False)
+    segmentation = np.array(simpler_poly.exterior.coords).ravel().tolist()
+    # CVAT requirements
+    return simpler_poly if len(segmentation) % 2 == 0 and 3 <= len(segmentation) // 2 else poly
+
 def mask_to_polygon(mask):
     # https://www.immersivelimit.com/create-coco-annotations-from-scratch
     contours = measure.find_contours(mask, 0.5, positive_orientation='low')
@@ -23,12 +29,11 @@ def mask_to_polygon(mask):
             row, col = contour[i]
             contour[i] = (col - 1, row - 1)
         poly = Polygon(contour)
-        poly = poly.simplify(1.0, preserve_topology=False)
+        poly = maybe_simplify_poly(poly)
         segmentation = np.array(poly.exterior.coords).ravel().tolist()
+        assert len(segmentation) % 2 == 0 and 3 <= len(segmentation) // 2, "Wrong polygon points: %s" % segmentation
         segmentations.append(segmentation)
     return segmentations
-
-
 
 def load_img_from_disk(img_path):
     return cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
