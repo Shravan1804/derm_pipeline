@@ -180,7 +180,7 @@ def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest, m_prefix):
     for c in dirs:
         grids = patcher.imgs_to_patches(os.path.join(data, c))
         print(f"Process {proc_id}: saving {c} patches")
-        patcher.save_patches(data, dest, c, grids)
+        patcher.save_patches(data, dest, c, grids, m_prefix)
         pms.append((c, grids))
     pmq.put(pms)
 
