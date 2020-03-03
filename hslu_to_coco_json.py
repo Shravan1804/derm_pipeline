@@ -2,13 +2,33 @@ import os
 import cv2
 import json
 import random
-import numpy as np
 import argparse
+import numpy as np
+from skimage import measure
 import multiprocessing as mp
+from shapely.geometry import Polygon
 from pycocotools import mask as coco_mask
 import concurrency
 from ObjDetecPatchSamplerDataset import ObjDetecPatchSamplerDataset
 import torch
+
+def mask_to_polygon(mask):
+    # https://www.immersivelimit.com/create-coco-annotations-from-scratch
+    contours = measure.find_contours(mask, 0.5, positive_orientation='low')
+    segmentations = []
+    for contour in contours:
+        # Flip from (row, col) representation to (x, y)
+        # and subtract the padding pixel
+        for i in range(len(contour)):
+            row, col = contour[i]
+            contour[i] = (col - 1, row - 1)
+        poly = Polygon(contour)
+        poly = poly.simplify(1.0, preserve_topology=False)
+        segmentation = np.array(poly.exterior.coords).ravel().tolist()
+        segmentations.append(segmentation)
+    return segmentations
+
+
 
 def load_img_from_disk(img_path):
     return cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
@@ -57,14 +77,8 @@ def to_coco_format(data, img_dir, annos, mext, classes):
         labels = targets['labels'].tolist()
         areas = targets['area'].tolist()
         iscrowd = targets['iscrowd'].tolist()
-        if 'masks' in targets:
-            masks = torch.as_tensor(targets['masks'], dtype=torch.uint8)
-            # make masks Fortran contiguous for coco_mask
-            masks = masks.permute(0, 2, 1).contiguous().permute(0, 2, 1)
         num_objs = len(bboxes)
         for i in range(num_objs):
-            rle = coco_mask.encode(masks[i].numpy())
-            rle['counts'] = str(rle['counts'], 'utf-8')
             categories.add(labels[i])
             dataset['annotations'].append({
                 'image_id': idx,
@@ -73,7 +87,7 @@ def to_coco_format(data, img_dir, annos, mext, classes):
                 'area': areas[i],
                 'iscrowd': iscrowd[i],
                 'id': ann_id,
-                'segmentation': rle
+                'segmentation': mask_to_polygon(targets['masks'][i])
             })
             ann_id += 1
     dataset['categories'] = [{'id': i, 'name': classes[i - 1], 'supercategory': classes[i - 1]}
