@@ -137,12 +137,14 @@ class PatchExtractor(object):
         # print(pm['patch_path'], 'neighbors:', [r['patch_path'] for r in res])
         return res
 
-    def save_patches(self, source, dest, dirname, grids):
+    def save_patches(self, source, dest, dirname, grids, mask_prefix=None):
         dest = os.path.join(dest, dirname)
         if not os.path.exists(dest):
             os.makedirs(dest)
         for img, patches in grids.items():
             im = self.load_img_from_disk(os.path.join(source, dirname, img))
+            if mask_prefix is not None and dirname.startswith(mask_prefix):
+                im = im[:, :, 0]    # discard all but first channel
             for pm in patches:
                 cv2.imwrite(os.path.join(dest, pm['patch_path']), self.get_patch_from_patch_map(im, pm))
 
@@ -173,7 +175,7 @@ class PatchExtractor(object):
         return file + PatchExtractor.SEP + PatchExtractor.get_patch_suffix(idx_h, idx_w) + ext
 
 
-def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest):
+def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest, m_prefix):
     pms = []
     for c in dirs:
         grids = patcher.imgs_to_patches(os.path.join(data, c))
@@ -188,6 +190,7 @@ def main():
     parser.add_argument('--dest', type=str, required=True, help="directory where the patches should be saved")
     parser.add_argument('-p', '--patch-size', default=512, type=int, help="patch size")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
+    parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix of mask dirs (for these we keep only 1 channel)")
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -204,7 +207,7 @@ def main():
     pmq = mp.Queue()
     jobs = []
     for i, dirs in zip(range(workers), batched_dirs):
-        jobs.append(mp.Process(target=multiprocess_patching, args=(i, pmq, patcher, args.data, dirs, args.dest)))
+        jobs.append(mp.Process(target=multiprocess_patching, args=(i, pmq, patcher, args.data, dirs, args.dest, args.mdir_prefix)))
         jobs[i].start()
     pms = concurrency.unload_mpqueue(pmq, jobs)
     for j in jobs:
