@@ -82,17 +82,20 @@ def to_coco_format(data, img_dir, annos, mext, classes):
         iscrowd = targets['iscrowd'].tolist()
         num_objs = len(bboxes)
         for i in range(num_objs):
-            categories.add(labels[i])
-            dataset['annotations'].append({
-                'image_id': idx,
-                'bbox': bboxes[i],
-                'category_id': labels[i],
-                'area': areas[i],
-                'iscrowd': iscrowd[i],
-                'id': ann_id,
-                'segmentation': mask_to_polygon(targets['masks'][i])
-            })
-            ann_id += 1
+            try:
+                dataset['annotations'].append({
+                    'image_id': idx,
+                    'bbox': bboxes[i],
+                    'category_id': labels[i],
+                    'area': areas[i],
+                    'iscrowd': iscrowd[i],
+                    'id': ann_id,
+                    'segmentation': mask_to_polygon(targets['masks'][i])
+                })
+                categories.add(labels[i])
+                ann_id += 1
+            except Exception as err:
+                print(f"Image {img} is causing a problem with obj {i} of category {classes[i - 1]}: {err}")
     dataset['categories'] = [{'id': i, 'name': classes[i - 1], 'supercategory': classes[i - 1]}
                              for i in sorted(categories)]
     return dataset
