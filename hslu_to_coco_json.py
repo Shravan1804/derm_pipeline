@@ -95,7 +95,7 @@ def to_coco_format(data, img_dir, annos, mext, classes):
                 categories.add(labels[i])
                 ann_id += 1
             except Exception as err:
-                print(f"Image {img} is causing a problem with obj {i} of category {classes[i - 1]}: {err}")
+                print(f"Image {img} is causing a problem with obj {i} of category {classes[labels[i] - 1]}: {err}")
     dataset['categories'] = [{'id': i, 'name': classes[i - 1], 'supercategory': classes[i - 1]}
                              for i in sorted(categories)]
     return dataset
