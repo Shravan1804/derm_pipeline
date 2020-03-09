@@ -3,6 +3,7 @@ import random
 import argparse
 import numpy as np
 from shutil import copy
+from common import maybe_create, add_obj_detec_args
 from sklearn.model_selection import KFold
 from sklearn.model_selection import train_test_split
 
@@ -23,23 +24,15 @@ def dataset_split(args, directory):
         return splits
 
 
-def maybe_create(*d):
-    path = os.path.join(*d)
-    if not os.path.exists(path):
-        os.makedirs(path)
-    return path
-
-
-def copy_imgs(data, dest, splits, mask_dirs=None, mext=None):
-    cat = os.path.basename(os.path.dirname(splits['test'][0]))
+def copy_imgs(args, cat, splits, mask_dirs=None):
     print(f"Copying {cat} images ...")
     for ds, files in splits.items():
         for f in files:
-            copy(f, os.path.join(maybe_create(dest, ds, cat), os.path.basename(f)))
+            copy(f, os.path.join(maybe_create(args.dest, ds, cat), os.path.basename(f)))
             if mask_dirs:
                 for mdir in mask_dirs:
-                    m = os.path.splitext(os.path.basename(f))[0] + mext
-                    copy(os.path.join(data, mdir, m), os.path.join(maybe_create(dest, ds, mdir), m))
+                    m = os.path.splitext(os.path.basename(f))[0] + args.mext
+                    copy(os.path.join(args.data, mdir, m), os.path.join(maybe_create(args.dest, ds, mdir), m))
 
 
 def main(args):
@@ -50,25 +43,23 @@ def main(args):
     if args.obj_detec:
         mask_dirs = [d for d in dirs if d != args.img_dir and os.path.isdir(os.path.join(args.data, d))]
         splits = dataset_split(args, args.img_dir)
-        copy_imgs(args.data, args.dest, splits, mask_dirs, args.mext)
+        copy_imgs(args, args.img_dir, splits, mask_dirs)
     else:
         for d in dirs:
-            copy_imgs(args.data, args.dest, dataset_split(args, d))
+            copy_imgs(args, d, dataset_split(args, d))
     print("done")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Split dataset in train/test dataset")
-    parser.add_argument('--data', type=str, required=True, help="source dataset root directory absolute path")
-    parser.add_argument('--dest', type=str, help="directory where the patches should be saved")
+    parser.add_argument('--data', type=str, required=True, help="source dataset root directory")
+    parser.add_argument('--dest', type=str, help="directory where the slits should be saved")
     parser.add_argument('--test-size', default=.2, type=float, help="Proportion of test set")
-    parser.add_argument('--cross-val', action='store_true', help='apply cross validation')
-    parser.add_argument('--val-size', default=.2, type=float, help="Proportion of test set")
-    parser.add_argument('--nfolds', default=5, type=int, help='Number of folds')
+    parser.add_argument('--cross-val', action='store_true', help="apply cross validation")
+    parser.add_argument('--val-size', default=.2, type=float, help="Proportion of validation set")
+    parser.add_argument('--nfolds', default=5, type=int, help="Number of folds")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
-    parser.add_argument('--obj-detec', action='store_true', help='if not set, will consider dataset to be classif')
-    parser.add_argument('--img-dir', type=str, default='images', help="dir containing images if --obj-detec")
-    parser.add_argument('--mext', type=str, default='.png', help="masks file extension")
+    add_obj_detec_args(parser)
     args = parser.parse_args()
 
     args.data = args.data.rstrip('/')
