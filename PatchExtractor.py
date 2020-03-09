@@ -1,9 +1,10 @@
 import os
 import cv2
+import math
+import torch
 import random
 import numpy as np
 import matplotlib.pyplot as plt
-from radam import *
 import argparse
 import pickle
 import multiprocessing as mp
@@ -184,15 +185,7 @@ def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest, m_prefix):
         pms.append((c, grids))
     pmq.put(pms)
 
-def main():
-    parser = argparse.ArgumentParser(description="Converts dataset to a patch dataset without data augmentation")
-    parser.add_argument('--data', type=str, required=True, help="source data root directory absolute path")
-    parser.add_argument('--dest', type=str, required=True, help="directory where the patches should be saved")
-    parser.add_argument('-p', '--patch-size', default=512, type=int, help="patch size")
-    parser.add_argument('--seed', default=42, type=int, help="random seed")
-    parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix of mask dirs (for these we keep only 1 channel)")
-    args = parser.parse_args()
-
+def main(args):
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -217,4 +210,12 @@ def main():
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Converts dataset to a patch dataset without data augmentation")
+    parser.add_argument('--data', type=str, required=True, help="source data root directory absolute path")
+    parser.add_argument('--dest', type=str, required=True, help="directory where the patches should be saved")
+    parser.add_argument('-p', '--patch-size', default=512, type=int, help="patch size")
+    parser.add_argument('--seed', default=42, type=int, help="random seed")
+    parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix of mask dirs (for these we keep only 1 channel)")
+    args = parser.parse_args()
+
     main()
