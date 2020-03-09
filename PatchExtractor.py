@@ -179,6 +179,7 @@ class PatchExtractor(object):
 def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest, m_prefix):
     pms = []
     for c in dirs:
+        print(f"Process {proc_id}: patching {c} patches")
         grids = patcher.imgs_to_patches(os.path.join(data, c))
         print(f"Process {proc_id}: saving {c} patches")
         patcher.save_patches(data, dest, c, grids, m_prefix)
@@ -195,7 +196,8 @@ def main(args):
     if not os.path.exists(args.dest):
         os.makedirs(args.dest)
 
-    workers, batch_size, batched_dirs = concurrency.batch_dirs(sorted(os.listdir(args.data)))
+    all_dirs = [d for d in sorted(os.listdir(args.data)) if os.path.isdir(os.path.join(args.data, d))]
+    workers, batch_size, batched_dirs = concurrency.batch_dirs(all_dirs)
     patcher = PatchExtractor(args.patch_size)
     pmq = mp.Queue()
     jobs = []
