@@ -220,4 +220,4 @@ if __name__ == '__main__':
     parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix of mask dirs (for these we keep only 1 channel)")
     args = parser.parse_args()
 
-    main()
+    main(args)
