@@ -10,14 +10,15 @@ import multiprocessing as mp
 from functools import partial
 
 
-import fastai
+import fastai.vision as fvision
+import fastai.torch_core as fcore
 from radam import *
 
 
 def load_and_prepare_img(img_path):
     im = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
-    t = fastai.vision.pil2tensor(im, dtype=im.dtype)  # converts to numpy tensor
-    return fastai.vision.Image(t.float() / 255.)  # Convert to float
+    t = fvision.pil2tensor(im, dtype=im.dtype)  # converts to numpy tensor
+    return fvision.Image(t.float() / 255.)  # Convert to float
 
 
 def correct_labels(args, task):
@@ -31,7 +32,7 @@ def correct_labels(args, task):
         if cat != pred:
             f = os.path.basename(img_path)
             move(img_path, os.path.join(args.data, pred, f))
-            logs += f"{f};{cat};{pred}\n"
+            logs += f"{f};{cat};{pred}"
     if idx % 100 == 0:
         print(f"Process {os.getpid()} completed task {idx} in {datetime.timedelta(seconds=time.time() - start)}.")
     return logs
@@ -61,25 +62,28 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default="cpu", help="cpu or gpu")
     parser.add_argument('--proc_bs', type=int, default=100, help="Number of imgs per process")
     parser.add_argument('--workers', type=int, help="Number of process, will adjust to chosen device if needed")
-    parser.add_argument('--log', default="log.txt", type=str, help="log file where label corrections will be tracked")
+    parser.add_argument('--log', type=str, help="log file where label corrections will be tracked")
     parser.add_argument('--std-proc', action='store_true', help="Use standard process instead of custom process")
     parser.add_argument('--seed', default=42, type=int, help="batch size")
     args = parser.parse_args()
 
     common.check_args(args)
     common.set_seeds(args.seed, np=np)
+    if args.log is None:
+        args.log = os.path.join(args.data, 'changes.txt')
 
     assert os.path.exists(args.model), f"Provided model path do not exist: {args.model}"
 
     if args.device == "gpu" and torch.cuda.is_available():
-        fastai.torch_core.defaults.device = 'gpu'
+        # TODO: each process use one GPU
+        fcore.defaults.device = 'gpu'
         if args.workers is None:
             args.workers = torch.cuda.device_count()
         else:
             args.workers = min(torch.cuda.device_count(), args.workers)
     else:
         args.device = "cpu"
-        fastai.torch_core.defaults.device = 'cpu'
+        fcore.defaults.device = torch.device('cpu')
         if args.workers is None:
             args.workers = mp.cpu_count()
 
