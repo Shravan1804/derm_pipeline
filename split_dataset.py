@@ -3,7 +3,7 @@ import random
 import argparse
 import numpy as np
 from shutil import copy
-from common import maybe_create, add_obj_detec_args
+from common import *
 from sklearn.model_selection import KFold
 from sklearn.model_selection import train_test_split
 
@@ -62,8 +62,7 @@ if __name__ == '__main__':
     add_obj_detec_args(parser)
     args = parser.parse_args()
 
-    args.data = args.data.rstrip('/')
-    assert os.path.exists(args.data) and os.path.isdir(args.data), f"Provided dataset dir {args.data} invalid."
+    check_args(args)
 
     if args.dest is None:
         args.dest = maybe_create(os.path.dirname(args.data), os.path.basename(args.data) + '_splitted')
