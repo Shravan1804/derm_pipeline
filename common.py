@@ -38,6 +38,5 @@ def add_obj_detec_args(parser):
 
 def load_fastai_model(model_path):
     import fastai.vision as fvision
-    from radam import *
     return fvision.load_learner(os.path.dirname(model_path), os.path.basename(model_path))
 
