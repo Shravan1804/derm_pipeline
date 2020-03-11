@@ -75,6 +75,7 @@ if __name__ == '__main__':
     assert os.path.exists(args.model), f"Provided model path do not exist: {args.model}"
 
     if args.device == "gpu" and torch.cuda.is_available():
+        raise Exception("GPU mode not supported yet.")
         # TODO: each process use one GPU
         fcore.defaults.device = 'gpu'
         if args.workers is None:
