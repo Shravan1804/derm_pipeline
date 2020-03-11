@@ -25,14 +25,14 @@ def correct_labels(args, task):
     logs = ""
     start = time.time()
     idx, batch = task
-    model = common.load_fastai_model(args.model_path) if args.std_proc else mp.current_process().model
+    model = common.load_fastai_model(args.model) if args.std_proc else mp.current_process().model
     for img_path in batch:
         cat = os.path.basename(os.path.dirname(img_path))
         pred = str(model.predict(load_and_prepare_img(img_path))[0])
         if cat != pred:
             f = os.path.basename(img_path)
             move(img_path, os.path.join(args.data, pred, f))
-            logs += f"{f};{cat};{pred}"
+            logs += f"{f};{cat};{pred}\n"
     if idx % 100 == 0:
         print(f"Process {os.getpid()} completed task {idx} in {datetime.timedelta(seconds=time.time() - start)}.")
     return logs
@@ -46,7 +46,7 @@ def main(args, ctx=None):
     with open(args.log, 'w') as logger:
         logger.write('file;old_label;new_label\n')
         for correction in pool.imap_unordered(partial(correct_labels, args), zip(range(len(tasks)), tasks)):
-            logger.write(f'{correction}\n')
+            logger.write(correction)
     pool.close()
     pool.join()
     print(f"Work completed in {datetime.timedelta(seconds=time.time() - start)}.")
@@ -94,10 +94,12 @@ if __name__ == '__main__':
         mp_ctx = mp.get_context()  # get the default context
 
         class CustomProcess(mp_ctx.Process):
+            proc_id = 0
             def __init__(self, *argv, **kwargs):
                 self.model = common.load_fastai_model(args.model)
                 super().__init__(*argv, **kwargs)
-                print(f"Custom process {os.getpid()} created.")
+                CustomProcess.proc_id += 1
+                print(f"Custom process {CustomProcess.proc_id} created.")
 
         mp_ctx.Process = CustomProcess  # override the context's Process
 
