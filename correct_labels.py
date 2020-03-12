@@ -64,7 +64,7 @@ if __name__ == '__main__':
     parser.add_argument('--workers', type=int, help="Number of process, will adjust to chosen device if needed")
     parser.add_argument('--log', type=str, help="log file where label corrections will be tracked")
     parser.add_argument('--std-proc', action='store_true', help="Use standard process instead of custom process")
-    parser.add_argument('--seed', default=42, type=int, help="batch size")
+    parser.add_argument('--seed', default=42, type=int, help="random seed")
     args = parser.parse_args()
 
     common.check_args(args)
