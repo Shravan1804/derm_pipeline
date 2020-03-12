@@ -70,7 +70,7 @@ if __name__ == '__main__':
     common.check_args(args)
     common.set_seeds(args.seed, np=np)
     if args.log is None:
-        args.log = os.path.join(args.data, 'changes.txt')
+        args.log = os.path.join(args.data, f'{datetime.datetime.now().strftime("%Y%m%d_%H%M")}_changes.txt')
 
     assert os.path.exists(args.model), f"Provided model path do not exist: {args.model}"
 
