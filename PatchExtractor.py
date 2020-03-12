@@ -9,6 +9,7 @@ import argparse
 import pickle
 import multiprocessing as mp
 import concurrency
+import common
 
 class DrawHelper(object):
     def __init__(self, thickness=1, style='dotted', gap=10):
@@ -139,9 +140,7 @@ class PatchExtractor(object):
         return res
 
     def save_patches(self, source, dest, dirname, grids, mask_prefix=None):
-        dest = os.path.join(dest, dirname)
-        if not os.path.exists(dest):
-            os.makedirs(dest)
+        dest = common.maybe_create(dest, dirname)
         for img, patches in grids.items():
             im = self.load_img_from_disk(os.path.join(source, dirname, img))
             if mask_prefix is not None and dirname.startswith(mask_prefix):
@@ -187,15 +186,6 @@ def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest, m_prefix):
     pmq.put(pms)
 
 def main(args):
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-
-    if args.data is None or not os.path.exists(args.data):
-        raise Exception("Error, --data invalid")
-    if not os.path.exists(args.dest):
-        os.makedirs(args.dest)
-
     all_dirs = [d for d in sorted(os.listdir(args.data)) if os.path.isdir(os.path.join(args.data, d))]
     workers, batch_size, batched_dirs = concurrency.batch_dirs(all_dirs)
     patcher = PatchExtractor(args.patch_size)
@@ -214,10 +204,14 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Converts dataset to a patch dataset without data augmentation")
     parser.add_argument('--data', type=str, required=True, help="source data root directory absolute path")
-    parser.add_argument('--dest', type=str, required=True, help="directory where the patches should be saved")
+    parser.add_argument('--dest', type=str, help="directory where the patches should be saved")
     parser.add_argument('-p', '--patch-size', default=512, type=int, help="patch size")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
     parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix of mask dirs (for these we keep only 1 channel)")
     args = parser.parse_args()
+
+    common.check_args(args)
+    if args.dest is None:
+        args.dest = common.maybe_create(os.path.dirname(args.data), os.path.basename(args.data) + '_patched')
 
     main(args)
