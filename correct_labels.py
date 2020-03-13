@@ -1,6 +1,6 @@
 import os
-import cv2
 import time
+import torch
 import common
 import datetime
 import concurrency
@@ -8,9 +8,6 @@ import numpy as np
 from shutil import move
 import multiprocessing as mp
 from functools import partial
-
-import fastai
-from radam import *
 
 
 
@@ -81,8 +78,7 @@ if __name__ == '__main__':
             args.workers = min(torch.cuda.device_count(), args.workers)
     else:
         args.device = 'cpu'
-        fastai.torch_core.defaults.device = torch.device('cpu')
-        fastai.basics.defaults.device = torch.device('cpu')
+        torch.cuda.device(args.device)
         if args.workers is None:
             args.workers = mp.cpu_count()
 

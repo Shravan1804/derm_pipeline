@@ -77,8 +77,10 @@ def add_obj_detec_args(parser):
     parser.add_argument('--mext', type=str, default='.png', help="masks file extension")
 
 
-def fastai_load_model(model_path):
+def fastai_load_model(model_path, radam=True):
     import fastai.vision as fvision
+    if radam:
+        from radam import *
     return fvision.load_learner(os.path.dirname(model_path), os.path.basename(model_path))
 
 def fastai_load_and_prepare_img(img_path):
