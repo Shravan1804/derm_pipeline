@@ -1,5 +1,4 @@
 import os
-import torch
 import datetime
 from pathlib import Path
 
@@ -31,20 +30,18 @@ def get_root_logdir(logdir):
         return os.path.join(str(Path.home()), 'logs')
 
 
-def set_seeds(seed, random=None, np=None, torch=None):
-    if random:
-        random.seed(seed)
-    if np:
-        np.random.seed(seed)
-    if torch:
-        torch.manual_seed(seed)
-        """
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)  # gpu vars
-            torch.backends.cudnn.deterministic = True  # needed
-            torch.backends.cudnn.benchmark = False
-        """
+def set_seeds(seed, cuda_seeded=False):
+    import random
+    import numpy as np
+    import torch
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if cuda_seeded and torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # gpu vars
+        torch.backends.cudnn.deterministic = True  # needed
+        torch.backends.cudnn.benchmark = False
 
 
 def check_args(args):
@@ -53,6 +50,7 @@ def check_args(args):
 
 
 def set_gpu(gpuid):
+    import torch
     if torch.cuda.is_available() and gpuid is not None:
         torch.cuda.set_device(gpuid)
 
@@ -80,7 +78,7 @@ def add_obj_detec_args(parser):
 def fastai_load_model(model_path, radam=True):
     import fastai.vision as fvision
     if radam:
-        from radam import *
+        from radam import RAdam
     return fvision.load_learner(os.path.dirname(model_path), os.path.basename(model_path))
 
 def fastai_load_and_prepare_img(img_path):
