@@ -4,12 +4,9 @@ import torch
 import common
 import datetime
 import concurrency
-import numpy as np
 from shutil import move
 import multiprocessing as mp
 from functools import partial
-
-
 
 
 def correct_labels(args, task):
@@ -61,7 +58,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     common.check_args(args)
-    common.set_seeds(args.seed, np=np)
+    common.set_seeds(args.seed)
     if args.log is None:
         args.log = os.path.join(args.data, f'{datetime.datetime.now().strftime("%Y%m%d_%H%M")}_changes.txt')
 
