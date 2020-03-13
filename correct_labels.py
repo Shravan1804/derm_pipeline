@@ -1,6 +1,5 @@
 import os
 import time
-import torch
 import common
 import datetime
 import concurrency
@@ -57,27 +56,27 @@ if __name__ == '__main__':
     parser.add_argument('--seed', default=42, type=int, help="random seed")
     args = parser.parse_args()
 
-    common.check_args(args)
-    common.set_seeds(args.seed)
-    if args.log is None:
-        args.log = os.path.join(args.data, f'{datetime.datetime.now().strftime("%Y%m%d_%H%M")}_changes.txt')
-
-    assert os.path.exists(args.model), f"Provided model path do not exist: {args.model}"
-
     if args.device == "gpu":
+        import torch
         if True or not torch.cuda.is_available():
             raise Exception("GPU mode not supported.")
         # TODO: each process use one GPU
-        # fcore.defaults.device = torch.device('gpu')
         if args.workers is None:
             args.workers = torch.cuda.device_count()
         else:
             args.workers = min(torch.cuda.device_count(), args.workers)
     else:
         args.device = 'cpu'
-        torch.cuda.device(args.device)
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
         if args.workers is None:
             args.workers = mp.cpu_count()
+
+    common.check_args(args)
+    common.set_seeds(args.seed)
+    if args.log is None:
+        args.log = os.path.join(args.data, f'{datetime.datetime.now().strftime("%Y%m%d_%H%M")}_changes.txt')
+
+    assert os.path.exists(args.model), f"Provided model path do not exist: {args.model}"
 
     if args.std_proc:
         mp_ctx = None
