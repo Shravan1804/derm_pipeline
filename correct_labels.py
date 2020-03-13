@@ -9,7 +9,7 @@ from shutil import move
 import multiprocessing as mp
 from functools import partial
 
-
+import fastai
 import fastai.vision as fvision
 import fastai.torch_core as fcore
 from radam import *
@@ -78,14 +78,15 @@ if __name__ == '__main__':
         if True or not torch.cuda.is_available():
             raise Exception("GPU mode not supported.")
         # TODO: each process use one GPU
-        fcore.defaults.device = 'gpu'
+        # fcore.defaults.device = torch.device('gpu')
         if args.workers is None:
             args.workers = torch.cuda.device_count()
         else:
             args.workers = min(torch.cuda.device_count(), args.workers)
     else:
-        args.device = "cpu"
+        args.device = 'cpu'
         fcore.defaults.device = torch.device('cpu')
+        fastai.basics.defaults.device = torch.device('cpu')
         if args.workers is None:
             args.workers = mp.cpu_count()
 
