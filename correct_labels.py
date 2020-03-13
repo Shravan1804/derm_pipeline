@@ -12,7 +12,7 @@ def correct_labels(args, task):
     logs = ""
     start = time.time()
     idx, batch = task
-    model = common.load_fastai_model(args.model) if args.std_proc else mp.current_process().model
+    model = common.fastai_load_model(args.model) if args.std_proc else mp.current_process().model
     for img_path in batch:
         cat = os.path.basename(os.path.dirname(img_path))
         pred = str(model.predict(common.fastai_load_and_prepare_img(img_path))[0])
