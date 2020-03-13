@@ -77,7 +77,13 @@ def add_obj_detec_args(parser):
     parser.add_argument('--mext', type=str, default='.png', help="masks file extension")
 
 
-def load_fastai_model(model_path):
+def fastai_load_model(model_path):
     import fastai.vision as fvision
     return fvision.load_learner(os.path.dirname(model_path), os.path.basename(model_path))
 
+def fastai_load_and_prepare_img(img_path):
+    import fastai.vision as fvision
+    import cv2
+    im = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+    t = fvision.pil2tensor(im, dtype=im.dtype)  # converts to numpy tensor
+    return fvision.Image(t.float() / 255.)  # Convert to float

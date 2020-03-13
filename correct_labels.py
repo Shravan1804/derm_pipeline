@@ -10,15 +10,9 @@ import multiprocessing as mp
 from functools import partial
 
 import fastai
-import fastai.vision as fvision
-import fastai.torch_core as fcore
 from radam import *
 
 
-def load_and_prepare_img(img_path):
-    im = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
-    t = fvision.pil2tensor(im, dtype=im.dtype)  # converts to numpy tensor
-    return fvision.Image(t.float() / 255.)  # Convert to float
 
 
 def correct_labels(args, task):
@@ -28,7 +22,7 @@ def correct_labels(args, task):
     model = common.load_fastai_model(args.model) if args.std_proc else mp.current_process().model
     for img_path in batch:
         cat = os.path.basename(os.path.dirname(img_path))
-        pred = str(model.predict(load_and_prepare_img(img_path))[0])
+        pred = str(model.predict(common.fastai_load_and_prepare_img(img_path))[0])
         if cat != pred:
             f = os.path.basename(img_path)
             move(img_path, os.path.join(args.data, pred, f))
@@ -87,7 +81,7 @@ if __name__ == '__main__':
             args.workers = min(torch.cuda.device_count(), args.workers)
     else:
         args.device = 'cpu'
-        fcore.defaults.device = torch.device('cpu')
+        fastai.torch_core.defaults.device = torch.device('cpu')
         fastai.basics.defaults.device = torch.device('cpu')
         if args.workers is None:
             args.workers = mp.cpu_count()
@@ -103,7 +97,7 @@ if __name__ == '__main__':
 
             def __init__(self, *argv, **kwargs):
                 self.pcid = CustomProcess.proc_id
-                self.model = common.load_fastai_model(args.model)
+                self.model = common.fastai_load_model(args.model)
                 super().__init__(*argv, **kwargs)
                 CustomProcess.proc_id += 1
                 print(f"Custom process {CustomProcess.proc_id} created.")
