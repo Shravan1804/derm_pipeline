@@ -34,7 +34,8 @@ def correct_labels(args, task):
             move(img_path, os.path.join(args.data, pred, f))
             logs += f"{f};{cat};{pred}\n"
     if idx % 100 == 0:
-        print(f"Process {os.getpid()} completed task {idx} in {datetime.timedelta(seconds=time.time() - start)}.")
+        pcid = str(os.getpid()) if args.std_proc else f"{mp.current_process().pcid} (pid {os.getpid()})"
+        print(f"Process {pcid} completed task {idx} in {datetime.timedelta(seconds=time.time() - start)}.")
     return logs
 
 
@@ -49,6 +50,7 @@ def main(args, ctx=None):
             logger.write(correction)
     pool.close()
     pool.join()
+    pool.terminate()
     print(f"Work completed in {datetime.timedelta(seconds=time.time() - start)}.")
 
 
@@ -98,7 +100,9 @@ if __name__ == '__main__':
 
         class CustomProcess(mp_ctx.Process):
             proc_id = 0
+
             def __init__(self, *argv, **kwargs):
+                self.pcid = CustomProcess.proc_id
                 self.model = common.load_fastai_model(args.model)
                 super().__init__(*argv, **kwargs)
                 CustomProcess.proc_id += 1
