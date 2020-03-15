@@ -41,16 +41,16 @@ def log_changes(args, changes):
 
 
 def main(args, ctx=None):
-    import fastai as fai
+    import fastai.vision as fv
     start = time.time()
     if args.device == "gpu":
         p = {'path': os.path.dirname(args.model), 'file': os.path.basename(args.model), 'bs': args.gpu_bs,
-             'test': fai.ImageList.from_folder(args.data)}
+             'test': fv.ImageList.from_folder(args.data)}
         learner = common.fastai_load_model(p)
         if args.ngpus > 1:
             learner.model = torch.nn.DataParallel(learner.model, device_ids=list(range(args.ngpus)))
         file_labels = [(str(p), os.path.basename(os.path.dirname(p))) for p in learner.data.test_ds.items]
-        preds, _ = learner.get_preds(ds_type=fai.DatasetType.Test)
+        preds, _ = learner.get_preds(ds_type=fv.DatasetType.Test)
         preds = [learner.data.classes[p] for p in np.argmax(preds.numpy(), 1)]
         changes = [maybe_move_file(file_labels[i][0], file_labels[i][1], p) for i, p in enumerate(preds)]
         log_changes(args, changes)
