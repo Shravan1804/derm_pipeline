@@ -2,6 +2,7 @@ import os
 import datetime
 from pathlib import Path
 
+
 def flatten(lst):
     """Flattens lst of lsts"""
     return [elem for sublst in lst for elem in sublst]
@@ -14,14 +15,30 @@ def maybe_create(*d):
     return path
 
 
-def list_dirs(root):
-    return sorted([d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))])
+def list_files(directory, full_path=False):
+    return sorted([os.path.join(directory, f) if full_path else f for f in os.listdir(directory)
+                   if os.path.isfile(os.path.join(directory, f))])
+
+
+def list_dirs(root, full_path=False):
+    return sorted([os.path.join(root, d) if full_path else d for d in os.listdir(root)
+                   if os.path.isdir(os.path.join(root, d))])
+
+
+def list_files_in_dirs(root, full_path=False):
+    return [os.path.join(root, d, f) if full_path else f for d in list_dirs(root, full_path)
+            for f in list_files(os.path.join(root, d))]
+
+
+def batch_list(lst, bs):
+    return [lst[i:min(len(lst), i + bs)] for i in range(0, len(lst), bs)]
 
 
 def get_exp_logdir(args):
     return f'{datetime.datetime.now().strftime("%Y%m%d_%H%M")}_{os.path.basename(args.data)}_{args.model}_lr{args.lr}' \
         + f'_bs{args.batch_size}_epo{args.epochs}_seed{args.seed}_world{args.nmachines * args.ngpus}_wd{args.wd}' \
         + f'_{args.exp_name}'
+
 
 def get_root_logdir(logdir):
     if os.path.exists(logdir) and os.path.isdir(logdir):
@@ -49,7 +66,7 @@ def check_args(args):
     assert os.path.exists(args.data) and os.path.isdir(args.data), f"Provided dataset dir {args.data} invalid."
 
 
-def set_gpu(gpuid):
+def maybe_set_gpu(gpuid):
     import torch
     if torch.cuda.is_available() and gpuid is not None:
         torch.cuda.set_device(gpuid)
@@ -75,11 +92,11 @@ def add_obj_detec_args(parser):
     parser.add_argument('--mext', type=str, default='.png', help="masks file extension")
 
 
-def fastai_load_model(model_path, radam=True):
+def fastai_load_model(model_params, radam=True):
     import fastai.vision as fvision
     if radam:
         from radam import RAdam
-    return fvision.load_learner(os.path.dirname(model_path), os.path.basename(model_path))
+    return fvision.load_learner(**model_params)
 
 def fastai_load_and_prepare_img(img_path):
     import fastai.vision as fvision
