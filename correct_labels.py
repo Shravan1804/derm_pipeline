@@ -44,7 +44,7 @@ def main(args, ctx=None):
     import fastai.vision as fv
     start = time.time()
     if args.device == "gpu":
-        p = {'path': os.path.dirname(args.model), 'file': os.path.basename(args.model), 'bs': args.gpu_bs,
+        p = {'path': os.path.dirname(args.model), 'file': os.path.basename(args.model), 'bs': args.gpu_bs * args.ngpus,
              'test': fv.ImageList.from_folder(args.data)}
         learner = common.fastai_load_model(p)
         if args.ngpus > 1:
