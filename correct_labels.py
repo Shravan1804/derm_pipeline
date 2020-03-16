@@ -33,8 +33,8 @@ def correct_labels(args, task):
     return logs
 
 
-def log_changes(args, changes):
-    with open(args.log, 'w') as logger:
+def log_changes(log_file_path, changes):
+    with open(log_file_path, 'w') as logger:
         logger.write('file;old_label;new_label\n')
         for correction in changes:
             logger.write(correction)
@@ -53,11 +53,11 @@ def main(args, ctx=None):
         preds, _ = learner.get_preds(ds_type=fv.DatasetType.Test)
         preds = [learner.data.classes[p] for p in np.argmax(preds.numpy(), 1)]
         changes = [maybe_move_file(file_labels[i][0], file_labels[i][1], p) for i, p in enumerate(preds)]
-        log_changes(args, changes)
+        log_changes(args.log, changes)
     else:
         tasks = concurrency.batch_files_in_dirs(args.data, bs=args.proc_bs)
         pool = mp.Pool(processes=args.workers) if ctx is None else ctx.Pool(processes=args.workers)
-        log_changes(args, pool.imap_unordered(partial(correct_labels, args), zip(range(len(tasks)), tasks)))
+        log_changes(args.log, pool.imap_unordered(partial(correct_labels, args), zip(range(len(tasks)), tasks)))
         pool.close()
         pool.join()
         pool.terminate()
