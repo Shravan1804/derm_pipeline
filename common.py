@@ -41,7 +41,7 @@ def get_exp_logdir(args):
 
 
 def get_root_logdir(logdir):
-    if os.path.exists(logdir) and os.path.isdir(logdir):
+    if logdir is not None and os.path.exists(logdir) and os.path.isdir(logdir):
         return logdir
     else:
         return os.path.join(str(Path.home()), 'logs')
