@@ -36,23 +36,6 @@ def batch_list(lst, bs):
     return [lst[i:min(len(lst), i + bs)] for i in range(0, len(lst), bs)]
 
 
-def log_console_output(console_log_file_path):
-    tee = subprocess.Popen(["tee", console_log_file_path], stdin=subprocess.PIPE)
-    # Cause tee's stdin to get a copy of our stdin/stdout (as well as that
-    # of any child processes we spawn)
-    os.dup2(tee.stdin.fileno(), sys.stdout.fileno())
-    os.dup2(tee.stdin.fileno(), sys.stderr.fileno())
-
-    # The flush flag is needed to guarantee these lines are written before
-    # the two spawned /bin/ls processes emit any output
-    print("\nstdout", flush=True)
-    print("stderr", file=sys.stderr, flush=True)
-
-    # These child processes' stdin/stdout are
-    os.spawnve("P_WAIT", "/bin/ls", ["/bin/ls"], {})
-    os.execve("/bin/ls", ["/bin/ls"], os.environ)
-
-
 def get_exp_logdir(args):
     return f'{datetime.datetime.now().strftime("%Y%m%d_%H%M")}_{os.path.basename(args.data)}_{args.model}_lr{args.lr}' \
         + f'_bs{args.batch_size}_epo{args.epochs}_seed{args.seed}_world{args.nmachines * args.ngpus}_wd{args.wd}' \
