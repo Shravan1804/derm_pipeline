@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import datetime
 import subprocess
 from pathlib import Path
@@ -106,3 +107,10 @@ def fastai_load_and_prepare_img(img_path):
     im = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
     t = fvision.pil2tensor(im, dtype=im.dtype)  # converts to numpy tensor
     return fvision.Image(t.float() / 255.)  # Convert to float
+
+
+def time_method(m):
+    start = time.time()
+    m()
+    print(f"Work completed in {datetime.timedelta(seconds=time.time() - start)}.")
+
