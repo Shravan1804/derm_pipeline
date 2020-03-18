@@ -9,10 +9,10 @@ import multiprocessing as mp
 from functools import partial
 
 
-def maybe_move_file(img_path, cat, pred):
+def maybe_move_file(data_path, img_path, cat, pred):
     if cat != pred:
         f = os.path.basename(img_path)
-        move(img_path, os.path.join(args.data, pred, f))
+        move(img_path, os.path.join(data_path, pred, f))
         return f'{f};{cat};{pred}\n'
     return ''
 
@@ -29,7 +29,7 @@ def gpu_correct_labels(data_path, model_path, bs, ngpus, log_path=None):
     file_labels = [(str(p), os.path.basename(os.path.dirname(p))) for p in learner.data.test_ds.items]
     preds, _ = learner.get_preds(ds_type=fv.DatasetType.Test)
     preds = [learner.data.classes[p] for p in np.argmax(preds.numpy(), 1)]
-    changes = [maybe_move_file(file_labels[i][0], file_labels[i][1], p) for i, p in enumerate(preds)]
+    changes = [maybe_move_file(data_path, file_labels[i][0], file_labels[i][1], p) for i, p in enumerate(preds)]
     log_changes(log_path, changes)
 
 
@@ -42,7 +42,7 @@ def cpu_correct_labels(args, task):
     for img_path in batch:
         cat = os.path.basename(os.path.dirname(img_path))
         pred = str(model.predict(common.fastai_load_and_prepare_img(img_path))[0])
-        logs += maybe_move_file(img_path, cat, pred)
+        logs += maybe_move_file(args.data, img_path, cat, pred)
     if idx % 100 == 0:
         pcid = str(os.getpid()) if args.std_proc else f"{mp.current_process().pcid} (pid {os.getpid()})"
         print(f"Process {pcid} completed task {idx} in {datetime.timedelta(seconds=time.time() - start)}.")
