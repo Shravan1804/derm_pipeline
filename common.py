@@ -69,7 +69,9 @@ def check_args(args):
     assert os.path.exists(args.data) and os.path.isdir(args.data), f"Provided dataset dir {args.data} invalid."
 
 
-def maybe_set_gpu(gpuid):
+def maybe_set_gpu(gpuid, ngpus):
+    if ngpus != 1:
+        return
     import torch
     if torch.cuda.is_available() and gpuid is not None:
         torch.cuda.set_device(gpuid)

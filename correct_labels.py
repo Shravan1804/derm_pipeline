@@ -95,7 +95,7 @@ if __name__ == '__main__':
     if args.device == "gpu":
         import torch
         assert torch.cuda.is_available(), "CUDA not available, please run on CPU"
-        common.maybe_set_gpu(args.gpuid)
+        common.maybe_set_gpu(args.gpuid, args.ngpus)
     else:
         args.device = 'cpu'
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
