@@ -17,15 +17,10 @@ def maybe_move_file(data_path, img_path, cat, pred):
     return ''
 
 
-def gpu_correct_labels(data_path, model_path, bs, ngpus, log_path=None):
+def gpu_correct_labels(data_path, learner, log_path=None):
     if log_path is None:
         log_path = default_logfile(data_path)
     import fastai.vision as fv
-    p = {'path': os.path.dirname(model_path), 'file': os.path.basename(model_path), 'bs': bs * ngpus,
-         'test': fv.ImageList.from_folder(data_path)}
-    learner = common.fastai_load_model(p)
-    if ngpus > 1:
-        learner.model = torch.nn.DataParallel(learner.model, device_ids=list(range(ngpus)))
     file_labels = [(str(p), os.path.basename(os.path.dirname(p))) for p in learner.data.test_ds.items]
     preds, _ = learner.get_preds(ds_type=fv.DatasetType.Test)
     preds = [learner.data.classes[p] for p in np.argmax(preds.numpy(), 1)]
@@ -63,7 +58,13 @@ def log_changes(log_file_path, changes):
 def main(args, ctx=None):
     start = time.time()
     if args.device == "gpu":
-        gpu_correct_labels(args.data, args.model, args.gpu_bs, args.ngpus, args.log)
+        import fastai.vision as fv
+        p = {'path': os.path.dirname(args.model), 'file': os.path.basename(args.model), 'bs': args.gpu_bs * args.ngpus,
+             'test': fv.ImageList.from_folder(args.model)}
+        learner = common.fastai_load_model(p)
+        if args.ngpus > 1:
+            learner.model = torch.nn.DataParallel(learner.model, device_ids=list(range(args.ngpus)))
+        gpu_correct_labels(args.data, learner, args.log)
     else:
         tasks = concurrency.batch_files_in_dirs(args.data, bs=args.proc_bs)
         pool = mp.Pool(processes=args.workers) if ctx is None else ctx.Pool(processes=args.workers)
