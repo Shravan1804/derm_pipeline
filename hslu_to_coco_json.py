@@ -56,7 +56,7 @@ def combine_class_annos(img_objs, mask_dirs):
     else:
         return {}
 
-def to_coco_format(data, img_dir, annos, mext, classes):
+def to_coco_format(data, img_dir, annos, mext, classes, to_polygon):
     dataset = {'info': {'year': 2020, 'description': os.path.basename(data)},
                'licenses': [{'id': 1, 'name': 'confidential, cannot be shared'}],
                'images': [], 'categories': [], 'annotations': []}
@@ -83,15 +83,19 @@ def to_coco_format(data, img_dir, annos, mext, classes):
         num_objs = len(bboxes)
         for i in range(num_objs):
             try:
-                dataset['annotations'].append({
+                anno = {
                     'image_id': idx,
                     'bbox': bboxes[i],
                     'category_id': labels[i],
                     'area': areas[i],
                     'iscrowd': iscrowd[i],
                     'id': ann_id,
-                    'segmentation': mask_to_polygon(targets['masks'][i])
-                })
+                    'segmentation': targets['masks'][i]
+                }
+                if to_polygon:
+                    anno['segmentation'] = mask_to_polygon(anno['segmentation'])
+                dataset['annotations'].append(anno)
+
                 categories.add(labels[i])
                 ann_id += 1
             except Exception as err:
@@ -105,6 +109,7 @@ def main():
     parser.add_argument('--data', type=str, required=True, help="dataset root directory absolute path")
     parser.add_argument('--img-dir', type=str, default='images', help="dir containing images")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
+    parser.add_argument('--to_polygon', action='store_true', help="converts bitmask to polygon")
     parser.add_argument('--mext', type=str, default='.png', help="masks file extension")
     parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix to rm from mask dirs to get mask class")
     args = parser.parse_args()
@@ -140,7 +145,8 @@ def main():
     for j in jobs:
         j.join()
     print("Converting and saving as coco json")
-    json.dump(to_coco_format(args.data, args.img_dir, merged_annos, args.mext, classes), open(json_path, 'w'))
+    json.dump(to_coco_format(args.data, args.img_dir, merged_annos, args.mext, classes, args.to_polygon),
+              open(json_path, 'w'))
     print("done")
 
 
