@@ -89,11 +89,14 @@ def to_coco_format(data, img_dir, annos, mext, classes, to_polygon):
                     'category_id': labels[i],
                     'area': areas[i],
                     'iscrowd': iscrowd[i],
-                    'id': ann_id,
-                    'segmentation': targets['masks'][i]
+                    'id': ann_id
                 }
                 if to_polygon:
-                    anno['segmentation'] = mask_to_polygon(anno['segmentation'])
+                    anno['segmentation'] = mask_to_polygon(targets['masks'][i])
+                else:
+                    rle = coco_mask.encode(targets['masks'][i])
+                    rle['counts'] = str(rle['counts'], 'utf-8')
+                    anno['segmentation'] = rle
                 dataset['annotations'].append(anno)
 
                 categories.add(labels[i])
