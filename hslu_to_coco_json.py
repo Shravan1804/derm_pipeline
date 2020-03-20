@@ -81,6 +81,9 @@ def to_coco_format(data, img_dir, annos, mext, classes, to_polygon):
         labels = targets['labels'].tolist()
         areas = targets['area'].tolist()
         iscrowd = targets['iscrowd'].tolist()
+        masks = torch.as_tensor(targets['masks'], dtype=torch.uint8)
+        # make masks Fortran contiguous for coco_mask
+        masks = masks.permute(0, 2, 1).contiguous().permute(0, 2, 1)
         num_objs = len(bboxes)
         for i in range(num_objs):
             try:
@@ -93,9 +96,9 @@ def to_coco_format(data, img_dir, annos, mext, classes, to_polygon):
                     'id': ann_id
                 }
                 if to_polygon:
-                    anno['segmentation'] = mask_to_polygon(targets['masks'][i])
+                    anno['segmentation'] = mask_to_polygon(masks[i].numpy())
                 else:
-                    rle = coco_mask.encode(targets['masks'][i])
+                    rle = coco_mask.encode(masks[i].numpy())
                     rle['counts'] = str(rle['counts'], 'utf-8')
                     anno['segmentation'] = rle
                 dataset['annotations'].append(anno)
