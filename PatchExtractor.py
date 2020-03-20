@@ -212,6 +212,7 @@ if __name__ == '__main__':
 
     common.check_args(args)
     if args.dest is None:
-        args.dest = common.maybe_create(os.path.dirname(args.data), os.path.basename(args.data) + '_patched')
+        args.dest = common.maybe_create(os.path.dirname(args.data),
+                                        f'{os.path.basename(args.data)}_patched{args.patch_size}')
 
     main(args)
