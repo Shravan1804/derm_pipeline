@@ -1,6 +1,7 @@
 import os
 import cv2
 import json
+import common
 import random
 import argparse
 import numpy as np
@@ -117,9 +118,8 @@ def main():
     parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix to rm from mask dirs to get mask class")
     args = parser.parse_args()
 
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    common.check_args(args)
+    common.set_seeds(args.seed)
 
     json_path = os.path.join(args.data, f"{os.path.basename(args.data)}_coco_format.json")
 
