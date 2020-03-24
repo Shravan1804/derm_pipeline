@@ -432,7 +432,7 @@ def main():
     # img_list = [os.path.join(args.img_dir, i) for i in ['run13_00099.jpg', 'run13_00016.jpg', 'run13_00083.jpg', 'run13_00014.jpg', 'run13_00123.jpg', 'run13_00073.jpg', 'run13_00143.jpg', 'run13_00064.jpg', 'run13_00117.jpg', 'run13_00150.jpg', 'run13_00002.jpg', 'run13_00110.jpg', 'run13_00028.jpg', 'run13_00032.jpg', 'run13_00074.jpg']]
     for img_id, img_path in enumerate(img_list):
         file, ext = os.path.splitext(os.path.basename(img_path))
-        im = patcher.load_img_from_disk(img_path)
+        im = cv2.cvtColor(patcher.load_img_from_disk(img_path), cv2.COLOR_BGR2RGB)
         gt = ObjDetecModel.get_img_gt(img_path)
         if args.obj_detec and args.show_gt and not args.no_graphs:
             model.show_preds(im, [gt], title=f'Ground Truth for {file}{ext}', fname=f'{file}_00_gt{ext}')

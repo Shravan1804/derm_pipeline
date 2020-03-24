@@ -37,8 +37,12 @@ def batch_list(lst, bs):
     return [lst[i:min(len(lst), i + bs)] for i in range(0, len(lst), bs)]
 
 
+def now():
+    return datetime.datetime.now().strftime("%Y%m%d_%H%M")
+
+
 def get_exp_logdir(args):
-    return f'{datetime.datetime.now().strftime("%Y%m%d_%H%M")}_{os.path.basename(args.data)}_{args.model}_lr{args.lr}' \
+    return f'{now()}_{os.path.basename(args.data)}_{args.model}_lr{args.lr}' \
         + f'_bs{args.batch_size}_epo{args.epochs}_seed{args.seed}_world{args.nmachines * args.ngpus}_wd{args.wd}' \
         + f'_{args.exp_name}'
 
@@ -77,7 +81,7 @@ def maybe_set_gpu(gpuid, ngpus):
         torch.cuda.set_device(gpuid)
 
 
-def add_common_train_args(parser, lr=None, wd=1e-4, b=None, model=None):
+def add_common_train_args(parser, lr=None, wd=None, b=None, model=None):
     parser.add_argument('-name', '--exp-name', required=True, help='Custom string to append to experiment log dir')
     parser.add_argument('--lr', type=float, default=lr, help='Learning rate')
     parser.add_argument('--epochs', type=int, default=26, help='Number of total epochs to run')
