@@ -43,8 +43,13 @@ def now():
 
 def get_exp_logdir(args, custom=''):
     ws = args.num_machines * args.num_gpus
-    return f'{now()}_{custom}_{args.model}_bs{args.batch_size}_lr{args.lr}' \
-        + f'_wd{args.wd}_epo{args.epochs}_seed{args.seed}_world{ws}_{args.exp_name}'
+    d = f'{now()}_{custom}_{args.model}_bs{args.batch_size}'
+    if args.lr:
+        d += f'_lr{args.lr}'
+    if args.wd:
+        d += f'_wd{args.wd}'
+    d += f'_epo{args.epochs}_seed{args.seed}_world{ws}_{args.exp_name}'
+    return d
 
 def get_root_logdir(logdir):
     if logdir is not None and os.path.exists(logdir) and os.path.isdir(logdir):
