@@ -43,7 +43,7 @@ def now():
 
 def get_exp_logdir(args):
     return f'{now()}_{os.path.basename(args.data)}_{args.model}_lr{args.lr}' \
-        + f'_bs{args.batch_size}_epo{args.epochs}_seed{args.seed}_world{args.nmachines * args.ngpus}_wd{args.wd}' \
+        + f'_bs{args.batch_size}_epo{args.epochs}_seed{args.seed}_world{args.num_machines * args.num_gpus}_wd{args.wd}' \
         + f'_{args.exp_name}'
 
 
@@ -81,6 +81,11 @@ def maybe_set_gpu(gpuid, ngpus):
         torch.cuda.set_device(gpuid)
 
 
+def add_multi_gpus_args(parser):
+    parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
+    parser.add_argument("--num-machines", type=int, default=1)
+
+
 def add_common_train_args(parser, lr=None, wd=None, b=None, model=None):
     parser.add_argument('-name', '--exp-name', required=True, help='Custom string to append to experiment log dir')
     parser.add_argument('--lr', type=float, default=lr, help='Learning rate')
@@ -89,8 +94,6 @@ def add_common_train_args(parser, lr=None, wd=None, b=None, model=None):
     parser.add_argument('--logdir', type=str, help="Root directory where logs will be saved")
     parser.add_argument('--seed', type=int, default=42, help="Random seed")
     parser.add_argument('--gpuid', type=int, help="For single gpu, gpu id to be used")
-    parser.add_argument('--ngpus', type=int, default=1, help="Number of gpus per machines")
-    parser.add_argument('--nmachines', type=int, default=1, help="Number of machines")
     parser.add_argument('--model', type=str, default=model, help="Model name")
     parser.add_argument('--wd', default=wd, type=float, help='weight decay')
 
