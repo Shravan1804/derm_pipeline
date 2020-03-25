@@ -41,11 +41,10 @@ def now():
     return datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
 
-def get_exp_logdir(args):
-    return f'{now()}_{os.path.basename(args.data)}_{args.model}_lr{args.lr}' \
-        + f'_bs{args.batch_size}_epo{args.epochs}_seed{args.seed}_world{args.num_machines * args.num_gpus}_wd{args.wd}' \
-        + f'_{args.exp_name}'
-
+def get_exp_logdir(args, custom=''):
+    ws = args.num_machines * args.num_gpus
+    return f'{now()}_{custom}_{args.model}_bs{args.batch_size}_lr{args.lr}' \
+        + f'_wd{args.wd}_epo{args.epochs}_seed{args.seed}_world{ws}_{args.exp_name}'
 
 def get_root_logdir(logdir):
     if logdir is not None and os.path.exists(logdir) and os.path.isdir(logdir):
@@ -73,8 +72,8 @@ def check_args(args):
     assert os.path.exists(args.data) and os.path.isdir(args.data), f"Provided dataset dir {args.data} invalid."
 
 
-def maybe_set_gpu(gpuid, ngpus):
-    if ngpus != 1:
+def maybe_set_gpu(gpuid, num_gpus):
+    if num_gpus != 1:
         return
     import torch
     if torch.cuda.is_available() and gpuid is not None:
@@ -86,16 +85,20 @@ def add_multi_gpus_args(parser):
     parser.add_argument("--num-machines", type=int, default=1)
 
 
-def add_common_train_args(parser, lr=None, wd=None, b=None, model=None):
+def add_common_train_args(parser, pdefaults=dict(), phelp=dict()):
     parser.add_argument('-name', '--exp-name', required=True, help='Custom string to append to experiment log dir')
-    parser.add_argument('--lr', type=float, default=lr, help='Learning rate')
-    parser.add_argument('--epochs', type=int, default=26, help='Number of total epochs to run')
-    parser.add_argument('-b', '--batch-size', default=b, type=int, help="Batch size")
-    parser.add_argument('--logdir', type=str, help="Root directory where logs will be saved")
-    parser.add_argument('--seed', type=int, default=42, help="Random seed")
+    parser.add_argument('--logdir', type=str, default=pdefaults.get('logdir', get_root_logdir(None)), help="Root directory where logs will be saved, default to $HOME/logs")
+    parser.add_argument('--exp-logdir', type=str, help="Experiment logdir, will be created in root log dir")
+    parser.add_argument('--model', type=str, default=pdefaults.get('model', None), help=phelp.get('model', "Model name"))
+
+    parser.add_argument('--seed', type=int, default=pdefaults.get('seed', 42), help="Random seed")
+    parser.add_argument('--epochs', type=int, default=pdefaults.get('epo', 26), help='Number of total epochs to run')
+    parser.add_argument('-b', '--batch-size', default=pdefaults.get('bs', 6), type=int, help="Batch size")
     parser.add_argument('--gpuid', type=int, help="For single gpu, gpu id to be used")
-    parser.add_argument('--model', type=str, default=model, help="Model name")
-    parser.add_argument('--wd', default=wd, type=float, help='weight decay')
+
+    parser.add_argument('--wd', default=p.get('wd', None), type=float, help='weight decay')
+    parser.add_argument('--lr', type=float, default=pdefaults.get('lr', None), help=phelp.get('lr', 'Learning rate'))
+    parser.add_argument('--lr-steps', default=pdefaults.get('lr-steps', [8, 11]), nargs='+', type=int, help='decrease lr every step-size epochs')
 
 
 def add_obj_detec_args(parser):
