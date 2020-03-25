@@ -43,6 +43,10 @@ def get_img_annotations(img_id, start_ann_id, targets):
     ann_id = start_ann_id
     targets["boxes"][:, 2:] -= targets["boxes"][:, :2]
     for k in targets.keys():
+        if k in ['labels', 'iscrowd', 'areas']:
+            targets[k] = targets[k].astype(int)
+        else:
+            targets[k] = targets[k].astype(float)
         if hasattr(k, 'tolist'):
             targets[k] = targets[k].tolist()
     for i in range(len(targets['labels'])):
