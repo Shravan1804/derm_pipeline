@@ -43,23 +43,19 @@ def get_img_annotations(img_id, start_ann_id, targets):
     ann_id = start_ann_id
     targets["boxes"][:, 2:] -= targets["boxes"][:, :2]
     for k in targets.keys():
-        if k in ['labels', 'iscrowd', 'areas']:
-            targets[k] = targets[k].astype(int)
-        else:
-            targets[k] = targets[k].astype(float)
         if hasattr(k, 'tolist'):
             targets[k] = targets[k].tolist()
     for i in range(len(targets['labels'])):
         annos.append({
             'image_id': img_id,
-            'bbox': targets["boxes"][i],
-            'category_id': targets['labels'][i],
-            'area': targets['areas'][i],
-            'iscrowd': targets['iscrowd'][i],
+            'bbox': [float(b) for b in targets["boxes"][i]],
+            'category_id': int(targets['labels'][i]),
+            'area': int(targets['areas'][i]),
+            'iscrowd': int(targets['iscrowd'][i]),
             'id': ann_id,
             'segmentation': targets['masks'][i]
         })
-        categories.add(targets['labels'][i])
+        categories.add(int(targets['labels'][i]))
         ann_id += 1
     return ann_id, annos, categories
 
