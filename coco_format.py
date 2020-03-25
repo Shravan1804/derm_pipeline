@@ -41,11 +41,11 @@ def get_img_annotations(img_id, start_ann_id, targets):
     annos = []
     categories = set()
     ann_id = start_ann_id
+    targets["boxes"][:, 2:] -= targets["boxes"][:, :2]
     for k in targets.keys():
         if hasattr(k, 'tolist'):
             targets[k] = targets[k].tolist()
-    targets["boxes"][:, 2:] -= targets["boxes"][:, :2]
-    for i in range(targets['labels']):
+    for i in range(len(targets['labels'])):
         annos.append({
             'image_id': img_id,
             'bbox': targets["boxes"][i],
