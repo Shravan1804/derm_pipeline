@@ -138,7 +138,8 @@ def main():
     merged_annos = {mask_file: combine_class_annos(merged_annos[mask_file], mask_dirs) for mask_file in merged_annos.keys()}
 
     print("Converting and saving as coco json")
-    json.dump(to_coco_format(args.data, args.img_dir, merged_annos, args.mext, classes), open(json_path, 'w'))
+    json.dump(to_coco_format(args.data, args.img_dir, merged_annos, args.mext, classes), open(json_path, 'w'),
+              sort_keys=True, indent=4, separators=(',', ': '))
     print("done")
 
 

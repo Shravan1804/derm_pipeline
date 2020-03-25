@@ -152,7 +152,7 @@ def main():
         j.join()
     print("Converting and saving as coco json")
     json.dump(to_coco_format(args.data, args.img_dir, merged_annos, args.mext, classes, args.to_polygon),
-              open(json_path, 'w'))
+              open(json_path, 'w'), sort_keys=True, indent=4, separators=(',', ': '))
     print("done")
 
 
