@@ -96,7 +96,7 @@ def add_common_train_args(parser, pdefaults=dict(), phelp=dict()):
     parser.add_argument('-b', '--batch-size', default=pdefaults.get('bs', 6), type=int, help="Batch size")
     parser.add_argument('--gpuid', type=int, help="For single gpu, gpu id to be used")
 
-    parser.add_argument('--wd', default=p.get('wd', None), type=float, help='weight decay')
+    parser.add_argument('--wd', default=pdefaults.get('wd', None), type=float, help='weight decay')
     parser.add_argument('--lr', type=float, default=pdefaults.get('lr', None), help=phelp.get('lr', 'Learning rate'))
     parser.add_argument('--lr-steps', default=pdefaults.get('lr-steps', [8, 11]), nargs='+', type=int, help='decrease lr every step-size epochs')
 
