@@ -1,6 +1,10 @@
 import os
 import cv2
+import numpy as np
+from skimage import measure
+from shapely.geometry import Polygon
 from pycocotools import mask as coco_mask
+
 
 def get_default_dataset(description='coco format_data'):
     return {'info': {'year': 2020, 'description': description},
@@ -35,6 +39,37 @@ def convert_obj_mask_to_rle(mask):
 def convert_masks_to_rle(masks):
     masks = masks.permute(0, 2, 1).contiguous().permute(0, 2, 1)
     return [convert_obj_mask_to_rle(mask.numpy()) for mask in masks]
+
+
+def maybe_simplify_poly(poly):
+    simpler_poly = poly.simplify(1.0, preserve_topology=False)
+    if type(simpler_poly) is not Polygon:   # Multipolygon case
+        return poly
+    segmentation = np.array(simpler_poly.exterior.coords).ravel().tolist()
+    # CVAT requirements
+    return simpler_poly if len(segmentation) % 2 == 0 and 3 <= len(segmentation) // 2 else poly
+
+
+def convert_obj_mask_to_poly(mask):
+    # https://www.immersivelimit.com/create-coco-annotations-from-scratch
+    contours = measure.find_contours(mask, 0.5, positive_orientation='low')
+    segmentations = []
+    for contour in contours:
+        # Flip from (row, col) representation to (x, y)
+        # and subtract the padding pixel
+        for i in range(len(contour)):
+            row, col = contour[i]
+            contour[i] = (col - 1, row - 1)
+        poly = Polygon(contour)
+        poly = maybe_simplify_poly(poly)
+        segmentation = np.array(poly.exterior.coords).ravel().tolist()
+        assert len(segmentation) % 2 == 0 and 3 <= len(segmentation) // 2, "Wrong polygon points: %s" % segmentation
+        segmentations.append(segmentation)
+    return segmentations
+
+
+def convert_masks_to_poly(masks):
+    return [convert_obj_mask_to_poly(mask.numpy()) for mask in masks]
 
 
 def get_img_annotations(img_id, start_ann_id, targets):
