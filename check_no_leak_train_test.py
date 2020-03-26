@@ -36,10 +36,14 @@ def get_files_to_search(args):
 
 def search_terms(proc_id, terms, search_in):
     print(f'Proc {proc_id} searching for {len(terms)} terms in a list of {len(search_in)} items.')
+    count = 0
     for t, tt in terms:
         for s, ss in search_in:
             if t == s:
                 print(f'Proc {proc_id} found image {t} in both {tt} and {ss}')
+        if count % 1000 == 0:
+            print(f'Proc {proc_id} completed {count}/{len(terms)-count} term lookups.')
+        count += 1
 
 
 
