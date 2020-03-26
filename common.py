@@ -72,6 +72,10 @@ def set_seeds(seed, cuda_seeded=False):
         torch.backends.cudnn.benchmark = False
 
 
+def check_dir_valid(dirpath):
+    assert os.path.exists(dirpath) and os.path.isdir(dirpath), f"Provided dataset dir {dirpath} invalid."
+
+
 def check_args(args):
     args.data = args.data.rstrip('/')
     assert os.path.exists(args.data) and os.path.isdir(args.data), f"Provided dataset dir {args.data} invalid."
@@ -126,8 +130,8 @@ def fastai_load_and_prepare_img(img_path):
     return fvision.Image(t.float() / 255.)  # Convert to float
 
 
-def time_method(m):
+def time_method(m, args=None):
     start = time.time()
-    m()
+    m(args)
     print(f"Work completed in {datetime.timedelta(seconds=time.time() - start)}.")
 
