@@ -8,7 +8,7 @@ import concurrency
 
 def get_image_name(args, path):
     img = os.path.splitext(os.path.basename(path))[0]
-    return img.split(args.sep)[0] if args.patch else img
+    return img.split(args.patch_sep)[0] if args.patch else img
 
 
 def get_files_to_search(args):
