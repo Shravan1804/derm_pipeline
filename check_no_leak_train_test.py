@@ -42,7 +42,7 @@ def search_terms(proc_id, terms, search_in):
             if t == s:
                 print(f'Proc {proc_id} found image {t} in both {tt} and {ss}')
         if count > 0 and count % 5000 == 0:
-            print(f'Proc {proc_id} completed {count}/{len(terms)-count} term lookups.')
+            print(f'Proc {proc_id} completed {count}/{len(terms)} lookups ({len(terms)-count} remaining).')
         count += 1
 
 
