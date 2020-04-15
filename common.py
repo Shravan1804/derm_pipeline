@@ -110,6 +110,10 @@ def add_common_train_args(parser, pdefaults=dict(), phelp=dict()):
     parser.add_argument('--lr-steps', default=pdefaults.get('lr-steps', [8, 11]), nargs='+', type=int, help='decrease lr every step-size epochs')
 
 
+def add_classif_args(parser):
+    parser.add_argument('--classif', action='store_true', help="if dataset is classif dataset")
+
+
 def add_obj_detec_args(parser):
     parser.add_argument('--obj-detec', action='store_true', help="if dataset is obj detec dataset")
     parser.add_argument('--img-dir', type=str, default='images', help="dir containing images if --obj-detec")
