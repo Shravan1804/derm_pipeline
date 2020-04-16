@@ -18,19 +18,22 @@ def maybe_create(*d):
     return path
 
 
-def list_files(directory, full_path=False):
-    return sorted([os.path.join(directory, f) if full_path else f for f in os.listdir(directory)
+def list_files(directory, full_path=False, posix_path=False):
+    lf = sorted([os.path.join(directory, f) if full_path else f for f in os.listdir(directory)
                    if os.path.isfile(os.path.join(directory, f))])
+    return [Path(i) for i in lf] if posix_path else lf
 
 
-def list_dirs(root, full_path=False):
-    return sorted([os.path.join(root, d) if full_path else d for d in os.listdir(root)
+def list_dirs(root, full_path=False, posix_path=False):
+    ld = sorted([os.path.join(root, d) if full_path else d for d in os.listdir(root)
                    if os.path.isdir(os.path.join(root, d))])
+    return [Path(i) for i in ld] if posix_path else ld
 
 
-def list_files_in_dirs(root, full_path=False):
-    return [os.path.join(root, d, f) if full_path else f for d in list_dirs(root, full_path)
+def list_files_in_dirs(root, full_path=False, posix_path=False):
+    lf = [os.path.join(root, d, f) if full_path else f for d in list_dirs(root, full_path)
             for f in list_files(os.path.join(root, d))]
+    return [Path(i) for i in lf] if posix_path else lf
 
 
 def batch_list(lst, bs):
