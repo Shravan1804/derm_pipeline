@@ -73,8 +73,9 @@ class DrawHelper(object):
 class PatchExtractor(object):
     SEP = '__SEP__'
 
-    def __init__(self, patch_size):
+    def __init__(self, patch_size, resize=True):
         self.patch_size = patch_size
+        self.resize = resize
 
     def imgs_to_patches(self, dirname):
         grids = {}
@@ -87,6 +88,8 @@ class PatchExtractor(object):
 
     def img_as_grid_of_patches(self, im_arr, img_path):
         """Converts img into a grid of patches"""
+        if self.resize:
+            im_arr = self.maybe_resize(im_arr)
         im_h, im_w = im_arr.shape[:2]
         if im_h < self.patch_size or im_w < self.patch_size:
             raise Exception(f'Error, patch size {self.patch_size} do not fit img shape {im_arr.shape}')
