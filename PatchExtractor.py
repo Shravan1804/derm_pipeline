@@ -115,7 +115,8 @@ class PatchExtractor(object):
             return im_arr
 
     def load_img_from_disk(self, img_path):
-        return self.maybe_resize(cv2.imread(img_path, cv2.IMREAD_UNCHANGED))
+        im = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+        return self.maybe_resize(im) if self.resize else im
 
     def get_patch_from_patch_map(self, im, pm):
         return self.get_patch_from_idx(im, pm['idx_h'], pm['idx_w'])
