@@ -1,9 +1,8 @@
 import os
-import sys
 import time
 import datetime
-import subprocess
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 
 def flatten(lst):
@@ -141,4 +140,9 @@ def time_method(m, args=None):
     start = time.time()
     m(args)
     print(f"Work completed in {datetime.timedelta(seconds=time.time() - start)}.")
+
+def plt_save_fig(path, dpi=300, close=True):
+    plt.savefig(path, dpi=dpi)
+    if close:
+        plt.close()
 
