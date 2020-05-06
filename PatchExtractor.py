@@ -218,7 +218,8 @@ if __name__ == '__main__':
     parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix of mask dirs (for these we keep only 1 channel)")
     args = parser.parse_args()
 
-    common.check_args(args)
+    args.data = args.data.rstrip('/')
+    common.check_dir_valid(args.data)
     if args.dest is None:
         args.dest = common.maybe_create(os.path.dirname(args.data),
                                         f'{os.path.basename(args.data)}_patched{args.patch_size}')
