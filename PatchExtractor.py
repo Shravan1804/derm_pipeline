@@ -79,7 +79,11 @@ class PatchExtractor(object):
 
     def imgs_to_patches(self, dirname):
         grids = {}
-        for img_path in [os.path.join(dirname, im) for im in sorted(os.listdir(dirname))]:
+        files = common.list_files(dirname, full_path=True)
+        exclude = [p for p in files if not(p.endswith('.png') or p.endswith('.jpg'))]
+        if exclude:
+            print("Warning, these files are excluded:", exclude)
+        for img_path in [f for f in files if f not in exclude]:
             im = os.path.basename(img_path)
             if im not in grids:
                 grids[im] = []
