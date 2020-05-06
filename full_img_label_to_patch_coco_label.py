@@ -8,7 +8,7 @@ from tqdm import tqdm
 from shapely.geometry import Polygon, MultiPoint
 
 import common
-import PatchExtractor
+from PatchExtractor import PatchExtractor
 
 
 def main(args):
@@ -23,6 +23,10 @@ def main(args):
     print("CONVERTING FULL IMG LABELS TO NEW PATCH SIZE")
     patcher = PatchExtractor(ps)
     img_pms = patcher.imgs_to_patches(args.full_imgs)
+    for img in list(img_pms.keys()):
+        if img not in f_annos:
+            img_pms.pop(img)
+
     new_image_patches, new_annotations = [], []
     anno_id = patch_id = 0
     for img, pms in tqdm(img_pms.items()):
@@ -37,18 +41,20 @@ def main(args):
                     continue
                 a_poly = Polygon([anno['segmentation'][0][n:n+2] for n in range(0, len(anno['segmentation'][0]), 2)])
                 if patch_poly.intersects(a_poly):
-                    p_anno = copy.deepcopy(anno)
-                    inter = patch_poly.intersection(a_poly)
-                    # last two poly coords are starting point
-                    pts = np.array(inter.exterior.coords).ravel()[:-2]
-                    p_anno['segmentation'] = [(pts - np.ones(pts.shape) * np.array([x, y] * pts.size/2)).tolist()]
-                    bbox = list(MultiPoint(inter.exterior.coords).bounds)
-                    p_anno['bbox'] = [*bbox[:2], bbox[2] - bbox[0], bbox[3] - bbox[1]]  # [x, y, width, height]
-                    p_anno['area'] = inter.area
-                    p_anno['image_id'] = patch_id
-                    p_anno['id'] = anno_id
-                    anno_id += 1
-                    new_annotations.append(p_anno)
+                    inters = patch_poly.intersection(a_poly)
+                    inters = [inters] if type(inters) is Polygon else inters  # Multipolygon case
+                    for inter in inters:
+                        p_anno = copy.deepcopy(anno)
+                        # last two poly coords are starting point
+                        pts = np.array(inter.exterior.coords).ravel()[:-2]
+                        p_anno['segmentation'] = [(pts - np.ones(pts.shape) * np.array([x, y] * int(pts.size/2))).tolist()]
+                        bbox = list(MultiPoint(inter.exterior.coords).bounds)
+                        p_anno['bbox'] = [*bbox[:2], bbox[2] - bbox[0], bbox[3] - bbox[1]]  # [x, y, width, height]
+                        p_anno['area'] = inter.area
+                        p_anno['image_id'] = patch_id
+                        p_anno['id'] = anno_id
+                        anno_id += 1
+                        new_annotations.append(p_anno)
             patch_id += 1
 
     labels['images'] = new_image_patches

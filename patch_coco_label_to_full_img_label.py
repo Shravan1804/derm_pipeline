@@ -10,7 +10,7 @@ from shapely.ops import unary_union
 from shapely.geometry import Polygon, MultiPoint
 
 import common
-import PatchExtractor
+from PatchExtractor import PatchExtractor
 
 
 def main(args):
@@ -45,7 +45,7 @@ def main(args):
         anno['image_id'] = full_img_id[full_img]
         anno['bbox'] = (np.array(anno['bbox']) + np.ones(4) * np.array([x, y, x, y])).tolist()
         n = len(anno['segmentation'][0])
-        anno['segmentation'] = (np.array(anno['segmentation']) + np.ones((1, n)) * np.array([[x, y] * n/2])).tolist()
+        anno['segmentation'] = (np.array(anno['segmentation']) + np.ones((1, n)) * np.array([[x, y] * int(n/2)])).tolist()
         full_img_annos[full_img].append(anno)
 
     print("MERGING OVERLAPPING POLYGONS")
