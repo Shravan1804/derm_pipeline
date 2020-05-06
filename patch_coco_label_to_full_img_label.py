@@ -5,6 +5,7 @@ import itertools
 
 import cv2
 import numpy as np
+from tqdm import tqdm
 from shapely.ops import unary_union
 from shapely.geometry import Polygon, MultiPoint
 
@@ -44,13 +45,13 @@ def main(args):
         anno['image_id'] = full_img_id[full_img]
         anno['bbox'] = (np.array(anno['bbox']) + np.ones(4) * np.array([x, y, x, y])).tolist()
         n = len(anno['segmentation'][0])
-        anno['segmentation'] = (np.array(anno['segmentation']) + np.ones((1, n)) * np.array([[x, y] * n])).tolist()
+        anno['segmentation'] = (np.array(anno['segmentation']) + np.ones((1, n)) * np.array([[x, y] * n/2])).tolist()
         full_img_annos[full_img].append(anno)
 
     print("MERGING OVERLAPPING POLYGONS")
     new_annotations = []
     anno_id = 0
-    for full_img, f_annos in full_img_annos.items():
+    for full_img, f_annos in tqdm(full_img_annos.items()):
         annos_per_cats = {c['id']: [a for a in f_annos if a['category_id'] == c['id']] for c in labels['categories']}
         for annos in annos_per_cats.values():
             polys = [Polygon([c[n:n+2] for c in range(0, len(c), 2)]) for c in [a['segmentation'][0] for a in annos]]
@@ -80,6 +81,7 @@ def main(args):
 
 def poly_to_anno(new_id, poly, old_anno):
     if old_anno['id'] == -1:    # merged polygon, recompute segmentation, bbox, area
+        # last two poly coords are starting point
         old_anno['segmentation'] = np.array(poly.exterior.coords).ravel()[:-2].reshape((1, -1)).tolist()
         bbox = list(MultiPoint(poly.exterior.coords).bounds)    # [xmin, ymin, xmax, ymax]
         old_anno['bbox'] = [*bbox[:2], bbox[2]-bbox[0], bbox[3]-bbox[1]]    # [x, y, width, height]
