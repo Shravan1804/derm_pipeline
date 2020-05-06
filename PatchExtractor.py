@@ -173,6 +173,10 @@ class PatchExtractor(object):
         return pm['patch_path'].split(PatchExtractor.SEP)[0] + os.path.splitext(pm['patch_path'])[1]
 
     @staticmethod
+    def get_img_fname_from_patch_fname(patch_fname):
+        return PatchExtractor.get_img_fname_from_patch({'patch_path': patch_fname})
+
+    @staticmethod
     def get_patch_fname(img_path, idx_h, idx_w):
         """Create patch file basename"""
         file, ext = os.path.splitext(os.path.basename(img_path))

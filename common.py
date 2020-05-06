@@ -74,13 +74,12 @@ def set_seeds(seed, cuda_seeded=False):
         torch.backends.cudnn.benchmark = False
 
 
+def check_file_valid(filepath):
+    assert os.path.exists(filepath) and os.path.isfile(filepath), f"Provided file {filepath} invalid."
+
+
 def check_dir_valid(dirpath):
-    assert os.path.exists(dirpath) and os.path.isdir(dirpath), f"Provided dataset dir {dirpath} invalid."
-
-
-def check_args(args):
-    args.data = args.data.rstrip('/')
-    assert os.path.exists(args.data) and os.path.isdir(args.data), f"Provided dataset dir {args.data} invalid."
+    assert os.path.exists(dirpath) and os.path.isdir(dirpath), f"Provided dir {dirpath} invalid."
 
 
 def maybe_set_gpu(gpuid, num_gpus):
