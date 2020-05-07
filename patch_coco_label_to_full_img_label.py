@@ -1,4 +1,5 @@
 import os
+import copy
 import json
 import argparse
 import itertools
@@ -54,21 +55,25 @@ def main(args):
     for full_img, f_annos in tqdm(full_img_annos.items()):
         annos_per_cats = {c['id']: [a for a in f_annos if a['category_id'] == c['id']] for c in labels['categories']}
         for annos in annos_per_cats.values():
-            polys = [Polygon([c[n:n+2] for c in range(0, len(c), 2)]) for c in [a['segmentation'][0] for a in annos]]
-            merge = None
-            while merge is None or merge:
-                merge = [(a, b) for a, b in itertools.combinations(zip(polys, annos), 2) if a[0].intersects(b[0])]
-                for p1_a1, p2_a2 in merge:
+            polys = [Polygon([c[n:n+2] for n in range(0, len(c), 2)]) for c in [a['segmentation'][0] for a in annos]]
+            polys_annos = list(zip(polys, annos))
+            merge = True
+            while merge:
+                for a in polys_annos:
+                    merge = False
+                    for b in polys_annos:
+                        if a != b and a[0].intersects(b[0]):
+                            merge = True
+                            p1_a1, p2_a2 = a, b
+                            break
+                    if merge:
+                        break
+                if merge:
+                    polys_annos.remove(p1_a1)
+                    polys_annos.remove(p2_a2)
                     p3 = unary_union([p1_a1[0], p2_a2[0]])
-                    if p1_a1[0] in polys:
-                        polys.remove(p1_a1[0])
-                        annos.remove(p1_a1[1])
-                    if p2_a2[0] in polys:
-                        polys.remove(p2_a2[0])
-                        annos.remove(p2_a2[1])
-                    polys.append(p3)
-                    annos.append(poly_to_anno(-1, p3, p1_a1[1]))
-            for poly, anno in zip(polys, annos):
+                    polys_annos.append((p3, poly_to_anno(-1, p3, p1_a1[1])))
+            for poly, anno in polys_annos:
                 new_annotations.append(poly_to_anno(anno_id, poly, anno))
                 anno_id += 1
 
@@ -80,14 +85,15 @@ def main(args):
 
 
 def poly_to_anno(new_id, poly, old_anno):
-    if old_anno['id'] == -1:    # merged polygon, recompute segmentation, bbox, area
+    new_anno = copy.deepcopy(old_anno)
+    if new_anno['id'] == -1:    # merged polygon, recompute segmentation, bbox, area
         # last two poly coords are starting point
-        old_anno['segmentation'] = np.array(poly.exterior.coords).ravel()[:-2].reshape((1, -1)).tolist()
+        new_anno['segmentation'] = np.array(poly.exterior.coords).ravel()[:-2].reshape((1, -1)).tolist()
         bbox = list(MultiPoint(poly.exterior.coords).bounds)    # [xmin, ymin, xmax, ymax]
-        old_anno['bbox'] = [*bbox[:2], bbox[2]-bbox[0], bbox[3]-bbox[1]]    # [x, y, width, height]
-        old_anno['area'] = poly.area
-    old_anno['id'] = new_id
-    return old_anno
+        new_anno['bbox'] = [*bbox[:2], bbox[2]-bbox[0], bbox[3]-bbox[1]]    # [x, y, width, height]
+        new_anno['area'] = poly.area
+    new_anno['id'] = new_id
+    return new_anno
 
 
 if __name__ == '__main__':
