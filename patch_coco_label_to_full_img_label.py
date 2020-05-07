@@ -2,7 +2,6 @@ import os
 import copy
 import json
 import argparse
-import itertools
 
 import cv2
 import numpy as np
@@ -17,8 +16,8 @@ from PatchExtractor import PatchExtractor
 def main(args):
     with open(args.labels, 'r') as f:
         labels = json.load(f)
-    patch_id_to_full_img = {img['id']: PatchExtractor.get_img_fname_from_patch_fname(img['file_name'])
-                            for img in labels['images']}
+    id_to_patch_name = {img['id']: img['file_name'] for img in labels['images']}
+    patch_id_to_full_img = {k: PatchExtractor.get_img_fname_from_patch_fname(v) for k, v in id_to_patch_name.items()}
     full_img_id = {k: i for i, k in enumerate(sorted(set(patch_id_to_full_img.values())))}
 
     print("CREATING NEW LIST OF FULL IMAGES")
@@ -36,18 +35,17 @@ def main(args):
 
     print("ADJUSTING ANNOTATIONS POLYGONS TO FULL IMAGES")
     full_img_annos = {k: [] for k in full_img_id.keys()}
-    for anno in labels['annotations']:
-        if len(anno['segmentation']) > 1:
-            print(img_path, "Unsupported polygon (", anno['segmentation'], ") skipping...")
-            continue
-        full_img = patch_id_to_full_img[anno['image_id']]
-        patch_name = [im['file_name'] for im in labels['images'] if im['id'] == anno['image_id']][0]
-        y, x = PatchExtractor.get_pos_from_patch_name(patch_name)
-        anno['image_id'] = full_img_id[full_img]
-        anno['bbox'] = (np.array(anno['bbox']) + np.ones(4) * np.array([x, y, x, y])).tolist()
-        n = len(anno['segmentation'][0])
-        anno['segmentation'] = (np.array(anno['segmentation']) + np.ones((1, n)) * np.array([[x, y] * int(n/2)])).tolist()
-        full_img_annos[full_img].append(anno)
+    for lanno in labels['annotations']:
+        for seg in lanno['segmentation']:
+            anno = copy.deepcopy(lanno)
+            anno['segmentation'] = [seg]
+            full_img = patch_id_to_full_img[anno['image_id']]
+            y, x = PatchExtractor.get_pos_from_patch_name(id_to_patch_name[anno['image_id']])
+            anno['image_id'] = full_img_id[full_img]
+            anno['bbox'] = (np.array(anno['bbox']) + np.ones(4) * np.array([x, y, x, y])).tolist()
+            n = len(anno['segmentation'][0])
+            anno['segmentation'] = (np.array(anno['segmentation']) + np.ones((1, n)) * np.array([[x, y] * int(n/2)])).tolist()
+            full_img_annos[full_img].append(anno)
 
     print("MERGING OVERLAPPING POLYGONS")
     new_annotations = []
