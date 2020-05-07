@@ -71,10 +71,14 @@ def main(args):
                     polys_annos.remove(p2_a2)
                     p3 = unary_union([p1_a1[0], p2_a2[0]])
                     p3 = p3 if type(p3) is Polygon else unary_union(p3)
-                    assert type(p3) is Polygon, f'union: {type(p3)}'
-                    polys_annos.append((p3, poly_to_anno(-1, p3, p1_a1[1])))
-            for poly, anno in polys_annos:
-                new_annotations.append(poly_to_anno(anno_id, poly, anno))
+                    if type(p3) is Polygon:
+                        polys_annos.append((p3, poly_to_anno(-1, p3, p1_a1[1])))
+                    else:
+                        print("Warning result of union not merged, skipping object")
+
+            for _, anno in polys_annos:
+                anno['id'] = anno_id
+                new_annotations.append(anno)
                 anno_id += 1
 
     labels['images'] = new_images
@@ -84,14 +88,13 @@ def main(args):
     json.dump(labels, open(json_path, 'w'), sort_keys=True, indent=4, separators=(',', ': '))
 
 
-def poly_to_anno(new_id, poly, old_anno, recompute=False):
+def poly_to_anno(new_id, poly, old_anno):
     new_anno = copy.deepcopy(old_anno)
-    if new_anno['id'] == -1 or recompute:    # merged polygon, recompute segmentation, bbox, area
-        # last two poly coords are starting point
-        new_anno['segmentation'] = np.array(poly.exterior.coords).ravel()[:-2].reshape((1, -1)).tolist()
-        bbox = list(MultiPoint(poly.exterior.coords).bounds)    # [xmin, ymin, xmax, ymax]
-        new_anno['bbox'] = [*bbox[:2], bbox[2]-bbox[0], bbox[3]-bbox[1]]    # [x, y, width, height]
-        new_anno['area'] = poly.area
+    # last two poly coords are starting point
+    new_anno['segmentation'] = np.array(poly.exterior.coords).ravel()[:-2].reshape((1, -1)).tolist()
+    bbox = list(MultiPoint(poly.exterior.coords).bounds)    # [xmin, ymin, xmax, ymax]
+    new_anno['bbox'] = [*bbox[:2], bbox[2]-bbox[0], bbox[3]-bbox[1]]    # [x, y, width, height]
+    new_anno['area'] = poly.area
     new_anno['id'] = new_id
     return new_anno
 
