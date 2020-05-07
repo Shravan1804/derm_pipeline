@@ -54,6 +54,10 @@ def main(args):
         annos_per_cats = {c['id']: [a for a in f_annos if a['category_id'] == c['id']] for c in labels['categories']}
         for annos in annos_per_cats.values():
             polys = [Polygon([c[n:n+2] for n in range(0, len(c), 2)]) for c in [a['segmentation'][0] for a in annos]]
+            for i, poly in enumerate(polys):
+                if not poly.is_valid:
+                    polys[i] = poly.buffer(0)
+                    annos[i] = poly_to_anno(-1, polys[i], annos[i], recompute=True)
             polys_annos = list(zip(polys, annos))
             merge = True
             while merge:
@@ -82,9 +86,9 @@ def main(args):
     json.dump(labels, open(json_path, 'w'), sort_keys=True, indent=4, separators=(',', ': '))
 
 
-def poly_to_anno(new_id, poly, old_anno):
+def poly_to_anno(new_id, poly, old_anno, recompute=False):
     new_anno = copy.deepcopy(old_anno)
-    if new_anno['id'] == -1:    # merged polygon, recompute segmentation, bbox, area
+    if new_anno['id'] == -1 or recompute:    # merged polygon, recompute segmentation, bbox, area
         # last two poly coords are starting point
         new_anno['segmentation'] = np.array(poly.exterior.coords).ravel()[:-2].reshape((1, -1)).tolist()
         bbox = list(MultiPoint(poly.exterior.coords).bounds)    # [xmin, ymin, xmax, ymax]
