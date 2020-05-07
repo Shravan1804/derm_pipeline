@@ -54,10 +54,6 @@ def main(args):
         annos_per_cats = {c['id']: [a for a in f_annos if a['category_id'] == c['id']] for c in labels['categories']}
         for annos in annos_per_cats.values():
             polys = [Polygon([c[n:n+2] for n in range(0, len(c), 2)]) for c in [a['segmentation'][0] for a in annos]]
-            for i, poly in enumerate(polys):
-                if not poly.is_valid:
-                    polys[i] = poly.buffer(0)
-                    annos[i] = poly_to_anno(-1, polys[i], annos[i], recompute=True)
             polys_annos = list(zip(polys, annos))
             merge = True
             while merge:
@@ -73,6 +69,7 @@ def main(args):
                 if merge:
                     polys_annos.remove(p1_a1)
                     polys_annos.remove(p2_a2)
+                    assert type(p1_a1[0]) is Polygon and type(p2_a2[0]) is Polygon, f'p1:{type(p1_a1[0])}, p2:{type(p2_a2[0])}'
                     p3 = unary_union([p1_a1[0], p2_a2[0]])
                     polys_annos.append((p3, poly_to_anno(-1, p3, p1_a1[1])))
             for poly, anno in polys_annos:
