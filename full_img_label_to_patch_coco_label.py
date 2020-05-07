@@ -39,6 +39,8 @@ def main(args):
                     print(img, "Unsupported polygon (", anno['segmentation'], ") skipping...")
                     continue
                 a_poly = Polygon([anno['segmentation'][0][n:n+2] for n in range(0, len(anno['segmentation'][0]), 2)])
+                if not a_poly.is_valid:
+                    a_poly = a_poly.buffer(0)
                 if patch_poly.intersects(a_poly):
                     inters = patch_poly.intersection(a_poly)
                     inters = [inters] if type(inters) is Polygon else inters  # Multipolygon case
