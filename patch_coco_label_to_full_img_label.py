@@ -69,12 +69,10 @@ def main(args):
                 if merge:
                     polys_annos.remove(p1_a1)
                     polys_annos.remove(p2_a2)
-                    assert type(p1_a1[0]) is Polygon and type(p2_a2[0]) is Polygon, f'p1:{type(p1_a1[0])},' \
-                                                                                    f'p2:{type(p2_a2[0])}'
                     p3 = unary_union([p1_a1[0], p2_a2[0]])
-                    p3s = [p3] if type(p1_a1[0]) is Polygon else p3
-                    for p3 in p3s:
-                        polys_annos.append((p3, poly_to_anno(-1, p3, p1_a1[1])))
+                    p3 = p3 if type(p3) is Polygon else unary_union(p3)
+                    assert type(p3) is Polygon, f'union: {type(p3)}'
+                    polys_annos.append((p3, poly_to_anno(-1, p3, p1_a1[1])))
             for poly, anno in polys_annos:
                 new_annotations.append(poly_to_anno(anno_id, poly, anno))
                 anno_id += 1
