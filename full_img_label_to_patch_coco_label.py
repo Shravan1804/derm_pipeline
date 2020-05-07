@@ -1,6 +1,7 @@
 import os
 import copy
 import json
+import pickle
 import argparse
 
 import numpy as np
@@ -8,7 +9,6 @@ from tqdm import tqdm
 from shapely.geometry import Polygon, MultiPoint
 
 import common
-from PatchExtractor import PatchExtractor
 
 
 def main(args):
@@ -21,8 +21,7 @@ def main(args):
         f_annos[id_full_img[anno['image_id']]].append(anno)
 
     print("CONVERTING FULL IMG LABELS TO NEW PATCH SIZE")
-    patcher = PatchExtractor(ps)
-    img_pms = patcher.imgs_to_patches(args.full_imgs)
+    img_pms = pickle.load(open(args.patches, "rb"))[0][1]
     for img in list(img_pms.keys()):
         if img not in f_annos:
             img_pms.pop(img)
@@ -59,19 +58,19 @@ def main(args):
 
     labels['images'] = new_image_patches
     labels['annotations'] = new_annotations
-    json_path = os.path.join(args.full_imgs, f'patched{ps}_coco.json')
+    json_path = os.path.join(os.path.dirname(args.patches), f'patched{ps}_coco.json')
     print("SAVING", json_path)
     json.dump(labels, open(json_path, 'w'), sort_keys=True, indent=4, separators=(',', ': '))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Converts patch coco labels to full img labels")
-    parser.add_argument('--full-imgs', type=str, required=True, help="Path of dir containing full imgs")
+    parser.add_argument('--patches', type=str, help="Pickle file containing patch maps")
     parser.add_argument('--labels', type=str, help="JSON file containing patch labels in coco format")
     parser.add_argument('-p', '--patch-size', default=1024, type=int, help="patch size to convert labels to")
     args = parser.parse_args()
 
-    common.check_dir_valid(args.full_imgs)
+    common.check_file_valid(args.patches)
     common.check_file_valid(args.labels)
 
     common.time_method(main, args)
