@@ -56,7 +56,7 @@ def main(args):
             polys = [Polygon([c[n:n+2] for n in range(0, len(c), 2)]) for c in [a['segmentation'][0] for a in annos]]
             polys_annos = list(zip(polys, annos))
             merge = True
-            while merge:
+            while merge and len(polys_annos) > 0:
                 for a in polys_annos:
                     merge = False
                     for b in polys_annos:
