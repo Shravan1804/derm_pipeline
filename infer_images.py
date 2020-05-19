@@ -98,7 +98,7 @@ class ClassifModel(CustomModel):
         fig, ax = plt.subplots(1, figsize=(20, 20))
         colors = [(255, 255, 0), (255, 255, 0), (0, 0, 255)]
         for patch, pred in preds.items():
-            h, w = PatchExtractor.get_pos_from_patch_name(patch)
+            h, w = PatchExtractor.get_position(patch)
             for i, p in enumerate(pred):
                 cv2.putText(img_arr, p, (50 + w, (i+1)*50 + h), cv2.FONT_HERSHEY_SIMPLEX, 2, colors[i], thickness=3)
         ax.imshow(img_arr)
@@ -432,16 +432,16 @@ def main():
     # img_list = [os.path.join(args.img_dir, i) for i in ['run13_00099.jpg', 'run13_00016.jpg', 'run13_00083.jpg', 'run13_00014.jpg', 'run13_00123.jpg', 'run13_00073.jpg', 'run13_00143.jpg', 'run13_00064.jpg', 'run13_00117.jpg', 'run13_00150.jpg', 'run13_00002.jpg', 'run13_00110.jpg', 'run13_00028.jpg', 'run13_00032.jpg', 'run13_00074.jpg']]
     for img_id, img_path in enumerate(img_list):
         file, ext = os.path.splitext(os.path.basename(img_path))
-        im = cv2.cvtColor(patcher.load_img_from_disk(img_path), cv2.COLOR_BGR2RGB)
+        im = cv2.cvtColor(patcher.load_image(img_path), cv2.COLOR_BGR2RGB)
         gt = ObjDetecModel.get_img_gt(img_path)
         if args.obj_detec and args.show_gt and not args.no_graphs:
             model.show_preds(im, [gt], title=f'Ground Truth for {file}{ext}', fname=f'{file}_00_gt{ext}')
         print("Creating patches for", img_path)
-        pm = patcher.img_as_grid_of_patches(im, img_path)
+        pm = patcher.patch_grid(img_path, im)
         # create batches
         b_pm = [pm[i:min(len(pm), i+args.batch_size)] for i in range(0, len(pm), args.batch_size)]
         # lst of batches with a batch being a tuple containing lst of patch maps and lst of corresponding image patches
-        b_patches = [(b, [patcher.get_patch_from_idx(im, pms['idx_h'], pms['idx_w']) for pms in b]) for b in b_pm]
+        b_patches = [(b, [patcher.extract_patch(im, pms['idx_h'], pms['idx_w']) for pms in b]) for b in b_pm]
         print("Applying model to patches")
         pm_preds = unbatch([(pms, model.predict_imgs(ims)) for pms, ims in tqdm(b_patches)])
         if args.obj_detec:
@@ -460,7 +460,7 @@ def main():
             title = f'Predictions with confidence > {args.conf_thresh}'
             plot_name = f'{file}_01_conf_{args.conf_thresh}{ext}'
         elif args.classif:
-            neighbors = {p['patch_path']: patcher.get_neighboring_patches(p, im.shape, d=1) for p in pm}
+            neighbors = {p['patch_path']: patcher.neighboring_patches(p, im.shape, d=1) for p in pm}
             #DEBUG NEIGHBORS:
             #[print("Error", p, "does not seem correct") for neigh in neighbors.values() for p in neigh if p not in [a['patch_path'] for a in pm]]
             preds = {pm['patch_path']: pred for pm, pred in pm_preds}

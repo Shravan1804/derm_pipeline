@@ -1,8 +1,6 @@
 import os
 import cv2
 import math
-import torch
-import random
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
@@ -11,7 +9,8 @@ import multiprocessing as mp
 import concurrency
 import common
 
-class DrawHelper(object):
+class DrawHelper:
+    """Helper class to draw patches delimitations on images"""
     def __init__(self, thickness=1, style='dotted', gap=10):
         self.thickness = thickness
         self.style = style
@@ -60,7 +59,7 @@ class DrawHelper(object):
     def test(self):
         im = np.zeros((800, 800, 3), dtype='uint8')
         patcher = PatchExtractor(256)
-        patch_maps = patcher.img_as_grid_of_patches(im, 'test.jpg')
+        patch_maps = patcher.patch_grid(im, 'test.jpg')
         patcher.draw_patches(im, patch_maps)
         plt.figure()
         fig, ax = plt.subplots(1, figsize=(12, 9))
@@ -70,42 +69,42 @@ class DrawHelper(object):
         plt.close()
 
 
-class PatchExtractor(object):
+class PatchExtractor:
+    """Extracts patches from images either by random sampling or splitting the image as a grid"""
     SEP = '__SEP__'
 
-    def __init__(self, patch_size, resize=True):
+    def __init__(self, patch_size, seed=42):
+        """Seed used when sampling patches from image"""
         self.patch_size = patch_size
-        self.resize = resize
+        np.random.seed(seed)
 
-    def imgs_to_patches(self, dirname):
-        grids = {}
+    def dir_images_to_patches(self, dirname):
         files = common.list_files(dirname, full_path=True)
         exclude = [p for p in files if not(p.endswith('.png') or p.endswith('.jpg'))]
         if exclude:
-            print("Warning, these files are excluded:", exclude)
-        for img_path in [f for f in files if f not in exclude]:
-            im = os.path.basename(img_path)
-            if im not in grids:
-                grids[im] = []
-            grids[im].extend(self.img_as_grid_of_patches(self.load_img_from_disk(img_path), img_path))
-        return grids
+            print("Warning: In", dirname, "these files are excluded:", exclude)
+        return {os.path.basename(f): self.patch_grid(f) for f in files if f not in exclude}
 
-    def img_as_grid_of_patches(self, im_arr, img_path):
-        """Converts img into a grid of patches"""
-        if self.resize:
-            im_arr = self.maybe_resize(im_arr)
+    def sample_patches(self, img_path, nb, im_arr=None):
+        """Samples nb patches from img"""
+        assert nb > 1, f"Cannot sample nb={nb} patches from {img_path}."
+        im_arr = self.load_image(img_path) if im_arr is None else self.maybe_resize(im_arr)
         im_h, im_w = im_arr.shape[:2]
-        if im_h < self.patch_size or im_w < self.patch_size:
-            raise Exception(f'Error, patch size {self.patch_size} do not fit img shape {im_arr.shape}')
+        idx_h, idx_w = (np.random.randint(low=0, high=1 + im_h - self.patch_size, size=nb),
+                        np.random.randint(low=0, high=1 + im_w - self.patch_size, size=nb))
+        return [PatchExtractor.create_pm(img_path, h, w) for h, w in zip(idx_h, idx_w)]
+
+    def patch_grid(self, img_path, im_arr=None):
+        """Converts img into a grid of patches"""
+        im_arr = self.load_image(img_path) if im_arr is None else self.maybe_resize(im_arr)
+        im_h, im_w = im_arr.shape[:2]
         step_h = self.patch_size - PatchExtractor.get_overlap(im_h, self.patch_size)
         # Don't forget + 1 in the stop argument otherwise the upper bound won't be included
         grid_h = np.arange(start=0, stop=1 + im_h - self.patch_size, step=step_h)
         step_w = self.patch_size - PatchExtractor.get_overlap(im_w, self.patch_size)
         grid_w = np.arange(start=0, stop=1 + im_w - self.patch_size, step=step_w)
-        grid_idx = [self.get_patch_map(img_path, 0, a, b) for a in grid_h for b in grid_w]
-        if not grid_idx:
-            grid_idx = [self.get_patch_map(img_path, 0, 0, 0)]
-        return grid_idx
+        grid_idx = [PatchExtractor.create_pm(img_path, a, b) for a in grid_h for b in grid_w]
+        return grid_idx if grid_idx else [PatchExtractor.create_pm(img_path, 0, 0)]
 
     def maybe_resize(self, im_arr):
         """Resize img only if one of its dimensions is smaller than the patch size otherwise returns img unchanged"""
@@ -118,23 +117,21 @@ class PatchExtractor(object):
         else:
             return im_arr
 
-    def load_img_from_disk(self, img_path):
+    def load_image(self, img_path):
+        common.check_file_valid(img_path)
         im = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
-        return self.maybe_resize(im) if self.resize else im
+        return self.maybe_resize(im)
 
-    def get_patch_from_patch_map(self, im, pm):
-        return self.get_patch_from_idx(im, pm['idx_h'], pm['idx_w'])
+    def pm_to_patch(self, im, pm):
+        """Creates patch from patch map"""
+        return self.extract_patch(im, pm['idx_h'], pm['idx_w'])
 
-    def get_patch_from_idx(self, im, id_h, id_w):
+    def extract_patch(self, im, id_h, id_w):
+        """Extracts patch at provided position"""
         return im[id_h:id_h + self.patch_size, id_w:id_w + self.patch_size]
 
-    def get_patch_map(self, img_path, rotation, idx_h, idx_w):
-        patch_name = PatchExtractor.get_patch_fname(img_path, idx_h, idx_w)
-        return {'patch_path': patch_name, 'rotation': rotation, 'idx_h': idx_h, 'idx_w': idx_w}
-
-    def get_neighboring_patches(self, pm, img_shape, d=1, include_self=True):
-        """ Will include itself in the list of neighbors """
-        img_name = PatchExtractor.get_img_fname_from_patch(pm)
+    def neighboring_patches(self, pm, img_shape, d=1, include_self=True):
+        img_name = PatchExtractor.get_full_img(pm)
         max_h, max_w = img_shape[0] - self.patch_size, img_shape[1] - self.patch_size
         step_h = self.patch_size - PatchExtractor.get_overlap(img_shape[0], self.patch_size)
         step_w = self.patch_size - PatchExtractor.get_overlap(img_shape[1], self.patch_size)
@@ -150,19 +147,27 @@ class PatchExtractor(object):
     def save_patches(self, source, dest, dirname, grids, mask_prefix=None):
         dest = common.maybe_create(dest, dirname)
         for img, patches in grids.items():
-            im = self.load_img_from_disk(os.path.join(source, dirname, img))
-            if mask_prefix is not None and dirname.startswith(mask_prefix):
+            im = self.load_image(os.path.join(source, dirname, img))
+            if mask_prefix is not None and dirname.startswith(mask_prefix):     # mask img are 2D
                 im = im[:, :, 0]    # discard all but first channel
             for pm in patches:
-                cv2.imwrite(os.path.join(dest, pm['patch_path']), self.get_patch_from_patch_map(im, pm))
+                cv2.imwrite(os.path.join(dest, pm['patch_path']), self.pm_to_patch(im, pm))
 
     @staticmethod
-    def get_pos_from_patch_name(patch_name):
+    def create_pm(img_path, idx_h, idx_w):
+        """Creates patch map"""
+        patch_name = PatchExtractor.get_patch_fname(img_path, idx_h, idx_w)
+        return {'patch_path': patch_name, 'full_img': img_path, 'idx_h': idx_h, 'idx_w': idx_w}
+
+    @staticmethod
+    def get_position(patch_name):
+        """Extracts patch coordinates from its filename"""
         ext = os.path.splitext(patch_name)[1]
         return tuple(int(t) for t in patch_name.replace(ext, '').split(f'{PatchExtractor.SEP}_h')[1].split('_w'))
 
     @staticmethod
     def get_overlap(n, div):
+        """Computes minimum overlap between patches"""
         remainder = n % div
         quotient = max(1, int(n / div))
         overlap = math.ceil((div - remainder) / quotient)
@@ -173,12 +178,13 @@ class PatchExtractor(object):
         return '_h' + str(idx_h) + '_w' + str(idx_w)
 
     @staticmethod
-    def get_img_fname_from_patch(pm):
-        return pm['patch_path'].split(PatchExtractor.SEP)[0] + os.path.splitext(pm['patch_path'])[1]
+    def get_full_img(pm):
+        """Returns filename of full image"""
+        return os.path.basename(pm['full_img'])
 
     @staticmethod
-    def get_img_fname_from_patch_fname(patch_fname):
-        return PatchExtractor.get_img_fname_from_patch({'patch_path': patch_fname})
+    def get_full_img_from_patch(patch_fname):
+        return os.path.basename(patch_fname).split(PatchExtractor.SEP)[0] + os.path.splitext(patch_fname)[1]
 
     @staticmethod
     def get_patch_fname(img_path, idx_h, idx_w):
@@ -191,7 +197,7 @@ def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest, m_prefix):
     pms = []
     for c in dirs:
         print(f"Process {proc_id}: patching {c} patches")
-        grids = patcher.imgs_to_patches(os.path.join(data, c))
+        grids = patcher.dir_images_to_patches(os.path.join(data, c))
         print(f"Process {proc_id}: saving {c} patches")
         patcher.save_patches(data, dest, c, grids, m_prefix)
         pms.append((c, grids))
@@ -214,7 +220,7 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Converts dataset to a patch dataset without data augmentation")
+    parser = argparse.ArgumentParser(description="Creates patch dataset from image dataset")
     parser.add_argument('--data', type=str, required=True, help="source data root directory absolute path")
     parser.add_argument('--dest', type=str, help="directory where the patches should be saved")
     parser.add_argument('-p', '--patch-size', default=512, type=int, help="patch size")

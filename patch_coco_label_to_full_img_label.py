@@ -17,7 +17,7 @@ def main(args):
     with open(args.labels, 'r') as f:
         labels = json.load(f)
     id_to_patch_name = {img['id']: img['file_name'] for img in labels['images']}
-    patch_id_to_full_img = {k: PatchExtractor.get_img_fname_from_patch_fname(v) for k, v in id_to_patch_name.items()}
+    patch_id_to_full_img = {k: PatchExtractor.get_full_img_from_patch(v) for k, v in id_to_patch_name.items()}
     full_img_id = {k: i for i, k in enumerate(sorted(set(patch_id_to_full_img.values())))}
 
     print("CREATING NEW LIST OF FULL IMAGES")
@@ -40,7 +40,7 @@ def main(args):
             anno = copy.deepcopy(lanno)
             anno['segmentation'] = [seg]
             full_img = patch_id_to_full_img[anno['image_id']]
-            y, x = PatchExtractor.get_pos_from_patch_name(id_to_patch_name[anno['image_id']])
+            y, x = PatchExtractor.get_position(id_to_patch_name[anno['image_id']])
             anno['image_id'] = full_img_id[full_img]
             anno['bbox'] = (np.array(anno['bbox']) + np.ones(4) * np.array([x, y, x, y])).tolist()
             n = len(anno['segmentation'][0])
