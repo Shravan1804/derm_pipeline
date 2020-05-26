@@ -151,6 +151,16 @@ class PatchExtractor:
         # print(pm['patch_path'], 'neighbors:', [r['patch_path'] for r in res])
         return res
 
+    def are_neighbors(self, p1, p2, d=1, first=True):
+        dist = self.patch_size * d
+        h1, w1 = PatchExtractor.get_position(p1)
+        hmin1, hmax1 = max(0, h1 - dist), h1 + self.patch_size + dist
+        wmin1, wmax1 = max(0, w1 - dist), w1 + self.patch_size + dist
+        h2, w2 = PatchExtractor.get_position(p2)
+        # recursion for hypothetic case where one patch is englobed in the second
+        return (hmin1 <= h2 + self.patch_size <= hmax1 and wmin1 <= w2 + self.patch_size <= wmax1) or\
+               (hmin1 <= h2 <= hmax1 and wmin1 <= w2 <= wmax1) or (first and self.are_neighbors(p2, p1, d, False))
+
     def save_patches(self, source, dest, dirname, grids, mask_prefix=None):
         dest = common.maybe_create(dest, dirname)
         for img, patches in grids.items():
