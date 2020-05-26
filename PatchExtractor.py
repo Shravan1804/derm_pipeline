@@ -72,6 +72,7 @@ class DrawHelper:
 class PatchExtractor:
     """Extracts patches from images either by random sampling or splitting the image as a grid"""
     SEP = '__SEP__'
+    RAND = '__RAND__'
 
     def __init__(self, patch_size, seed=42):
         """Seed used when sampling patches from image"""
@@ -130,6 +131,12 @@ class PatchExtractor:
         """Extracts patch at provided position"""
         return im[id_h:id_h + self.patch_size, id_w:id_w + self.patch_size]
 
+    def find_full_img_res_from_patches(self, patches):
+        positions = [PatchExtractor.get_position(p) for p in patches]
+        max_h = max([p[0] for p in positions])
+        max_w = max([p[1] for p in positions])
+        return max_h + self.patch_size, max_w + self.patch_size
+
     def neighboring_patches(self, pm, img_shape, d=1, include_self=True):
         img_name = PatchExtractor.get_full_img(pm)
         max_h, max_w = img_shape[0] - self.patch_size, img_shape[1] - self.patch_size
@@ -140,7 +147,7 @@ class PatchExtractor:
         neighbors = [(a, b) for a, b in [(m + pm['idx_h'], n + pm['idx_w']) for m in scope_h for n in scope_w]
                      if 0 <= a <= max_h and 0 <= b <= max_w
                      and (include_self or not (a == pm['idx_h'] and b == pm['idx_w']))]
-        res = [PatchExtractor.get_patch_fname(img_name, h, w) for h, w in neighbors]
+        res = [PatchExtractor.get_patch_name(img_name, h, w) for h, w in neighbors]
         # print(pm['patch_path'], 'neighbors:', [r['patch_path'] for r in res])
         return res
 
@@ -154,10 +161,17 @@ class PatchExtractor:
                 cv2.imwrite(os.path.join(dest, pm['patch_path']), self.pm_to_patch(im, pm))
 
     @staticmethod
-    def create_pm(img_path, idx_h, idx_w):
+    def create_pm(img_path, idx_h, idx_w, randomly_sampled=False):
         """Creates patch map"""
-        patch_name = PatchExtractor.get_patch_fname(img_path, idx_h, idx_w)
+        patch_name = PatchExtractor.get_patch_name(img_path, idx_h, idx_w, randomly_sampled)
         return {'patch_path': patch_name, 'full_img': img_path, 'idx_h': idx_h, 'idx_w': idx_w}
+
+    @staticmethod
+    def pm_from_patch(patch_name):
+        pm = PatchExtractor.create_pm(PatchExtractor.get_full_img_from_patch(patch_name),
+                                      *PatchExtractor.get_position(patch_name))
+        assert pm['patch_path'] == os.path.basename(patch_name)
+        return pm
 
     @staticmethod
     def get_position(patch_name):
@@ -174,23 +188,24 @@ class PatchExtractor:
         return 0 if overlap == n else overlap
 
     @staticmethod
-    def get_patch_suffix(idx_h, idx_w):
-        return '_h' + str(idx_h) + '_w' + str(idx_w)
-
-    @staticmethod
     def get_full_img(pm):
         """Returns filename of full image"""
         return os.path.basename(pm['full_img'])
 
     @staticmethod
-    def get_full_img_from_patch(patch_fname):
-        return os.path.basename(patch_fname).split(PatchExtractor.SEP)[0] + os.path.splitext(patch_fname)[1]
+    def get_full_img_from_patch(patch_name):
+        return os.path.basename(patch_name).split(PatchExtractor.SEP)[0] + os.path.splitext(patch_name)[1]
 
     @staticmethod
-    def get_patch_fname(img_path, idx_h, idx_w):
+    def get_patch_suffix(idx_h, idx_w):
+        return '_h' + str(idx_h) + '_w' + str(idx_w)
+
+    @staticmethod
+    def get_patch_name(img_path, idx_h, idx_w, randomly_sampled=False):
         """Create patch file basename"""
         file, ext = os.path.splitext(os.path.basename(img_path))
-        return file + PatchExtractor.SEP + PatchExtractor.get_patch_suffix(idx_h, idx_w) + ext
+        sep = PatchExtractor.SEP + PatchExtractor.RAND if randomly_sampled else PatchExtractor.SEP
+        return file + sep + PatchExtractor.get_patch_suffix(idx_h, idx_w) + ext
 
 
 def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest, m_prefix):
