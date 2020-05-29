@@ -109,7 +109,7 @@ class ClassifModel(CustomModel):
         plt.show()
         plt.close()
 
-    def prediction_validation(self, preds, neighbors, consider_top=2):
+    def prediction_validation(self, preds, neighbors, cats=None, consider_top=2):
         pred_probs = {k: v[2].numpy() for k, v in preds.items()}
         preds = {k: [f'orig: {str(v[0])}'] for k, v in preds.items()}
         summed_neighbors_preds = {k: sum([pred_probs[p] for p in neighbors[k]]) for k in preds.keys()}
@@ -119,6 +119,20 @@ class ClassifModel(CustomModel):
             top_preds = list(zip(np.array(self.classes)[topk], neighbors_preds[topk]))
             preds[patch] = [f'{i+1}: {p[0]}' for i, p in enumerate(top_preds)] + preds[patch]
         return preds
+
+    def prediction_validation2(self, preds, neighbors, cats, consider_top=2):
+        pred_probs = {k: v[2].numpy() for k, v in preds.items()}
+        res = {k: [f'orig: {str(v[0])}'] for k, v in preds.items()}
+        for k in res.keys():
+            orig = int(preds[k][1])
+            neigh_preds = {}
+            for neighbor in neighbors[k]:
+                for top in pred_probs[neighbor].argsort()[::-1][:consider_top]:
+                    neigh_preds[top] = neigh_preds.get(top, 0) + 1
+            most_probable = [t[0] for t in sorted(neigh_preds.items(), key=lambda item: item[1])[::-1][:consider_top]]
+            if orig not in most_probable:
+                res[k].append(f'corr: {cats[int(most_probable[0])]}')
+        return res
 
 
 class ObjDetecModel(CustomModel):
@@ -464,7 +478,7 @@ def main():
             #DEBUG NEIGHBORS:
             #[print("Error", p, "does not seem correct") for neigh in neighbors.values() for p in neigh if p not in [a['patch_path'] for a in pm]]
             preds = {pm['patch_path']: pred for pm, pred in pm_preds}
-            preds = model.prediction_validation(preds, neighbors)
+            preds = model.prediction_validation2(preds, neighbors, cats=model.model.data.classes)
             title = f'Body localization'
             plot_name = f'{file}_body_loc_{ext}'
         if args.draw_patches:
