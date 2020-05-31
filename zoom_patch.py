@@ -33,6 +33,9 @@ class ZoomPatcher(ImgClassifPreprocessor):
             img_name, ext = os.path.splitext(os.path.basename(img_path))
             dest_dir = os.path.basename(os.path.dirname(img_path))
             orig = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+            if len(orig.shape) < 3:
+                print("Proc", pid, "skips", img_path, "as its shape is", orig.shape, ".")
+                continue
             facts_new_sizes = self.get_new_img_sizes(*orig.shape[:-1])
             patcher = PatchExtractor(patch_size=self.patch_size)
             for fact, new_size in facts_new_sizes:
