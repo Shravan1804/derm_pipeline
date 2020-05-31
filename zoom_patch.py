@@ -28,6 +28,7 @@ class ZoomPatcher(ImgClassifPreprocessor):
         return facts_new_sizes
 
     def preprocess(self, pid, pmq, batch):
+        print("Proc", pid, "started pre-processing", len(batch), "images.")
         for img_path in batch:
             img_name, ext = os.path.splitext(os.path.basename(img_path))
             dest_dir = os.path.basename(os.path.dirname(img_path))
@@ -40,7 +41,7 @@ class ZoomPatcher(ImgClassifPreprocessor):
                 for pm in patcher.patch_grid(zoom_img_name, im_arr=im):
                     cv2.imwrite(os.path.join(self.dest, dest_dir, pm['patch_path']), patcher.pm_to_patch(im, pm))
                     patcher.pm_to_patch(im, pm)
-        print("Proc", pid, "completed")
+        print("Proc", pid, "completed pre-processing", len(batch), "images.")
 
 
 def main(args):
