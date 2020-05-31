@@ -244,13 +244,18 @@ def main(args):
     print("done")
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Creates patch dataset from image dataset")
+def get_patcher_arg_parser(desc="Creates patch dataset from image dataset"):
+    parser = argparse.ArgumentParser(description=desc)
     parser.add_argument('--data', type=str, required=True, help="source data root directory absolute path")
     parser.add_argument('--dest', type=str, help="directory where the patches should be saved")
     parser.add_argument('-p', '--patch-size', default=512, type=int, help="patch size")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
-    parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix of mask dirs (for these we keep only 1 channel)")
+    parser.add_argument('--mdir-prefix', type=str, default='masks_',
+                        help="prefix of mask dirs (for these we keep only 1 channel)")
+    return parser
+
+if __name__ == '__main__':
+    parser = get_patcher_arg_parser()
     args = parser.parse_args()
 
     args.data = args.data.rstrip('/')
