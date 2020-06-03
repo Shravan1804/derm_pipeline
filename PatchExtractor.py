@@ -208,14 +208,18 @@ class PatchExtractor:
 
     @staticmethod
     def get_patch_suffix(idx_h, idx_w):
-        return '_h' + str(idx_h) + '_w' + str(idx_w)
+        return 'h' + str(idx_h) + '_w' + str(idx_w)
+
+    @staticmethod
+    def get_patch_suffix_from_pm(pm):
+        return PatchExtractor.get_patch_suffix(pm['idx_h'], pm['idx_w'])
 
     @staticmethod
     def get_patch_name(img_path, idx_h, idx_w, randomly_sampled=False):
         """Create patch file basename"""
         file, ext = os.path.splitext(os.path.basename(img_path))
         sep = PatchExtractor.SEP + PatchExtractor.RAND if randomly_sampled else PatchExtractor.SEP
-        return file + sep + PatchExtractor.get_patch_suffix(idx_h, idx_w) + ext
+        return file + sep + '_' + PatchExtractor.get_patch_suffix(idx_h, idx_w) + ext
 
 
 def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest, m_prefix):
