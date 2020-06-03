@@ -69,7 +69,6 @@ class ZoomPatcher(Zoom):
 
 
 def main(args):
-    args.workers = 1
     params = {'source': args.data, 'dest': args.dest, 'workers': args.workers, 'zoom_facts': args.zoom}
     if args.zoom_only:
         preproc = Zoom(**params)
