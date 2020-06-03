@@ -25,7 +25,7 @@ class Zoom(ImgClassifPreprocessor):
             yield f, (int(w_orig * f), int(h_orig * f))     # cv2 expects (WIDTH, HEIGHT)
 
     def img_zooms(self, img_path, orig):
-        for fact, new_size in self.get_new_img_sizes(*orig.shape[:-1]):
+        for fact, new_size in self.get_new_img_sizes(*orig.shape[:2]):
             img_name, ext = os.path.splitext(os.path.basename(img_path))
             yield f'{img_name}_zoom_{round(fact, 2)}{ext}', cv2.resize(orig, new_size)
 
