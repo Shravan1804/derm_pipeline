@@ -32,7 +32,7 @@ class Preprocessor:
         batch_size = math.ceil(len(self.items) / self.workers)
         return common.batch_list(self.items, batch_size)
 
-    def preprocess(self):
+    def preprocess(self, pid, pmq, batch):
         raise NotImplementedError
 
     def collect_items(self):
