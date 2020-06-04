@@ -78,10 +78,7 @@ class PatchSamplerDataset(object):
             print("Loaded patches from previous run, seed = ", seed)
 
     def validate_path(self, path):
-        if path.endswith('/'):
-            return path[:-1]
-        else:
-            return path
+        return path.rstrip('/')
 
     def get_height_and_width(self, idx):
         im, pm = self[idx]
@@ -276,12 +273,7 @@ class PatchSamplerDataset(object):
             return dataset_name + '_' + os.path.basename(os.path.dirname(self.root))
 
     def get_default_cache_root_dir(self):
-        """Needs self.split_data and self.root set. If not self.split_data assumes data already separated in e.g. train, valid dir"""
-        dir_name = os.path.dirname(self.root)
-        if self.split_data:
-            return dir_name
-        else:
-            return os.path.dirname(dir_name)
+        return os.path.dirname(self.root)
 
     def get_patch_list(self):
         if self.is_test:
