@@ -12,7 +12,7 @@ from PatchSamplerDataset import PatchSamplerDataset
 class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
 
     def __init__(self, root, patch_size, mask_file_ext='.png', min_object_px_size=30, dilate_small=False, quantiles=None,
-                 metrics_names=None, dest=None, filter_obj_size="all", **kwargs):
+                 metrics_names=None, split_data=True, dest=None, filter_obj_size="all", **kwargs):
         if filter_obj_size not in ["small", "medium", "large", "all"]:
             raise Exception("filter_by_size argument should be either small, medium, large or all")
         else:
@@ -26,12 +26,14 @@ class ObjDetecPatchSamplerDataset(PatchSamplerDataset):
         self.dilate_small = dilate_small
         self.quantiles = [0.25, 0.5, 0.75, 0.99] if quantiles is None else quantiles
         self.metrics_names = ['bbox_areas', 'segm_areas', 'obj_count'] if metrics_names is None else metrics_names
+        self.split_data = split_data
         self.dest = self.get_default_cache_root_dir() if dest is None else dest
 
         self.masks_dirs = [m for m in sorted(os.listdir(self.root)) if os.path.isdir(os.path.join(self.root, m))
                            and m.startswith('masks_')]
         self.crop_dataset()
-        super().__init__(self.root, self.patch_size, root_img_dir=self.root_img_dir, dest=self.dest, **kwargs)
+        super().__init__(self.root, self.patch_size, split_data=split_data, root_img_dir=self.root_img_dir,
+                         dest=self.dest, **kwargs)
         if len(self.get_patch_list()) == 0:
             self.patches = self.prepare_patches_from_imgs(self.get_img_dir(self.root))
             self.save_patches_to_disk()
