@@ -3,10 +3,10 @@ import random
 import argparse
 import numpy as np
 from shutil import copy
-from common import *
 from sklearn.model_selection import KFold
 from sklearn.model_selection import train_test_split
 
+import common
 
 def dataset_split(args, directory):
     files = [os.path.join(args.data, directory, f) for f in os.listdir(os.path.join(args.data, directory))]
@@ -28,11 +28,11 @@ def copy_imgs(args, cat, splits, mask_dirs=None):
     print(f"Copying {cat} images ...")
     for ds, files in splits.items():
         for f in files:
-            copy(f, os.path.join(maybe_create(args.dest, ds, cat), os.path.basename(f)))
+            copy(f, os.path.join(common.maybe_create(args.dest, ds, cat), os.path.basename(f)))
             if mask_dirs:
                 for mdir in mask_dirs:
                     m = os.path.splitext(os.path.basename(f))[0] + args.mext
-                    copy(os.path.join(args.data, mdir, m), os.path.join(maybe_create(args.dest, ds, mdir), m))
+                    copy(os.path.join(args.data, mdir, m), os.path.join(common.maybe_create(args.dest, ds, mdir), m))
 
 
 def main(args):
@@ -59,13 +59,13 @@ if __name__ == '__main__':
     parser.add_argument('--val-size', default=.2, type=float, help="Proportion of validation set")
     parser.add_argument('--nfolds', default=5, type=int, help="Number of folds")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
-    add_obj_detec_args(parser)
+    common.add_obj_detec_args(parser)
     args = parser.parse_args()
 
-    check_args(args)
+    common.check_dir_valid(args.data)
 
     if args.dest is None:
-        args.dest = maybe_create(os.path.dirname(args.data), os.path.basename(args.data) + '_splitted')
+        args.dest = common.maybe_create(os.path.dirname(args.data), os.path.basename(args.data) + '_splitted')
     args.dest = args.dest.rstrip('/')
 
     main(args)
