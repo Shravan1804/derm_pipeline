@@ -165,7 +165,7 @@ class PatchExtractor:
         dest = common.maybe_create(dest, dirname)
         for img, patches in grids.items():
             im = self.load_image(os.path.join(source, dirname, img))
-            if mask_prefix is not None and dirname.startswith(mask_prefix):     # mask img are 2D
+            if mask_prefix is not None and dirname.startswith(mask_prefix) and len(im.shape) > 3:     # mask img are 2D
                 im = im[:, :, 0]    # discard all but first channel
             for pm in patches:
                 cv2.imwrite(os.path.join(dest, pm['patch_path']), self.pm_to_patch(im, pm))
