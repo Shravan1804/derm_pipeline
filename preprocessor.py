@@ -4,6 +4,7 @@ import math
 import argparse
 import multiprocessing as mp
 
+from scipy import ndimage
 
 import concurrency
 import common
@@ -49,27 +50,27 @@ class ImgPreprocessor:
         for img_path in batch:
             dest_dir = os.path.basename(os.path.dirname(img_path))
             orig = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
-            processed = [(os.path.basename(img_path), orig)]
+            processed = [(os.path.basename(img_path), orig, True)]  # (orig name, orig img, force apply)
             for transform in transforms:
-                processed = transform.apply(processed, os.path.basename(img_path), orig)
+                processed = transform.apply(processed)
             for name, processed_img in processed:
                 cv2.imwrite(os.path.join(self.dest, dest_dir, name), processed_img)
         print("Process", pid, "completed pre-processing", len(batch), "images.")
 
 
 class ImgTransform:
-    def __init__(self, name):
+    def __init__(self, name, force_fact=None):
         self.name = name
+        self.force_fact = force_fact
 
-    def apply(self, to_process, orig_name, orig_img):
-        applied_once = False
+    def apply(self, to_process):
         processed = []
-        for name, img in to_process:
-            if self.can_apply(img):
-                applied_once = True
+        for name, img, force in to_process:
+            if not self.can_apply(img) and force:
+                processed.extend(self.force_process(name, img))
+            elif self.can_apply(img):
                 processed.extend(self.process(name, img))
-        if not applied_once:
-            processed.extend(self.force_process(orig_name, orig_img))
+        assert len(processed) > 0, f"Error, transform {self.name} did not produce output."
         return processed
 
     def process(self, name, img):
@@ -87,9 +88,9 @@ class ImgTransform:
 
 
 class Zoom(ImgTransform):
-    def __init__(self, zoom_facts=[1.]):
-        super().__init__('zoomed')
-        self.zoom_facts = zoom_facts
+    def __init__(self, zoom_facts=None):
+        super().__init__('zoomed', 1.0)
+        self.zoom_facts = [self.force_fact] if zoom_facts is None else zoom_facts
 
     def can_apply(self, img):
         return True
@@ -97,8 +98,32 @@ class Zoom(ImgTransform):
     def process(self, name, img):
         h, w = img.shape[:2]
         for f in self.zoom_facts:
-            # cv2 expects (WIDTH, HEIGHT)
-            yield self.processed_name(name, round(f, 2)), cv2.resize(img, (int(w * f), int(h * f)))
+            new_size = (int(w * f), int(h * f))     # cv2 expects (WIDTH, HEIGHT)
+            yield self.processed_name(name, round(f, 2)), cv2.resize(img, new_size), f == self.force_fact
+
+
+class Rotate(ImgTransform):
+    def __init__(self, rot_facts=None, rot_pad='reflect'):
+        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.rotate.html#scipy.ndimage.rotate
+        # rotation_padding=‘reflect’ or  ‘constant’ or ‘nearest’ or ‘mirror’ or ‘wrap’
+        #    mode       |   Ext   |         Input          |   Ext
+        # -----------+---------+------------------------+---------
+        # 'mirror'   | 4  3  2 | 1  2  3  4  5  6  7  8 | 7  6  5
+        # 'reflect'  | 3  2  1 | 1  2  3  4  5  6  7  8 | 8  7  6
+        # 'nearest'  | 1  1  1 | 1  2  3  4  5  6  7  8 | 8  8  8
+        # 'constant' | 0  0  0 | 1  2  3  4  5  6  7  8 | 0  0  0
+        # 'wrap'     | 6  7  8 | 1  2  3  4  5  6  7  8 | 1  2  3
+        super().__init__('rotated', 0)
+        self.rot_facts = [self.force_fact] if rot_facts is None else rot_facts
+        self.rot_pad = rot_pad
+
+    def can_apply(self, img):
+        return True
+
+    def process(self, name, img):
+        for r in self.rot_facts:
+            yield self.processed_name(name, r), ndimage.rotate(img, r, reshape=True, mode=self.rot_pad),\
+                  r == self.force_fact
 
 
 class Patch(ImgTransform):
@@ -114,15 +139,14 @@ class Patch(ImgTransform):
     def process(self, name, img):
         for pm in self.patcher.patch_grid(name, im_arr=img):
             param = PatchExtractor.get_patch_suffix_from_pm(pm)
-            yield self.processed_name(name, param), self.patcher.pm_to_patch(img, pm)
+            yield self.processed_name(name, param), self.patcher.pm_to_patch(img, pm), True
 
 
 def main(args):
     preproc = ImgPreprocessor(source=args.data, dest=args.dest, workers=args.workers)
-    if args.zoom_only:
-        transforms = [Zoom(args.zoom)]
-    else:
-        transforms = [Zoom(args.zoom), Patch(args.patch_size)]
+    transforms = [Zoom(args.zoom), Rotate(args.rotate)]
+    if not args.no_patch:
+        transforms.append(Patch(args.patch_size))
 
     preproc.apply(transforms)
 
@@ -133,7 +157,8 @@ if __name__ == '__main__':
     parser.add_argument('--dest', type=str, help="directory where the patches should be saved")
     parser.add_argument('-p', '--patch-size', default=512, type=int, help="patch size")
     parser.add_argument('--zoom', default=[.5, .75, 1, 1.5, 2], nargs='+', type=float, help="zoom factors")
-    parser.add_argument('--zoom-only', action='store_true', help="Applies only zoom augmentation")
+    parser.add_argument('--rotate', default=[0, 60, 120, 180, 240, 300], nargs='+', type=float, help="rotate factors")
+    parser.add_argument('--no-patch', action='store_true', help="Do not divide images in patch")
     parser.add_argument('--workers', type=int, help="Number of process")
     args = parser.parse_args()
 
