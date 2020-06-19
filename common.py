@@ -1,4 +1,5 @@
 import os
+import cv2
 import time
 import datetime
 from pathlib import Path
@@ -129,7 +130,6 @@ def fastai_load_model(model_params, radam=True):
 
 def fastai_load_and_prepare_img(img_path):
     import fastai.vision as fvision
-    import cv2
     im = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
     t = fvision.pil2tensor(im, dtype=im.dtype)  # converts to numpy tensor
     return fvision.Image(t.float() / 255.)  # Convert to float
@@ -140,8 +140,23 @@ def time_method(m, args=None):
     m(args)
     print(f"Work completed in {datetime.timedelta(seconds=time.time() - start)}.")
 
+
 def plt_save_fig(path, dpi=300, close=True):
     plt.savefig(path, dpi=dpi)
     if close:
         plt.close()
 
+
+def load_rgb_img(path):
+    return cv2.cvtColor(cv2.imread(path, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB)
+
+
+def plt_show_img(im, title, show=True, save_path=None):
+    fig, ax = plt.subplots()
+    ax.imshow(im)
+    ax.axis('off')
+    ax.set_title(title)
+    if save_path is not None:
+        plt_save_fig(save_path, close=False)
+    if show:
+        fig.show()
