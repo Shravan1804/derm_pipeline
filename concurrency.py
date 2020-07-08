@@ -11,8 +11,11 @@ def batch_dirs(all_dirs, workers=None):
     return workers, batch_size, common.batch_list(all_dirs, batch_size)
 
 
-def batch_files_in_dirs(root, bs):
-    return common.batch_list(common.list_files_in_dirs(root, full_path=True), bs)
+def batch_files_in_dirs(root, bs=None, workers=None):
+    files = common.list_files_in_dirs(root, full_path=True)
+    workers = min(mp.cpu_count(), len(files)) if workers is None else workers
+    bs = math.ceil(len(files) / workers) if bs is None else bs
+    return workers, bs, common.batch_list(files, bs)
 
 
 def unload_mpqueue(pmq, processes):
