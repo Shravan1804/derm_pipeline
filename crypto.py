@@ -27,7 +27,7 @@ def mp_encrypt(proc_id, files, fkey, dest):
             encrypted_data = fkey.encrypt(data.read())
             writer.write(encrypted_data)
         if i % 500 == 0:
-            f"Proc {proc_id} encrypted {i} files"
+            print(f"Proc {proc_id} encrypted {i}/{len(files)} files")
 
 def main(args):
     fkey = load_key(args.key_file)
