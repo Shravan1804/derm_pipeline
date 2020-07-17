@@ -10,6 +10,10 @@ import common
 import concurrency
 
 
+def load_user_provided_key():
+    return Fernet(input().encode())
+
+
 def load_key(key_file):
     with open(key_file, "rb") as kf:
         fkey = Fernet(kf.read())
