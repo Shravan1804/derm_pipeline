@@ -1,7 +1,9 @@
 import os
+import pickle
 import argparse
 import multiprocessing as mp
 
+from bidict import bidict
 from cryptography.fernet import Fernet
 
 import common
@@ -20,21 +22,36 @@ def decrypt(encrypted_file_path, fkey):
         return fkey.decrypt(encrypted_data.read())
 
 
-def mp_encrypt(proc_id, files, fkey, dest):
+def mp_encrypt(proc_id, files, fkey, root, dest, filenames_dict):
     for i, file in enumerate(files):
-        encrypted_dest = os.path.join(dest, os.path.basename(os.path.dirname(file)), os.path.basename(file))
+        name, ext = os.path.splitext(os.path.basename(file))
+        encrypted_dest = file.replace(root, dest).replace(name + ext, filenames_dict[name] + ext)
         with open(file, "rb") as data, open(encrypted_dest, "wb") as writer:
             encrypted_data = fkey.encrypt(data.read())
             writer.write(encrypted_data)
         if i % 500 == 0:
             print(f"Proc {proc_id} encrypted {i}/{len(files)} files")
 
+
+def create_filenames_dict(files, save_path):
+    n0 = len(str(len(files))) + 1
+    filenames_dict = bidict()
+    for i, f in enumerate(files):
+        name, ext = os.path.splitext(os.path.basename(f))
+        if name not in filenames_dict:
+            filenames_dict[name] = str(i).zfill(n0)
+    pickle.dump(filenames_dict, open(save_path, "wb"))
+    return filenames_dict
+
+
 def main(args):
     fkey = load_key(args.key_file)
-    workers, batch_size, batched_files = concurrency.batch_files_in_dirs(args.data)
+    files = common.list_files(args.data, full_path=True, recursion=True)
+    filenames_dict = create_filenames_dict(files, os.path.join(args.data, f'{os.path.basename(args.data)}_filenames.p'))
+    workers, batch_size, batched_files = concurrency.batch_lst(files)
     jobs = []
     for i, files in zip(range(workers), batched_files):
-        jobs.append(mp.Process(target=mp_encrypt, args=(i, files, fkey, args.dest)))
+        jobs.append(mp.Process(target=mp_encrypt, args=(i, files, fkey, args.data, args.dest, filenames_dict)))
         jobs[i].start()
     for j in jobs:
         j.join()
@@ -42,8 +59,8 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Encrypt, decrypt data")
-    parser.add_argument('--data', type=str, required=True, help="data to be encrypted")
+    parser = argparse.ArgumentParser(description="Encrypt, decrypt dataset")
+    parser.add_argument('--data', type=str, required=True, help="dataset to be encrypted")
     parser.add_argument('--dest', type=str, help="directory where the encrypted data is saved")
     parser.add_argument('--new-key', action='store_true', help="Creates new key file in --key-file")
     parser.add_argument('--key-file', type=str, help="file where to save key")
@@ -54,7 +71,7 @@ if __name__ == '__main__':
 
     if args.new_key:
         if args.key_file is None:
-            args.key_file = os.path.join(args.data, f'key_{os.path.basename(args.data)}.key')
+            args.key_file = os.path.join(args.data, f'{os.path.basename(args.data)}.key')
         key = Fernet.generate_key()
         with open(args.key_file, "wb") as kf:
             kf.write(key)
@@ -65,8 +82,6 @@ if __name__ == '__main__':
         args.dest = common.maybe_create(os.path.dirname(args.data), f'{os.path.basename(args.data)}_encrypted')
     else:
         common.check_dir_valid(args.dest)
-    for d in common.list_dirs(args.data):
-        common.maybe_create(args.dest, d)
-
+    common.reproduce_dir_structure(args.data, args.dest)
 
     common.time_method(main, args)
