@@ -10,8 +10,9 @@ import common
 import concurrency
 
 
-def load_user_provided_key():
-    return Fernet(input().encode())
+def load_user_provided_key(user_key=None):
+    user_key = input().encode() if user_key is None else user_key
+    return Fernet(user_key)
 
 
 def load_key(key_file):
