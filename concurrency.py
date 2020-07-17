@@ -5,14 +5,7 @@ import time
 import queue
 
 
-def batch_dirs(all_dirs, workers=None):
-    workers = min(mp.cpu_count(), len(all_dirs)) if workers is None else workers
-    batch_size = math.ceil(len(all_dirs) / workers)
-    return workers, batch_size, common.batch_list(all_dirs, batch_size)
-
-
-def batch_files_in_dirs(root, bs=None, workers=None):
-    files = common.list_files_in_dirs(root, full_path=True)
+def batch_lst(files, bs=None, workers=None):
     workers = min(mp.cpu_count(), len(files)) if workers is None else workers
     bs = math.ceil(len(files) / workers) if bs is None else bs
     return workers, bs, common.batch_list(files, bs)

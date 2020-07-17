@@ -49,7 +49,7 @@ def search_terms(proc_id, terms, search_in):
 
 def main(args):
     terms, search_in = get_files_to_search(args)
-    workers, batch_size, batched_dirs = concurrency.batch_dirs(terms)
+    workers, batch_size, batched_dirs = concurrency.batch_lst(terms)
     jobs = []
     for i, batch in zip(range(workers), batched_dirs):
         jobs.append(mp.Process(target=search_terms, args=(i, batch, search_in)))

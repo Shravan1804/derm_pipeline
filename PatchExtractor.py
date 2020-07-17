@@ -234,7 +234,7 @@ def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest, m_prefix):
 
 def main(args):
     all_dirs = [d for d in sorted(os.listdir(args.data)) if os.path.isdir(os.path.join(args.data, d))]
-    workers, batch_size, batched_dirs = concurrency.batch_dirs(all_dirs)
+    workers, batch_size, batched_dirs = concurrency.batch_lst(all_dirs)
     patcher = PatchExtractor(args.patch_size)
     pmq = mp.Queue()
     jobs = []

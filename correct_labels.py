@@ -66,7 +66,8 @@ def main(args, ctx=None):
             learner.model = torch.nn.DataParallel(learner.model, device_ids=list(range(args.ngpus)))
         gpu_correct_labels(args.data, learner, args.log)
     else:
-        _, _, tasks = concurrency.batch_files_in_dirs(args.data, bs=args.proc_bs)
+        files = common.list_files(args.data, full_path=True, recursion=True, max_rec_level=1)
+        _, _, tasks = concurrency.batch_lst(files, bs=args.proc_bs)
         pool = mp.Pool(processes=args.workers) if ctx is None else ctx.Pool(processes=args.workers)
         log_changes(args.log, pool.imap_unordered(partial(cpu_correct_labels, args), zip(range(len(tasks)), tasks)))
         pool.close()

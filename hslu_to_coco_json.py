@@ -132,7 +132,7 @@ def main():
     mask_dirs = [d for d in sorted(os.listdir(args.data)) if d != args.img_dir and os.path.isdir(os.path.join(args.data, d))]
     classes = [m.replace(args.mdir_prefix, '') for m in mask_dirs]
 
-    workers, batch_size, batched_dirs = concurrency.batch_dirs(mask_dirs)
+    workers, batch_size, batched_dirs = concurrency.batch_lst(mask_dirs)
     q_annos = mp.Queue()
     jobs = []
     for i, dirs in zip(range(workers), batched_dirs):

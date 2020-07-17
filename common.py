@@ -12,22 +12,45 @@ def flatten(lst):
 
 
 def maybe_create(*d):
+    """Receives arbitrary number of dirnames, joins them and create them if they don't exist. Returns joined path."""
     path = os.path.join(*d)
     if not os.path.exists(path):
         os.makedirs(path)
     return path
 
 
-def list_files(directory, full_path=False, posix_path=False):
-    lf = sorted([os.path.join(directory, f) if full_path else f for f in os.listdir(directory)
-                   if os.path.isfile(os.path.join(directory, f))])
-    return [Path(i) for i in lf] if posix_path else lf
+def reproduce_dir_structure(source, dest):
+    """Reproduce dir structure of source in dest. Raise exception if source invalid. Creates dest if needed."""
+    check_dir_valid(source)
+    maybe_create(dest)
+    for d in list_dirs(source):
+        reproduce_dir_structure(os.path.join(source, d), os.path.join(dest, d))
 
 
-def list_dirs(root, full_path=False, posix_path=False):
-    ld = sorted([os.path.join(root, d) if full_path else d for d in os.listdir(root)
-                   if os.path.isdir(os.path.join(root, d))])
-    return [Path(i) for i in ld] if posix_path else ld
+def list_files(root, full_path=False, posix_path=False, recursion=False, max_rec_level=-1):
+    """Return the list of files, if recursion stops at max_rec_level unless negative then goes all levels."""
+    lf = [os.path.join(root, f) if full_path else f for f in os.listdir(root) if os.path.isfile(os.path.join(root, f))]
+    if recursion and max_rec_level != 0:
+        for d in list_dirs(root, full_path, posix_path, recursion, max_rec_level-1):
+            full_d = d if full_path else os.path.join(root, d)
+            lf.extend([os.path.join(d, f) for f in os.listdir(full_d) if os.path.isfile(os.path.join(full_d, f))])
+    return [Path(i) for i in sorted(lf)] if posix_path else sorted(lf)
+
+
+def list_dirs(root, full_path=False, posix_path=False, recursion=False, max_rec_level=-1, rec_level=0):
+    """Return the list of dirs, if recursion stops at max_rec_level unless negative then goes all levels.
+    rec_level is used for the recursion and should not be set"""
+    if recursion and rec_level > max_rec_level >= 0:
+        return []
+    ld = [os.path.join(root, d) if full_path else d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))]
+    if recursion:
+        ld_rec = []
+        for d in ld:
+            new_root = d if full_path else os.path.join(root, d)
+            children = list_dirs(new_root, full_path, posix_path, recursion, max_rec_level, rec_level+1)
+            ld_rec.extend([c if full_path else os.path.join(d, c) for c in children])
+        ld += ld_rec
+    return [Path(d) for d in sorted(ld)] if posix_path else sorted(ld)
 
 
 def list_files_in_dirs(root, full_path=False, posix_path=False):
