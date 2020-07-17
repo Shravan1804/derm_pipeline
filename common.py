@@ -158,9 +158,9 @@ def fastai_load_and_prepare_img(img_path):
     return fvision.Image(t.float() / 255.)  # Convert to float
 
 
-def time_method(m, args=None):
+def time_method(m, args, *d):
     start = time.time()
-    m(args)
+    m(args, *d)
     print(f"Work completed in {datetime.timedelta(seconds=time.time() - start)}.")
 
 
