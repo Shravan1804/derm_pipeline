@@ -83,7 +83,7 @@ def get_img_with_masks(root, img_dir, mask_dirs, mask_ext):
 def main(args):
     mask_dirs = [d for d in common.list_dirs(args.data) if d.startswith(args.mdir_prefix)]
     img_with_masks = get_img_with_masks(args.data, args.img_dir, mask_dirs, args.mext)
-    workers, batch_size, batches = concurrency.batch_lst(img_with_masks)
+    workers, batch_size, batches = concurrency.batch_lst(img_with_masks, args.bs, args.workers)
     q_annos = mp.Queue()
     jobs = []
     for i, files in zip(range(workers), batches):
