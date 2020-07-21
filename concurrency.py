@@ -6,7 +6,7 @@ import queue
 
 
 def batch_lst(files, bs=None, workers=None):
-    workers = min(mp.cpu_count(), len(files)) if workers is None else workers
+    workers = min(mp.cpu_count() - 2, len(files)) if workers is None else workers
     bs = math.ceil(len(files) / workers) if bs is None else bs
     return workers, bs, common.batch_list(files, bs)
 
