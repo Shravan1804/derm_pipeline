@@ -27,16 +27,13 @@ def img_objs_to_annos(img, objs_in_masks, to_polygon):
     targets = ObjDetecPatchSamplerDataset.merge_all_masks_objs(objs_in_masks)
     if not targets:
         return []
-    targets = {'labels': targets['classes'], 'area': targets['bbox_areas'], 'boxes': targets['boxes'],
+    targets = {'labels': targets['classes'], 'areas': targets['bbox_areas'], 'boxes': targets['boxes'],
                'masks': targets['obj_masks'], 'iscrowd': targets['iscrowd']}
     masks = []
     for i, m in enumerate(targets['masks']):
         try:
-            if to_polygon:
-                masks.append(coco_format.convert_obj_mask_to_poly(m))
-            else:
-                m = np.array(m[:, :, None], order="F")
-                masks.append(coco_format.convert_obj_mask_to_rle(m))
+            masks.append(coco_format.convert_obj_mask_to_poly(m) if to_polygon else
+                         masks.append(coco_format.convert_obj_mask_to_rle(np.asfortranarray(m, dtype=np.uint8))))
         except Exception as err:
             print(f"Image {img} is causing a problem with obj {i} of category {targets['labels'][i]}: {err}")
     targets['masks'] = masks
@@ -50,7 +47,7 @@ def extract_annos(proc_id, q_annos, img_with_masks, to_poly):
         img_dict = coco_format.get_img_record(-1, img)
         annotations = img_objs_to_annos(img, [raw_mask_to_objs(mfile) for mfile in masks], to_poly)
         q_annos.put([(os.path.basename(img), (img_dict, annotations))])
-        if i % 5 == 0:
+        if i % 15 == 0:
             print(f"Process {proc_id}: processed {i}/{len(img_with_masks)} images")
 
 
@@ -67,6 +64,7 @@ def to_coco_format(root, img_dir, img_annos, classes):
             annotations[img_ann_id]['id'] = ann_id
             ann_id += 1
             cats.add(annotations[img_ann_id]['category_id'])
+        dataset['annotations'].extend(annotations)
     dataset['categories'] = [{'id': i, 'name': classes[i - 1], 'supercategory': classes[i - 1]} for i in sorted(cats)]
     return dataset
 
@@ -108,7 +106,7 @@ if __name__ == '__main__':
     parser.add_argument('--dest', type=str, help="dir where annotation json file will be saved")
     parser.add_argument('--img-dir', type=str, default='images', help="dir containing images")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
-    parser.add_argument('--to_polygon', action='store_true', help="converts bitmask to polygon")
+    parser.add_argument('--to-polygon', action='store_true', help="converts bitmask to polygon")
     parser.add_argument('--mext', type=str, default='.png', help="masks file extension")
     parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix of mask dirs")
     common.add_multi_proc_args(parser)
