@@ -46,6 +46,8 @@ def extract_annos(proc_id, q_annos, data, dirs):
         print(f"Process {proc_id}: extracting {dirname} objects")
         for idx, mask_file in enumerate(sorted(os.listdir(os.path.join(data, dirname)))):
             mask = load_img_from_disk(os.path.join(data, dirname, mask_file))
+            if len(mask.shape) > 2:
+                mask = mask[:, :, 0]
             mask = ObjDetecPatchSamplerDataset.rm_small_objs_and_sep_instance(mask, 30, check_bbox=True)
             q_annos.put([{mask_file: {dirname: ObjDetecPatchSamplerDataset.extract_mask_objs(mask)}}])
 
