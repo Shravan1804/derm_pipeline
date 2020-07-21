@@ -2,12 +2,14 @@ import os
 import cv2
 import json
 import argparse
+import numpy as np
 import multiprocessing as mp
-import concurrency
-from ObjDetecPatchSamplerDataset import ObjDetecPatchSamplerDataset
+
 
 import common
+import concurrency
 import coco_format
+from ObjDetecPatchSamplerDataset import ObjDetecPatchSamplerDataset
 
 
 def raw_mask_to_objs(mask_file, rm_size=25):
@@ -30,10 +32,13 @@ def img_objs_to_annos(img, objs_in_masks, to_polygon):
     masks = []
     for i, m in enumerate(targets['masks']):
         try:
-            masks.append(coco_format.convert_obj_mask_to_poly(m) if to_polygon else
-                         coco_format.convert_obj_mask_to_rle(m))
+            if to_polygon:
+                masks.append(coco_format.convert_obj_mask_to_poly(m))
+            else:
+               m = np.asarray(m)
+               masks.append(coco_format.convert_obj_mask_to_rle(m))
         except Exception as err:
-            print(f"Image {img} is causing a problem with obj {i} of category {targets['labels']}: {err}")
+            print(f"Image {img} is causing a problem with obj {i} of category {targets['labels'][i]}: {err}")
     targets['masks'] = masks
     _, annos, _ = coco_format.get_img_annotations(-1, 0, targets)
     return annos
@@ -44,18 +49,9 @@ def extract_annos(proc_id, q_annos, img_with_masks, to_poly):
         img, masks = img_masks
         img_dict = coco_format.get_img_record(-1, img)
         annotations = img_objs_to_annos(img, [raw_mask_to_objs(mfile) for mfile in masks], to_poly)
-        q_annos.put([{os.path.basename(img): (img_dict, annotations)}])
+        q_annos.put([(os.path.basename(img), (img_dict, annotations))])
         if i % 5 == 0:
             print(f"Process {proc_id}: processed {i}/{len(img_with_masks)} images")
-
-
-def combine_class_annos(img_objs, mask_dirs):
-    targets = ObjDetecPatchSamplerDataset.merge_all_masks_objs([img_objs[mdir] for mdir in mask_dirs])
-    if targets:
-        return {'labels': targets['classes'], 'area': targets['bbox_areas'], 'boxes': targets['boxes'],
-                'masks': targets['obj_masks'], 'iscrowd': targets['iscrowd']}
-    else:
-        return {}
 
 
 def to_coco_format(root, img_dir, img_annos, classes):
@@ -96,6 +92,7 @@ def main(args):
     img_annos = concurrency.unload_mpqueue(q_annos, jobs)
     for j in jobs:
         j.join()
+    img_annos = {item[0]: item[1] for item in img_annos}
 
     print("Converting and saving as coco json")
     json_path = os.path.join(args.dest, f"instances_{os.path.basename(args.data)}_coco_format.json")
