@@ -35,8 +35,8 @@ def img_objs_to_annos(img, objs_in_masks, to_polygon):
             if to_polygon:
                 masks.append(coco_format.convert_obj_mask_to_poly(m))
             else:
-               m = np.asarray(m)
-               masks.append(coco_format.convert_obj_mask_to_rle(m))
+                m = np.array(m[:, :, None], order="F")
+                masks.append(coco_format.convert_obj_mask_to_rle(m))
         except Exception as err:
             print(f"Image {img} is causing a problem with obj {i} of category {targets['labels'][i]}: {err}")
     targets['masks'] = masks
@@ -110,7 +110,8 @@ if __name__ == '__main__':
     parser.add_argument('--seed', default=42, type=int, help="random seed")
     parser.add_argument('--to_polygon', action='store_true', help="converts bitmask to polygon")
     parser.add_argument('--mext', type=str, default='.png', help="masks file extension")
-    parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix to rm from mask dirs to get mask class")
+    parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix of mask dirs")
+    common.add_multi_proc_args(parser)
     args = parser.parse_args()
 
     common.check_dir_valid(args.data)

@@ -145,6 +145,11 @@ def add_obj_detec_args(parser):
     parser.add_argument('--mext', type=str, default='.png', help="masks file extension")
 
 
+def add_multi_proc_args(parser):
+    parser.add_argument('--workers', type=int, help="Number of workers to use")
+    parser.add_argument('--bs', type=int, help="Batch size per worker")
+
+
 def fastai_load_model(model_params, radam=True):
     import fastai.vision as fvision
     if radam:
