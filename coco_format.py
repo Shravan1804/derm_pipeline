@@ -28,15 +28,12 @@ def get_img_record(idx, img_path, license_id=1):
 
 
 def convert_obj_mask_to_rle(mask):
-    """Assumes mask is fortran contiguous numpy array
-    with tensor: masks.permute(0, 2, 1).contiguous().permute(0, 2, 1)
-    """
     rle = coco_mask.encode(mask)
     rle['counts'] = str(rle['counts'], 'utf-8')
     return rle
 
 
-def convert_masks_to_rle(masks):
+def convert_torch_masks_to_rle(masks):
     masks = masks.permute(0, 2, 1).contiguous().permute(0, 2, 1)
     return [convert_obj_mask_to_rle(mask.numpy()) for mask in masks]
 
