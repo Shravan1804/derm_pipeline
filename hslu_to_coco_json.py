@@ -30,13 +30,18 @@ def img_objs_to_annos(img, objs_in_masks, to_polygon):
     targets = {'labels': targets['classes'], 'areas': targets['bbox_areas'], 'boxes': targets['boxes'],
                'masks': targets['obj_masks'], 'iscrowd': targets['iscrowd']}
     masks = []
-    for i, m in enumerate(targets['masks']):
+    rm_idx = []
+    for i, m in enumerate(targets['obj_masks']):
         try:
             masks.append(coco_format.convert_obj_mask_to_poly(m) if to_polygon else
                          masks.append(coco_format.convert_obj_mask_to_rle(np.asfortranarray(m, dtype=np.uint8))))
         except Exception as err:
-            print(f"Image {img} is causing a problem with obj {i} of category {targets['labels'][i]}: {err}")
-    targets['masks'] = masks
+            print(f"Image {img} is causing a problem with obj {i} of category {targets['classes'][i]}: {err}")
+            rm_idx.append(i)
+    targets = {'labels': np.delete(targets['classes'], rm_idx, axis=0), 'masks': masks,
+               'areas': np.delete(targets['bbox_areas'], rm_idx, axis=0),
+               'boxes': np.delete(targets['boxes'], rm_idx, axis=0),
+               'iscrowd': np.delete(targets['iscrowd'], rm_idx, axis=0)}
     _, annos, _ = coco_format.get_img_annotations(-1, 0, targets)
     return annos
 
@@ -47,7 +52,7 @@ def extract_annos(proc_id, q_annos, img_with_masks, to_poly):
         img_dict = coco_format.get_img_record(-1, img)
         annotations = img_objs_to_annos(img, [raw_mask_to_objs(mfile) for mfile in masks], to_poly)
         q_annos.put([(os.path.basename(img), (img_dict, annotations))])
-        if i % 15 == 0:
+        if i % max(15, (10*int(len(img_with_masks)/3/10))) == 0:     # prints status at every third of whole task
             print(f"Process {proc_id}: processed {i}/{len(img_with_masks)} images")
 
 
