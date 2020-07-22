@@ -27,8 +27,6 @@ def img_objs_to_annos(img, objs_in_masks, to_polygon):
     targets = ObjDetecPatchSamplerDataset.merge_all_masks_objs(objs_in_masks)
     if not targets:
         return []
-    targets = {'labels': targets['classes'], 'areas': targets['bbox_areas'], 'boxes': targets['boxes'],
-               'masks': targets['obj_masks'], 'iscrowd': targets['iscrowd']}
     masks = []
     rm_idx = []
     for i, m in enumerate(targets['obj_masks']):
