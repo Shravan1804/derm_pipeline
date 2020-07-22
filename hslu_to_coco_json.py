@@ -47,12 +47,12 @@ def img_objs_to_annos(proc_id, img, objs_in_masks, to_polygon):
 
 def extract_annos(proc_id, q_annos, img_with_masks, to_poly):
     for i, img_masks in enumerate(img_with_masks):
-        if i % max(15, (10*int(len(img_with_masks)/3/10))) == 0:     # prints status at every third of whole task
-            print(f"Process {proc_id}: processed {i}/{len(img_with_masks)} images")
         img, masks = img_masks
         img_dict = coco_format.get_img_record(-1, img)
         annotations = img_objs_to_annos(proc_id, img, [raw_mask_to_objs(mfile) for mfile in masks], to_poly)
         q_annos.put([(os.path.basename(img), (img_dict, annotations))])
+        if i % max(15, (10*int(len(img_with_masks)/3/10))) == 0:     # prints status at every third of whole task
+            print(f"Process {proc_id}: processed {i}/{len(img_with_masks)} images")
 
 
 def to_coco_format(root, img_dir, img_annos, classes):
