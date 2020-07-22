@@ -35,7 +35,7 @@ def img_objs_to_annos(proc_id, img, objs_in_masks, to_polygon):
                          masks.append(coco_format.convert_obj_mask_to_rle(np.asfortranarray(m, dtype=np.uint8))))
         except Exception as err:
             print(f"Process {proc_id} encountered an issue in image {img} with obj {i}"
-                  f"of category {targets['classes'][i]}: {err}")
+                  f" of category {targets['classes'][i]}: {err}")
             rm_idx.append(i)
     targets = {'labels': np.delete(targets['classes'], rm_idx, axis=0), 'masks': masks,
                'areas': np.delete(targets['bbox_areas'], rm_idx, axis=0),
