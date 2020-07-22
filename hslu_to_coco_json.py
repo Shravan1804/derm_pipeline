@@ -23,7 +23,7 @@ def raw_mask_to_objs(mask_file, rm_size=25):
     return ObjDetecPatchSamplerDataset.extract_mask_objs(mask)
 
 
-def img_objs_to_annos(img, objs_in_masks, to_polygon):
+def img_objs_to_annos(proc_id, img, objs_in_masks, to_polygon):
     targets = ObjDetecPatchSamplerDataset.merge_all_masks_objs(objs_in_masks)
     if not targets:
         return []
@@ -34,7 +34,8 @@ def img_objs_to_annos(img, objs_in_masks, to_polygon):
             masks.append(coco_format.convert_obj_mask_to_poly(m) if to_polygon else
                          masks.append(coco_format.convert_obj_mask_to_rle(np.asfortranarray(m, dtype=np.uint8))))
         except Exception as err:
-            print(f"Image {img} is causing a problem with obj {i} of category {targets['classes'][i]}: {err}")
+            print(f"Process {proc_id} encountered an issue in image {img} with obj {i}"
+                  f"of category {targets['classes'][i]}: {err}")
             rm_idx.append(i)
     targets = {'labels': np.delete(targets['classes'], rm_idx, axis=0), 'masks': masks,
                'areas': np.delete(targets['bbox_areas'], rm_idx, axis=0),
@@ -46,12 +47,12 @@ def img_objs_to_annos(img, objs_in_masks, to_polygon):
 
 def extract_annos(proc_id, q_annos, img_with_masks, to_poly):
     for i, img_masks in enumerate(img_with_masks):
-        img, masks = img_masks
-        img_dict = coco_format.get_img_record(-1, img)
-        annotations = img_objs_to_annos(img, [raw_mask_to_objs(mfile) for mfile in masks], to_poly)
-        q_annos.put([(os.path.basename(img), (img_dict, annotations))])
         if i % max(15, (10*int(len(img_with_masks)/3/10))) == 0:     # prints status at every third of whole task
             print(f"Process {proc_id}: processed {i}/{len(img_with_masks)} images")
+        img, masks = img_masks
+        img_dict = coco_format.get_img_record(-1, img)
+        annotations = img_objs_to_annos(proc_id, img, [raw_mask_to_objs(mfile) for mfile in masks], to_poly)
+        q_annos.put([(os.path.basename(img), (img_dict, annotations))])
 
 
 def to_coco_format(root, img_dir, img_annos, classes):
