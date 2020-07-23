@@ -97,7 +97,7 @@ def main(args):
     img_annos = {item[0]: item[1] for item in img_annos}
 
     print("Converting and saving as coco json")
-    json_path = os.path.join(args.dest, f"instances_{os.path.basename(args.data)}_coco_format.json")
+    json_path = os.path.join(args.dest, f"instances_{os.path.basename(args.data)}.json")
     classes = [m.replace(args.mdir_prefix, '') for m in mask_dirs]
     json.dump(to_coco_format(args.data, args.img_dir, img_annos, classes), open(json_path, 'w'),
               sort_keys=True, indent=4, separators=(',', ': '))
