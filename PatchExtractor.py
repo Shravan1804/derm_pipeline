@@ -234,6 +234,8 @@ def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest, m_prefix):
 
 def main(args):
     all_dirs = [d for d in sorted(os.listdir(args.data)) if os.path.isdir(os.path.join(args.data, d))]
+    if not all_dirs:
+        all_dirs = ['']
     workers, batch_size, batched_dirs = concurrency.batch_lst(all_dirs)
     patcher = PatchExtractor(args.patch_size)
     pmq = mp.Queue()
@@ -254,8 +256,7 @@ def get_patcher_arg_parser(desc="Creates patch dataset from image dataset"):
     parser.add_argument('--dest', type=str, help="directory where the patches should be saved")
     parser.add_argument('-p', '--patch-size', default=512, type=int, help="patch size")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
-    parser.add_argument('--mdir-prefix', type=str, default='masks_',
-                        help="prefix of mask dirs (for these we keep only 1 channel)")
+    parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix of mask dirs")
     return parser
 
 if __name__ == '__main__':
