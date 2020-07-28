@@ -1,10 +1,15 @@
 import os
 import cv2
 import numpy as np
+
 from skimage import measure
 from shapely.geometry import Polygon
 from pycocotools import mask as coco_mask
+from pycocotools.coco import COCO
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 
+import common
 
 def get_default_dataset(description='coco format_data'):
     return {'info': {'year': 2020, 'description': description},
@@ -91,3 +96,23 @@ def get_img_annotations(img_id, start_ann_id, targets):
         ann_id += 1
     return ann_id, annos, categories
 
+def visualize_dataset(img_dir, anno_json, dest):
+    common.check_dir_valid(img_dir)
+    common.check_dir_valid(dest)
+    common.check_file_valid(anno_json)
+
+    coco = COCO(anno_json)
+    imgs = coco.loadImgs(coco.getImgIds())
+    for img in tqdm(imgs):
+        im = common.load_rgb_img(os.path.join(img_dir, img['file_name']))
+        plt.figure(figsize=(10, 10))
+        plt.axis('off')
+        plt.imshow(im)
+        anns = coco.loadAnns(coco.getAnnIds(imgIds=img['id']))
+        coco.showAnns(anns)
+        common.plt_save_fig(os.path.join(dest, str(img['id']).zfill(4)+'_'+img['file_name']), dpi=150)
+
+if __name__ == '__main__':
+    path = '/home/shravan/Downloads/temp/'
+    d = '00_patched1024'
+    visualize_dataset(path+'images/'+d, path+'annotations/14_PPP_study_goldberg_00_1024px.json', path+'results')
