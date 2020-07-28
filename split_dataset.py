@@ -39,7 +39,7 @@ def copy_imgs(args, cat, splits, mask_dirs=None):
 
 def split_coco_labels(coco_json, files):
     with open(coco_json, 'r') as f:
-        labels = json.lead(f)
+        labels = json.load(f)
         files = [os.path.basename(f) for f in files]
         labels['images'] = [l for l in labels['images'] if os.path.basename(l['file_name']) in files]
         image_ids = [i['id'] for i in labels['images']]
