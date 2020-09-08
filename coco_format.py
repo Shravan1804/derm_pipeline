@@ -1,5 +1,7 @@
 import os
 import cv2
+import json
+import random
 import numpy as np
 
 from skimage import measure
@@ -111,6 +113,19 @@ def visualize_dataset(img_dir, anno_json, dest):
         anns = coco.loadAnns(coco.getAnnIds(imgIds=img['id']))
         coco.showAnns(anns)
         common.plt_save_fig(os.path.join(dest, str(img['id']).zfill(4)+'_'+img['file_name']), dpi=150)
+
+
+def save_sample_coco_data(coco_json_path, sample_size=100, save_path=None):
+    with open(coco_json_path, 'r') as f:
+        coco_json = json.load(f)
+        sample = get_default_dataset()
+        for k in ['info', 'licenses', 'categories']:
+            sample[k] = coco_json[k]
+        sample['images'] = random.sample(coco_json['images'], sample_size)
+        for img in sample['images']:
+            sample['annotations'].extend([a for a in coco_json['annotations'] if a['image_id'] == img['id']])
+        save_path = coco_json_path.replace('.json', '_sample.json') if save_path is None else save_path
+        json.dump(sample, open(save_path, 'w'), sort_keys=True, indent=4, separators=(',', ': '))
 
 if __name__ == '__main__':
     path = '/home/shravan/Downloads/temp/'
