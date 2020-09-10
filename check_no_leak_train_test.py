@@ -34,7 +34,7 @@ def get_files_to_search(args):
     return terms, search_in
 
 
-def search_terms(proc_id, terms, search_in):
+def search_terms(proc_id, terms, search_in, verbose):
     print(f'Proc {proc_id} searching for {len(terms)} terms in a list of {len(search_in)} items.')
     count = 0
     duplicates = {}
@@ -45,9 +45,10 @@ def search_terms(proc_id, terms, search_in):
         if count > 0 and count % 5000 == 0:
             print(f'Proc {proc_id} completed {count}/{len(terms)} lookups ({len(terms)-count} remaining).')
         count += 1
-    print(f'Proc {proc_id} found {len(duplicates.keys())} duplicates:')
-    for k, v in duplicates.items():
-        print(f"{k} has {len(v)} occurrences: {v}")
+    print(f'Proc {proc_id} found {len(duplicates.keys())} duplicates: {duplicates.keys()}')
+    if verbose:
+        for k, v in duplicates.items():
+            print(f"{k} has {len(v)} occurrences: {v}")
 
 
 def main(args):
@@ -55,7 +56,7 @@ def main(args):
     workers, batch_size, batched_dirs = concurrency.batch_lst(terms)
     jobs = []
     for i, batch in zip(range(workers), batched_dirs):
-        jobs.append(mp.Process(target=search_terms, args=(i, batch, search_in)))
+        jobs.append(mp.Process(target=search_terms, args=(i, batch, search_in, args.verbose)))
         jobs[i].start()
     for j in jobs:
         j.join()
@@ -69,6 +70,7 @@ if __name__ == '__main__':
     parser.add_argument('--classif', action='store_true', help="expect class subdirs in provided dirs")
     parser.add_argument('--patch', action='store_true', help="dir contains patches => checks if same img in both dirs")
     parser.add_argument('--patch-sep', type=str, default='__SEP__', help="patch name separator")
+    parser.add_argument('--verbose', action='store_true', help="show occurrences")
     common.add_obj_detec_args(parser)
     args = parser.parse_args()
 
