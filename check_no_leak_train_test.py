@@ -35,14 +35,15 @@ def get_files_to_search(args):
 
 
 def search_terms(proc_id, terms, search_in, verbose):
-    print(f'Proc {proc_id} searching for {len(terms)} terms in a list of {len(search_in)} items.')
+    if verbose:
+        print(f'Proc {proc_id} searching for {len(terms)} terms in a list of {len(search_in)} items.')
     count = 0
     duplicates = {}
     for t, tt in terms:
         for s, ss in search_in:
             if t == s:
                 duplicates[t] = duplicates.get(t, []) + [(tt, ss)]
-        if count > 0 and count % 5000 == 0:
+        if verbose and count > 0 and count % 5000 == 0:
             print(f'Proc {proc_id} completed {count}/{len(terms)} lookups ({len(terms)-count} remaining).')
         count += 1
     print(f'Proc {proc_id} found {len(duplicates.keys())} duplicates: {duplicates.keys()}')
