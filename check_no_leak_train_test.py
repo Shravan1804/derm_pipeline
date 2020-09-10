@@ -13,8 +13,8 @@ def get_image_name(args, path):
 
 def get_files_to_search(args):
     if args.classif:
-        dir1_files = common.list_files_in_dirs(args.dir1, full_path=True)
-        dir2_files = common.list_files_in_dirs(args.dir2, full_path=True)
+        dir1_files = common.list_files(args.dir1, full_path=True, recursion=True)
+        dir2_files = common.list_files(args.dir2, full_path=True, recursion=True)
     elif args.obj_detec:
         dir1_files = common.list_files(os.path.join(args.dir1, args.img_dir))
         dir2_files = common.list_files(os.path.join(args.dir2, args.img_dir))
@@ -37,14 +37,17 @@ def get_files_to_search(args):
 def search_terms(proc_id, terms, search_in):
     print(f'Proc {proc_id} searching for {len(terms)} terms in a list of {len(search_in)} items.')
     count = 0
+    duplicates = {}
     for t, tt in terms:
         for s, ss in search_in:
             if t == s:
-                print(f'Proc {proc_id} found image {t} in both {tt} and {ss}')
+                duplicates[t] = duplicates.get(t, []) + [(tt, ss)]
         if count > 0 and count % 5000 == 0:
             print(f'Proc {proc_id} completed {count}/{len(terms)} lookups ({len(terms)-count} remaining).')
         count += 1
-
+    print(f'Proc {proc_id} found {len(duplicates.keys())} duplicates:')
+    for k, v in duplicates.items():
+        print(f"{k} has {len(v)} occurrences: {v}")
 
 
 def main(args):
