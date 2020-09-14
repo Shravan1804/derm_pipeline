@@ -74,9 +74,9 @@ class PatchExtractor:
     SEP = '__SEP__'
     RAND = '__RAND__'
 
-    def __init__(self, patch_size, seed=42):
+    def __init__(self, patch_sizes, seed=42):
         """Seed used when sampling patches from image"""
-        self.patch_size = patch_size
+        self.patch_sizes = sorted(patch_sizes) if type(patch_sizes) == list else [patch_sizes]
         np.random.seed(seed)
 
     def dir_images_to_patches(self, dirname):
@@ -91,30 +91,37 @@ class PatchExtractor:
         assert nb > 1, f"Cannot sample nb={nb} patches from {img_path}."
         im_arr = self.load_image(img_path) if im_arr is None else self.maybe_resize(im_arr)
         im_h, im_w = im_arr.shape[:2]
-        idx_h, idx_w = (np.random.randint(low=0, high=1 + im_h - self.patch_size, size=nb),
-                        np.random.randint(low=0, high=1 + im_w - self.patch_size, size=nb))
-        return [PatchExtractor.create_pm(img_path, h, w) for h, w in zip(idx_h, idx_w)]
+        patches = []
+        for ps in self.patch_sizes:
+            idx_h, idx_w = (np.random.randint(low=0, high=1 + im_h - ps, size=nb),
+                            np.random.randint(low=0, high=1 + im_w - ps, size=nb))
+            patches.extend([PatchExtractor.create_pm(img_path, ps, h, w, True) for h, w in zip(idx_h, idx_w)])
+        return patches
 
     def patch_grid(self, img_path, im_arr=None):
         """Converts img into a grid of patches"""
         im_arr = self.load_image(img_path) if im_arr is None else self.maybe_resize(im_arr)
         im_h, im_w = im_arr.shape[:2]
-        step_h = self.patch_size - PatchExtractor.get_overlap(im_h, self.patch_size)
-        # Don't forget + 1 in the stop argument otherwise the upper bound won't be included
-        grid_h = np.arange(start=0, stop=1 + im_h - self.patch_size, step=step_h)
-        step_w = self.patch_size - PatchExtractor.get_overlap(im_w, self.patch_size)
-        grid_w = np.arange(start=0, stop=1 + im_w - self.patch_size, step=step_w)
-        grid_idx = [PatchExtractor.create_pm(img_path, a, b) for a in grid_h for b in grid_w]
-        return grid_idx if grid_idx else [PatchExtractor.create_pm(img_path, 0, 0)]
+        patches = []
+        for ps in self.patch_sizes:
+            step_h = ps - PatchExtractor.get_overlap(im_h, ps)
+            # Don't forget + 1 in the stop argument otherwise the upper bound won't be included
+            grid_h = np.arange(start=0, stop=1 + im_h - ps, step=step_h)
+            step_w = ps - PatchExtractor.get_overlap(im_w, ps)
+            grid_w = np.arange(start=0, stop=1 + im_w - ps, step=step_w)
+            grid_idx = [PatchExtractor.create_pm(img_path, ps, a, b) for a in grid_h for b in grid_w]
+            patches.extend(grid_idx if grid_idx else [PatchExtractor.create_pm(img_path, ps, 0, 0)])
+        return patches
 
     def maybe_resize(self, im_arr):
-        """Resize img only if one of its dimensions is smaller than the patch size otherwise returns img unchanged"""
+        """Resize img only if dim smaller than the max patch size otherwise returns img unchanged"""
+        ps = self.patch_sizes[-1]
         h, w = im_arr.shape[:2]
         smallest = min(h, w)
-        if smallest < self.patch_size:
-            ratio = self.patch_size / smallest
+        if smallest < ps:
+            ratio = ps / smallest
             # resize new dim takes first w then h!
-            return cv2.resize(im_arr, (max(self.patch_size, int(w * ratio)), max(self.patch_size, int(h * ratio))))
+            return cv2.resize(im_arr, (max(ps, int(w * ratio)), max(ps, int(h * ratio))))
         else:
             return im_arr
 
@@ -123,43 +130,44 @@ class PatchExtractor:
         im = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
         return self.maybe_resize(im)
 
-    def pm_to_patch(self, im, pm):
+    @staticmethod
+    def pm_to_patch(im, pm):
         """Creates patch from patch map"""
-        return self.extract_patch(im, pm['idx_h'], pm['idx_w'])
+        return PatchExtractor.extract_patch(im, pm['ps'], pm['idx_h'], pm['idx_w'])
 
-    def extract_patch(self, im, id_h, id_w):
+    @staticmethod
+    def extract_patch(im, ps, id_h, id_w):
         """Extracts patch at provided position"""
-        return im[id_h:id_h + self.patch_size, id_w:id_w + self.patch_size]
+        return im[id_h:id_h + ps, id_w:id_w + ps]
 
-    def find_full_img_res_from_patches(self, patches):
-        positions = [PatchExtractor.get_position(p) for p in patches]
-        max_h = max([p[0] for p in positions])
-        max_w = max([p[1] for p in positions])
-        return max_h + self.patch_size, max_w + self.patch_size
-
-    def neighboring_patches(self, pm, img_shape, d=1, include_self=True):
-        img_name = PatchExtractor.get_full_img(pm)
-        max_h, max_w = img_shape[0] - self.patch_size, img_shape[1] - self.patch_size
-        step_h = self.patch_size - PatchExtractor.get_overlap(img_shape[0], self.patch_size)
-        step_w = self.patch_size - PatchExtractor.get_overlap(img_shape[1], self.patch_size)
+    @staticmethod
+    def neighboring_patches(pm, img_shape, d=1, include_self=True):
+        img_name, ps = os.path.basename(pm['full_img']), pm['ps']
+        max_h, max_w = img_shape[0] - ps, img_shape[1] - ps
+        step_h = ps - PatchExtractor.get_overlap(img_shape[0], ps)
+        step_w = ps - PatchExtractor.get_overlap(img_shape[1], ps)
         scope_h = [i * step_h for i in range(-d, d+1)]
         scope_w = [i * step_w for i in range(-d, d + 1)]
         neighbors = [(a, b) for a, b in [(m + pm['idx_h'], n + pm['idx_w']) for m in scope_h for n in scope_w]
                      if 0 <= a <= max_h and 0 <= b <= max_w
                      and (include_self or not (a == pm['idx_h'] and b == pm['idx_w']))]
-        res = [PatchExtractor.get_patch_name(img_name, h, w) for h, w in neighbors]
+        res = [PatchExtractor.get_patch_name(img_name, ps, h, w) for h, w in neighbors]
         # print(pm['patch_path'], 'neighbors:', [r['patch_path'] for r in res])
         return res
 
-    def are_neighbors(self, p1, p2, d=1, first=True):
-        dist = self.patch_size * d
+    @staticmethod
+    def are_neighbors(p1, p2, d=1, first=True):
+        ps = PatchExtractor.get_position(p1)
+        assert ps == PatchExtractor.get_position(p2), "Error, provided patches do not have the same patch size"
+        dist = ps * d
         h1, w1 = PatchExtractor.get_position(p1)
-        hmin1, hmax1 = max(0, h1 - dist), h1 + self.patch_size + dist
-        wmin1, wmax1 = max(0, w1 - dist), w1 + self.patch_size + dist
+        hmin1, hmax1 = max(0, h1 - dist), h1 + ps + dist
+        wmin1, wmax1 = max(0, w1 - dist), w1 + ps + dist
         h2, w2 = PatchExtractor.get_position(p2)
         # recursion for hypothetic case where one patch is englobed in the second
-        return (hmin1 <= h2 + self.patch_size <= hmax1 and wmin1 <= w2 + self.patch_size <= wmax1) or\
-               (hmin1 <= h2 <= hmax1 and wmin1 <= w2 <= wmax1) or (first and self.are_neighbors(p2, p1, d, False))
+        return (hmin1 <= h2 + ps <= hmax1 and wmin1 <= w2 + ps <= wmax1) or\
+               (hmin1 <= h2 <= hmax1 and wmin1 <= w2 <= wmax1) or\
+               (first and PatchExtractor.are_neighbors(p2, p1, d, False))
 
     def save_patches(self, source, dest, dirname, grids, mask_prefix=None):
         dest = common.maybe_create(dest, dirname)
@@ -171,23 +179,22 @@ class PatchExtractor:
                 cv2.imwrite(os.path.join(dest, pm['patch_path']), self.pm_to_patch(im, pm))
 
     @staticmethod
-    def create_pm(img_path, idx_h, idx_w, randomly_sampled=False):
+    def create_pm(img_path, ps, idx_h, idx_w, randomly_sampled=False):
         """Creates patch map"""
-        patch_name = PatchExtractor.get_patch_name(img_path, idx_h, idx_w, randomly_sampled)
-        return {'patch_path': patch_name, 'full_img': img_path, 'idx_h': idx_h, 'idx_w': idx_w}
+        patch_name = PatchExtractor.get_patch_name(img_path, ps, idx_h, idx_w, randomly_sampled)
+        return {'patch_path': patch_name, 'full_img': img_path, 'ps': ps, 'idx_h': idx_h, 'idx_w': idx_w}
 
     @staticmethod
-    def pm_from_patch(patch_name):
-        pm = PatchExtractor.create_pm(PatchExtractor.get_full_img_from_patch(patch_name),
-                                      *PatchExtractor.get_position(patch_name))
-        assert pm['patch_path'] == os.path.basename(patch_name)
-        return pm
+    def get_patch_size(patch_name):
+        """Extracts patch size from its filename"""
+        name, _ = os.path.splitext(os.path.basename(patch_name))
+        return int(name.split(PatchExtractor.SEP)[1].split('_h')[0].replace('_ps', ''))
 
     @staticmethod
     def get_position(patch_name):
         """Extracts patch coordinates from its filename"""
-        ext = os.path.splitext(patch_name)[1]
-        return tuple(int(t) for t in patch_name.replace(ext, '').split(f'{PatchExtractor.SEP}_h')[1].split('_w'))
+        name, _ = os.path.splitext(os.path.basename(patch_name))
+        return tuple(int(t) for t in name.split(PatchExtractor.SEP)[1].split('_h')[1].split('_w'))
 
     @staticmethod
     def get_overlap(n, div):
@@ -198,12 +205,8 @@ class PatchExtractor:
         return 0 if overlap == n else overlap
 
     @staticmethod
-    def get_full_img(pm):
-        """Returns filename of full image"""
-        return os.path.basename(pm['full_img'])
-
-    @staticmethod
     def get_full_img_from_patch(patch_name):
+        """patch_name is the patch filename"""
         return os.path.basename(patch_name).split(PatchExtractor.SEP)[0] + os.path.splitext(patch_name)[1]
 
     @staticmethod
@@ -215,11 +218,11 @@ class PatchExtractor:
         return PatchExtractor.get_patch_suffix(pm['idx_h'], pm['idx_w'])
 
     @staticmethod
-    def get_patch_name(img_path, idx_h, idx_w, randomly_sampled=False):
+    def get_patch_name(img_path, ps, idx_h, idx_w, randomly_sampled=False):
         """Create patch file basename"""
         file, ext = os.path.splitext(os.path.basename(img_path))
         sep = PatchExtractor.SEP + PatchExtractor.RAND if randomly_sampled else PatchExtractor.SEP
-        return file + sep + '_' + PatchExtractor.get_patch_suffix(idx_h, idx_w) + ext
+        return f'{file}{sep}_ps{ps}_{PatchExtractor.get_patch_suffix(idx_h, idx_w)}{ext}'
 
 
 def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest, m_prefix):
@@ -246,7 +249,7 @@ def main(args):
     pms = concurrency.unload_mpqueue(pmq, jobs)
     for j in jobs:
         j.join()
-    pickle.dump(pms, open(os.path.join(args.dest, "patches.p"), "wb"))
+    pickle.dump(pms, open(os.path.join(args.dest, f'patches_{"_".join(map(str, args.patch_size))}.p'), "wb"))
     print("done")
 
 
@@ -254,19 +257,22 @@ def get_patcher_arg_parser(desc="Creates patch dataset from image dataset"):
     parser = argparse.ArgumentParser(description=desc)
     parser.add_argument('--data', type=str, required=True, help="source data root directory absolute path")
     parser.add_argument('--dest', type=str, help="directory where the patches should be saved")
-    parser.add_argument('-p', '--patch-size', default=512, type=int, help="patch size")
+    parser.add_argument('-p', '--patch-size', nargs='+', default=[512], type=int, help="patch sizes")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
     parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix of mask dirs")
     return parser
+
 
 if __name__ == '__main__':
     parser = get_patcher_arg_parser()
     args = parser.parse_args()
 
+    args.patch_size = sorted(args.patch_size)
+
     args.data = args.data.rstrip('/')
     common.check_dir_valid(args.data)
     if args.dest is None:
         args.dest = common.maybe_create(os.path.dirname(args.data),
-                                        f'{os.path.basename(args.data)}_patched{args.patch_size}')
+                                        f'{os.path.basename(args.data)}_patched_{"_".join(map(str, args.patch_size))}')
 
     main(args)
