@@ -104,10 +104,9 @@ class PatchExtractor:
         im_h, im_w = im_arr.shape[:2]
         patches = []
         for ps in self.patch_sizes:
-            step_h = ps - PatchExtractor.get_overlap(im_h, ps)
+            step_h, step_w = ps - PatchExtractor.get_overlap(im_h, ps), ps - PatchExtractor.get_overlap(im_w, ps)
             # Don't forget + 1 in the stop argument otherwise the upper bound won't be included
             grid_h = np.arange(start=0, stop=1 + im_h - ps, step=step_h)
-            step_w = ps - PatchExtractor.get_overlap(im_w, ps)
             grid_w = np.arange(start=0, stop=1 + im_w - ps, step=step_w)
             grid_idx = [PatchExtractor.create_pm(img_path, ps, a, b) for a in grid_h for b in grid_w]
             patches.extend(grid_idx if grid_idx else [PatchExtractor.create_pm(img_path, ps, 0, 0)])
@@ -141,11 +140,10 @@ class PatchExtractor:
         return im[id_h:id_h + ps, id_w:id_w + ps]
 
     @staticmethod
-    def neighboring_patches(pm, img_shape, d=1, include_self=True):
+    def neighboring_patches(pm, im_dim, d=1, include_self=True):
         img_name, ps = os.path.basename(pm['full_img']), pm['ps']
-        max_h, max_w = img_shape[0] - ps, img_shape[1] - ps
-        step_h = ps - PatchExtractor.get_overlap(img_shape[0], ps)
-        step_w = ps - PatchExtractor.get_overlap(img_shape[1], ps)
+        max_h, max_w = im_dim[0] - ps, im_dim[1] - ps
+        step_h, step_w = ps - PatchExtractor.get_overlap(im_dim[0], ps), ps - PatchExtractor.get_overlap(im_dim[1], ps)
         scope_h = [i * step_h for i in range(-d, d+1)]
         scope_w = [i * step_w for i in range(-d, d + 1)]
         neighbors = [(a, b) for a, b in [(m + pm['idx_h'], n + pm['idx_w']) for m in scope_h for n in scope_w]
@@ -200,9 +198,8 @@ class PatchExtractor:
     def get_overlap(n, div):
         """Computes minimum overlap between patches"""
         remainder = n % div
-        quotient = max(1, int(n / div))
-        overlap = math.ceil((div - remainder) / quotient)
-        return 0 if overlap == n else overlap
+        quotient = max(1, n // div)
+        return remainder // quotient
 
     @staticmethod
     def get_full_img_from_patch(patch_name):
@@ -235,8 +232,16 @@ def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest, m_prefix):
         pms.append((c, grids))
     pmq.put(pms)
 
+
+def get_dirs(root, level):
+    all_dirs = common.list_dirs(root)
+    while level > 0:
+        all_dirs = [os.path.join(a, b) for a in all_dirs for b in common.list_dirs(os.path.join(root, a))]
+        level -= 1
+    return all_dirs
+
 def main(args):
-    all_dirs = [d for d in sorted(os.listdir(args.data)) if os.path.isdir(os.path.join(args.data, d))]
+    all_dirs = get_dirs(args.data, args.level)
     if not all_dirs:
         all_dirs = ['']
     workers, batch_size, batched_dirs = concurrency.batch_lst(all_dirs)
@@ -259,6 +264,7 @@ def get_patcher_arg_parser(desc="Creates patch dataset from image dataset"):
     parser.add_argument('--dest', type=str, help="directory where the patches should be saved")
     parser.add_argument('-p', '--patch-size', nargs='+', default=[512], type=int, help="patch sizes")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
+    parser.add_argument('--level', default=0, type=int, help="nested level of class folders compared to args.data")
     parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix of mask dirs")
     return parser
 
@@ -275,4 +281,4 @@ if __name__ == '__main__':
         args.dest = common.maybe_create(os.path.dirname(args.data),
                                         f'{os.path.basename(args.data)}_patched_{"_".join(map(str, args.patch_size))}')
 
-    main(args)
+    common.time_method(main, args)
