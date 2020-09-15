@@ -245,7 +245,7 @@ def main(args):
     if not all_dirs:
         all_dirs = ['']
     workers, batch_size, batched_dirs = concurrency.batch_lst(all_dirs)
-    patcher = PatchExtractor(args.patch_size)
+    patcher = PatchExtractor(args.patch_sizes)
     pmq = mp.Queue()
     jobs = []
     for i, dirs in zip(range(workers), batched_dirs):
@@ -254,7 +254,7 @@ def main(args):
     pms = concurrency.unload_mpqueue(pmq, jobs)
     for j in jobs:
         j.join()
-    pickle.dump(pms, open(os.path.join(args.dest, f'patches_{"_".join(map(str, args.patch_size))}.p'), "wb"))
+    pickle.dump(pms, open(os.path.join(args.dest, f'patches_{"_".join(map(str, args.patch_sizes))}.p'), "wb"))
     print("done")
 
 
@@ -262,7 +262,7 @@ def get_patcher_arg_parser(desc="Creates patch dataset from image dataset"):
     parser = argparse.ArgumentParser(description=desc)
     parser.add_argument('--data', type=str, required=True, help="source data root directory absolute path")
     parser.add_argument('--dest', type=str, help="directory where the patches should be saved")
-    parser.add_argument('-p', '--patch-size', nargs='+', default=[512], type=int, help="patch sizes")
+    parser.add_argument('-p', '--patch-sizes', nargs='+', default=[512], type=int, help="patch sizes")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
     parser.add_argument('--level', default=0, type=int, help="nested level of class folders compared to args.data")
     parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix of mask dirs")
@@ -273,12 +273,12 @@ if __name__ == '__main__':
     parser = get_patcher_arg_parser()
     args = parser.parse_args()
 
-    args.patch_size = sorted(args.patch_size)
+    args.patch_sizes = sorted(args.patch_sizes)
 
     args.data = args.data.rstrip('/')
     common.check_dir_valid(args.data)
     if args.dest is None:
         args.dest = common.maybe_create(os.path.dirname(args.data),
-                                        f'{os.path.basename(args.data)}_patched_{"_".join(map(str, args.patch_size))}')
+                                        f'{os.path.basename(args.data)}_patched_{"_".join(map(str, args.patch_sizes))}')
 
     common.time_method(main, args)
