@@ -77,13 +77,13 @@ class ClassifModel(CustomModel):
             im[h:h + patch_size, w:w + patch_size] = hm
         return im
 
-    def show_preds(self, img_arr, preds, title, fname):
+    def show_preds(self, img_arr, preds, title, fname, entropy_thresh=1.25):
         plt.figure()
         fig, ax = plt.subplots(1, figsize=(20, 20))
         for patch, pred in preds.items():
             colors = ['y']*len(pred)
             if self.with_entropy:
-                colors[-1] = 'b'
+                colors[-1] = 'b' if float(pred[-1].replace('Entropy: ', '')) < entropy_thresh else 'r'
             h, w = PatchExtractor.get_position(patch)
             for i, (p, c) in enumerate(zip(pred, colors)):
                 plt.text(50 + w, (i+1)*50 + h, p, color=c, fontsize=8, fontweight='bold')
