@@ -83,7 +83,9 @@ class ClassifModel(CustomModel):
         for patch, pred in preds.items():
             h, w = PatchExtractor.get_position(patch)
             for i, (p, c) in enumerate(pred):
-                plt.text(50 + w, (i+1)*50 + h, p, color=c if i == 0 else 'y', fontsize=8, fontweight='bold')
+                if i > 0 and not (self.with_entropy and i == len(pred)-1):  # entropy value keeps its own color
+                    c = 'y'
+                plt.text(50 + w, (i+1)*50 + h, p, color=c, fontsize=8, fontweight='bold')
         ax.imshow(img_arr)
         plt.axis('off')
         plt.title(title, fontsize=42)
