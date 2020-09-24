@@ -80,7 +80,7 @@ class ClassifModel(CustomModel):
     def show_preds(self, img_arr, preds, title, fname):
         plt.figure()
         #im_h, im_w = img_arr.shape[:-1]
-        fig, ax = plt.subplots(1, figsize=(15, 15))  # figsize=(int(15*im_w/im_h), 15))
+        fig, ax = plt.subplots(1, figsize=(20, 20))  # figsize=(int(20*im_w/im_h), 20))
         for patch, pred in preds.items():
             colors = ['y']*len(pred)
             if self.with_entropy:
