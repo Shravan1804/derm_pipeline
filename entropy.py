@@ -28,8 +28,9 @@ def switch_custom_dropout(m, activate: bool = True, verbose: bool = False):
     """Turn all Custom Dropouts training mode to true or false according to the variable activate"""
     for c in m.children():
         if isinstance(c, CustomDropout):
-            print(f"Current active : {c.activate}")
-            print(f"Switching to : {activate}")
+            if verbose:
+                print(f"Current active : {c.activate}")
+                print(f"Switching to : {activate}")
             c.activate = activate
         else:
             switch_custom_dropout(c, activate=activate)

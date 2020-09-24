@@ -80,11 +80,11 @@ class ClassifModel(CustomModel):
     def show_preds(self, img_arr, preds, title, fname):
         plt.figure()
         im_h, im_w = img_arr.shape[:-1]
-        fig, ax = plt.subplots(1, figsize=(20, int(20*im_w/im_h)))
+        fig, ax = plt.subplots(1, figsize=(int(15*im_w/im_h), 15))
         for patch, pred in preds.items():
             colors = [(255, 255, 0)]*len(pred)
             if self.with_entropy:
-                colors[-1] = [(0, 0, 255)]
+                colors[-1] = (0, 0, 255)
             h, w = PatchExtractor.get_position(patch)
             for i, (p, c) in enumerate(zip(pred, colors)):
                 cv2.putText(img_arr, p, (50 + w, (i+1)*50 + h), cv2.FONT_HERSHEY_SIMPLEX, 1.25, c, 3)
@@ -105,7 +105,7 @@ class ClassifModel(CustomModel):
         preds = torch.cat([p.unsqueeze(0) for p in preds], dim=1)
 
         if self.with_entropy:
-            entropy_ims = entropy(preds)
+            entropy_ims = entropy.entropy(preds)
             topk_idx, topk_p, topk_std = entropy.custom_top_k_preds(preds, topk)
         else:
             topk_p, topk_idx = preds.squeeze(0).topk(topk, axis=1)
@@ -463,7 +463,7 @@ def main(args):
         print(f"Image {img_id}/{len(img_list)}: {img_path}")
         file, ext = os.path.splitext(os.path.basename(img_path))
         im = cv2.cvtColor(patcher.load_image(img_path), cv2.COLOR_BGR2RGB)
-        
+
         if args.obj_detec:
             gt = ObjDetecModel.get_img_gt(img_path)
             if args.out_dir is not None and gt is None:
@@ -475,7 +475,7 @@ def main(args):
         b_pms = common.batch_list(patch_maps, args.bs)
 
         pm_preds = []
-        for batch in tqdm(b_pms):
+        for batch in tqdm(b_pms) if len(b_pms) > 1 else b_pms:
             patches = [PatchExtractor.extract_patch(im, pm['ps'], pm['idx_h'], pm['idx_w']) for pm in batch]
             batch_preds = model.predict_imgs(patches)
             pm_preds.extend(zip(batch, batch_preds))
