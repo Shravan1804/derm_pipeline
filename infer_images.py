@@ -16,6 +16,7 @@ from radam import *
 from PatchExtractor import PatchExtractor, DrawHelper
 from ObjDetecPatchSamplerDataset import ObjDetecPatchSamplerDataset
 import common
+import entropy
 
 class CustomModel(object):
     def __init__(self, model_path, output_dir, use_cpu):
@@ -37,28 +38,39 @@ class CustomModel(object):
 
 
 class ClassifModel(CustomModel):
-    def __init__(self, model_path, output_dir, use_cpu):
+    def __init__(self, model_path, output_dir, use_cpu, with_entropy):
         super().__init__(model_path, output_dir, use_cpu)
         fvision.defaults.device = torch.device(self.device)
+        self.load_model()
+        self.with_entropy = with_entropy
+        if self.with_entropy:
+            entropy.convert_learner(self.learner)
 
     def load_model(self):
-        self.model = fvision.load_learner(os.path.dirname(self.model_path), os.path.basename(self.model_path))
+        self.learner = fvision.load_learner(os.path.dirname(self.model_path), os.path.basename(self.model_path))
 
-    def prepare_img_for_inference(self, im):
-        return fvision.Image(fvision.pil2tensor(im, np.float32).div_(255))
+    def prepare_img_for_inference(self, ims):
+        return [fvision.Image(fvision.pil2tensor(im, np.float32).div_(255)) for im in ims]
 
     def predict_imgs(self, ims):
-        return [self.model.predict(self.prepare_img_for_inference(im)) for im in ims]
+        ims = self.prepare_img_for_inference(ims)
+        preds = [[self.learner.predict(im)] for im in ims]
+        if self.with_entropy:
+            entropy.switch_custom_dropout(self.learner.model, True)
+            entropy_preds = [self.learner.predict_with_mc_dropout(im) for im in ims]
+            entropy.switch_custom_dropout(self.learner.model, False)
+            preds = [p + pe for p, pe in zip(preds, entropy_preds)]
+        return preds
 
     def gradcam(self, im, patches, patch_size=512):
         from cnn_viz.visualisation.core import GradCam
         from cnn_viz.visualisation.core.utils import image_net_postprocessing
         from cnn_viz.utils import tensor2img
-        vis = GradCam(self.model.model, torch.device('cpu'))
+        vis = GradCam(self.learner.model, torch.device('cpu'))
         print("Computing heatmap")
         for pm, p in tqdm(patches):
-            xb, _ = self.model.data.one_item(self.prepare_img_for_inference(p), detach=False, denorm=False)
-            hm = vis(xb, self.model.model._conv_head, postprocessing=image_net_postprocessing)[0]
+            xb, _ = self.learner.data.one_item(self.prepare_img_for_inference([p]), detach=False, denorm=False)
+            hm = vis(xb, self.learner.model._conv_head, postprocessing=image_net_postprocessing)[0]
             hm = tensor2img(fvision.denormalize(hm, *[torch.FloatTensor(x) for x in fvision.imagenet_stats]) * 255)
             hm = cv2.resize(hm.astype(np.uint8), (patch_size, patch_size))
             h, w = pm['idx_h'], pm['idx_w']
@@ -67,12 +79,15 @@ class ClassifModel(CustomModel):
 
     def show_preds(self, img_arr, preds, title, fname):
         plt.figure()
-        fig, ax = plt.subplots(1, figsize=(20, 20))
-        colors = [(255, 255, 0), (255, 255, 0), (0, 0, 255)]
+        im_h, im_w = img_arr.shape[:-1]
+        fig, ax = plt.subplots(1, figsize=(20, int(20*im_w/im_h)))
         for patch, pred in preds.items():
+            colors = [(255, 255, 0)]*len(pred)
+            if self.with_entropy:
+                colors[-1] = [(0, 0, 255)]
             h, w = PatchExtractor.get_position(patch)
-            for i, p in enumerate(pred):
-                cv2.putText(img_arr, p, (50 + w, (i+1)*50 + h), cv2.FONT_HERSHEY_SIMPLEX, 2, colors[i], thickness=3)
+            for i, (p, c) in enumerate(zip(pred, colors)):
+                cv2.putText(img_arr, p, (50 + w, (i+1)*50 + h), cv2.FONT_HERSHEY_SIMPLEX, 1.25, c, 3)
         ax.imshow(img_arr)
         plt.axis('off')
         plt.title(title, fontsize=42)
@@ -81,49 +96,74 @@ class ClassifModel(CustomModel):
         plt.show()
         plt.close()
 
-    def prediction_validation(self, preds, neighbors, cats=None, consider_top=2):
-        pred_probs = {k: v[2].numpy() for k, v in preds.items()}
-        preds = {k: [f'orig: {str(v[0])}'] for k, v in preds.items()}
-        summed_neighbors_preds = {k: sum([pred_probs[p] for p in neighbors[k]]) for k in preds.keys()}
-        for patch in preds.keys():
-            neighbors_preds = summed_neighbors_preds[patch]
-            topk = neighbors_preds.argsort()[::-1][:consider_top]
-            top_preds = list(zip(np.array(self.classes)[topk], neighbors_preds[topk]))
-            preds[patch] = [f'{i+1}: {p[0]}' for i, p in enumerate(top_preds)] + preds[patch]
-        return preds
+    def prepare_predictions(self, pm_preds, topk=3, d=2):
+        # Each image has a list of preds. If no entropy this list contains a single element.
+        pms, preds = zip(*pm_preds)
+        # Create tensor for each image: shape is entropy sample x nclasses
+        preds = [torch.cat([elem[2].unsqueeze(0) for elem in sublst], dim=0) for sublst in preds]
+        # Create tensor for whole batch: shape is entropy sample x bs x nclasses
+        preds = torch.cat([p.unsqueeze(0) for p in preds], dim=1)
 
-    def prediction_validation2(self, preds, neighbors, cats, consider_top=2):
-        pred_probs = {k: v[2].numpy() for k, v in preds.items()}
-        res = {k: [f'orig: {str(v[0])}'] for k, v in preds.items()}
-        for k in res.keys():
-            orig = int(preds[k][1])
-            neigh_preds = {}
-            for neighbor in neighbors[k]:
-                for top in pred_probs[neighbor].argsort()[::-1][:consider_top]:
-                    neigh_preds[top] = neigh_preds.get(top, 0) + 1
-            most_probable = [t[0] for t in sorted(neigh_preds.items(), key=lambda item: item[1])[::-1][:consider_top]]
-            if orig not in most_probable:
-                res[k].append(f'corr: {cats[int(most_probable[0])]}')
+        if self.with_entropy:
+            entropy_ims = entropy(preds)
+            topk_idx, topk_p, topk_std = entropy.custom_top_k_preds(preds, topk)
+        else:
+            topk_p, topk_idx = preds.squeeze(0).topk(topk, axis=1)
+
+        trad = {'arme': 'Arm', 'beine': 'Leg', 'fusse': 'Feet', 'hande': 'Hand', 'kopf': 'Head', 'other': 'Other',
+                'stamm': 'Trunk', 'mean': 'Mean'}
+        labels = [trad[c] for c in self.learner.data.classes]
+        res = {}
+        for i, (pm, idxs, probs) in enumerate(zip(pms, topk_idx, topk_p)):
+            res[pm['patch_path']] = [f'{labels[idx]}: {p:.{d}f}' for idx, p in zip(idxs, probs)]
+            if self.with_entropy:
+                res[pm['patch_path']] = [v + f' \u00B1 {s:.{d}f}' for v, s in zip(res[pm['patch_path']], topk_std[i])]
+                res[pm['patch_path']].append(f'Entropy: {entropy_ims[i]:.{d}f}')
         return res
+
+    def correct_predictions(self, preds, neighbors, cats, consider_top=2, method=2):
+        return preds
+        if method == 1:
+            pred_probs = {k: v[2].numpy() for k, v in preds.items()}
+            preds = {k: [f'orig: {str(v[0])}'] for k, v in preds.items()}
+            summed_neighbors_preds = {k: sum([pred_probs[p] for p in neighbors[k]]) for k in preds.keys()}
+            for patch in preds.keys():
+                neighbors_preds = summed_neighbors_preds[patch]
+                topk = neighbors_preds.argsort()[::-1][:consider_top]
+                top_preds = list(zip(np.array(self.classes)[topk], neighbors_preds[topk]))
+                preds[patch] = [f'{i + 1}: {p[0]}' for i, p in enumerate(top_preds)] + preds[patch]
+            return preds
+        elif method == 2:
+            pred_probs = {k: v[2].numpy() for k, v in preds.items()}
+            res = {k: [f'orig: {str(v[0])}'] for k, v in preds.items()}
+            for k in res.keys():
+                orig = int(preds[k][1])
+                neigh_preds = {}
+                for neighbor in neighbors[k]:
+                    for top in pred_probs[neighbor].argsort()[::-1][:consider_top]:
+                        neigh_preds[top] = neigh_preds.get(top, 0) + 1
+                most_probable = [t[0] for t in sorted(neigh_preds.items(), key=lambda item: item[1])[::-1][:consider_top]]
+                if orig not in most_probable:
+                    res[k].append(f'corr: {cats[int(most_probable[0])]}')
+            return res
 
 
 class EffnetClassifModel(ClassifModel):
-    def __init__(self, model_path, output_dir, use_cpu, data_sample, bs, input_size):
-        super().__init__(model_path, output_dir, use_cpu)
+    def __init__(self, model_path, output_dir, use_cpu, with_entropy, data_sample, bs, input_size):
         test = 'strong_labels_test'
         train = 'strong_labels_train'
         self.data = fvision.ImageDataBunch.from_folder(path=data_sample, train=train, valid=test, size=input_size, bs=bs)
         self.data.normalize(fvision.imagenet_stats)
         self.classes = self.data.classes
         self.n_classes = len(self.classes)
-        self.load_model()
+        super().__init__(model_path, output_dir, use_cpu, with_entropy)
 
     def load_model(self):
         from efficientnet_pytorch import EfficientNet
-        model = EfficientNet.from_pretrained('efficientnet-b6')
+        model = EfficientNet.from_name('efficientnet-b6')
         model._fc = torch.nn.Linear(model._fc.in_features, self.data.c)
         common.load_custom_pretrained_weights(model, self.model_path)
-        self.model = fvision.Learner(model=model, data=self.data)
+        self.learner = fvision.Learner(model=model, data=self.data)
 
 
 
@@ -404,26 +444,23 @@ class ObjDetecModel(CustomModel):
         classes, boxes, masks = (np.concatenate(val) for val in objs)
         return {'labels': classes, 'boxes': boxes, 'masks': masks.reshape((masks.shape[0], 1, *masks.shape[1:])).astype(np.float)}
 
-def unbatch(pm_preds):
-    pms, preds = zip(*pm_preds)
-    pms = [p for pm in pms for p in pm]
-    preds = [p for pred in preds for p in pred]
-    return zip(pms, preds)
 
 def main(args):
-    img_list = [args.img]  if args.img is not None else common.list_files(args.img_dir, full_path=True)
+    img_list = [args.img] if args.img is not None else common.list_files(args.img_dir, full_path=True)
 
     if args.obj_detec:
         classes = ['__background__', 'pustule', 'brown_spot'] if args.classes is None else args.classes
         model = ObjDetecModel(classes, args.model, args.out_dir, args.cpu)
     else:
         if args.effnet:
-            model = EffnetClassifModel(args.model, args.out_dir, args.cpu, args.data_sample, args.bs, args.input_size)
+            model = EffnetClassifModel(args.model, args.out_dir, args.cpu, args.entropy, args.data_sample,
+                                       args.bs, args.input_size)
         else:
-            model = ClassifModel(args.model, args.out_dir, args.cpu)
+            model = ClassifModel(args.model, args.out_dir, args.cpu, args.entropy)
 
     patcher = PatchExtractor(args.ps)
     for img_id, img_path in enumerate(img_list):
+        print(f"Image {img_id}/{len(img_list)}: {img_path}")
         file, ext = os.path.splitext(os.path.basename(img_path))
         im = cv2.cvtColor(patcher.load_image(img_path), cv2.COLOR_BGR2RGB)
         
@@ -433,17 +470,16 @@ def main(args):
                 raise Exception("No ground truth available, but user requested to save dets")
             if args.show_gt:
                 model.show_preds(im, [gt], title=f'Ground Truth for {file}{ext}', fname=f'{file}_00_gt{ext}')
-        
-        print("Creating patches for", img_path)
+
         patch_maps = patcher.patch_grid(img_path, im)
         b_pms = common.batch_list(patch_maps, args.bs)
-        # lst of tuples containing batch of patch maps with corresponding image patches
-        b_pms_patches = [(b, [PatchExtractor.extract_patch(im, pm['ps'], pm['idx_h'], pm['idx_w']) for pm in b])
-                         for b in b_pms]
 
-        print("Applying model to patches")
-        pm_preds = unbatch([(pms, model.predict_imgs(patches)) for pms, patches in tqdm(b_pms_patches)])
-        # TODO args.heatmap
+        pm_preds = []
+        for batch in tqdm(b_pms):
+            patches = [PatchExtractor.extract_patch(im, pm['ps'], pm['idx_h'], pm['idx_w']) for pm in batch]
+            batch_preds = model.predict_imgs(patches)
+            pm_preds.extend(zip(batch, batch_preds))
+            # TODO handle args.heatmap
 
         if args.obj_detec:
             pm_preds = [p for p in pm_preds if p[1]['labels'].size > 0]
@@ -458,9 +494,9 @@ def main(args):
             title = f'Predictions with confidence > {args.conf_thresh}'
             plot_name = f'{file}_01_conf_{args.conf_thresh}{ext}'
         else:
+            preds = model.prepare_predictions(pm_preds)
             neighbors = {p['patch_path']: patcher.neighboring_patches(p, im.shape, d=1) for p in patch_maps}
-            preds = {pm['patch_path']: pred for pm, pred in pm_preds}
-            preds = model.prediction_validation2(preds, neighbors, cats=model.model.data.classes)
+            preds = model.correct_predictions(preds, neighbors, cats=model.learner.data.classes)
             title = f'Body localization'
             plot_name = f'{file}_body_loc{ext}'
 
@@ -490,6 +526,7 @@ if __name__ == '__main__':
     parser.add_argument('--data-sample', type=str, help="optional, needed to recreate effnet learner")
     parser.add_argument('--effnet', action='store_true', help="efficientnet model if set, need --data-sample")
     parser.add_argument('--heatmap', action='store_true', help="For classif, creates gradcam image")
+    parser.add_argument('--entropy', action='store_true', help="Compute image entropy")
 
     # obj detec args
     parser.add_argument('--obj-detec', action='store_true', help="Applies object detection model")
