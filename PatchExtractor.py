@@ -195,11 +195,12 @@ class PatchExtractor:
         return tuple(int(t) for t in name.split(PatchExtractor.SEP)[1].split('_h')[1].split('_w'))
 
     @staticmethod
-    def get_overlap(n, div):
+    def get_overlap(n, ps):
         """Computes minimum overlap between patches"""
-        remainder = n % div
-        quotient = max(1, n // div)
-        return remainder // quotient
+        remainder = n % ps
+        quotient = max(1, n // ps)
+        overlap = math.ceil((ps - remainder) / quotient)
+        return 0 if overlap == n else overlap
 
     @staticmethod
     def get_full_img_from_patch(patch_name):
