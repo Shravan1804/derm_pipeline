@@ -82,12 +82,12 @@ class ClassifModel(CustomModel):
         im_h, im_w = img_arr.shape[:-1]
         fig, ax = plt.subplots(1, figsize=(int(15*im_w/im_h), 15))
         for patch, pred in preds.items():
-            colors = [(255, 255, 0)]*len(pred)
+            colors = ['y']*len(pred)
             if self.with_entropy:
-                colors[-1] = (0, 0, 255)
+                colors[-1] = 'b'
             h, w = PatchExtractor.get_position(patch)
             for i, (p, c) in enumerate(zip(pred, colors)):
-                cv2.putText(img_arr, p, (50 + w, (i+1)*50 + h), cv2.FONT_HERSHEY_SIMPLEX, 1.25, c, 3)
+                plt.text(50 + w, (i+1)*50 + h, p, color=c, fontsize=12, fontweight='bold')
         ax.imshow(img_arr)
         plt.axis('off')
         plt.title(title, fontsize=42)
