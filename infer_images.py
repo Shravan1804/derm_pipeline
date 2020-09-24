@@ -77,16 +77,13 @@ class ClassifModel(CustomModel):
             im[h:h + patch_size, w:w + patch_size] = hm
         return im
 
-    def show_preds(self, img_arr, preds, title, fname, entropy_thresh=1.25):
+    def show_preds(self, img_arr, preds, title, fname):
         plt.figure()
         fig, ax = plt.subplots(1, figsize=(20, 20))
         for patch, pred in preds.items():
-            colors = ['y']*len(pred)
-            if self.with_entropy:
-                colors[-1] = 'b' if float(pred[-1].replace('Entropy: ', '')) < entropy_thresh else 'r'
             h, w = PatchExtractor.get_position(patch)
-            for i, (p, c) in enumerate(zip(pred, colors)):
-                plt.text(50 + w, (i+1)*50 + h, p, color=c, fontsize=8, fontweight='bold')
+            for i, (p, c) in enumerate(pred):
+                plt.text(50 + w, (i+1)*50 + h, p, color=c if i == 0 else 'y', fontsize=8, fontweight='bold')
         ax.imshow(img_arr)
         plt.axis('off')
         plt.title(title, fontsize=42)
@@ -95,7 +92,13 @@ class ClassifModel(CustomModel):
         plt.show()
         plt.close()
 
-    def prepare_predictions(self, pm_preds, topk=3, d=2):
+    def prepare_predictions(self, pm_preds, topk=3, d=2, entropy_thresh=1.25):
+        trad = {'arme': 'Arm', 'beine': 'Leg', 'fusse': 'Feet', 'hande': 'Hand', 'kopf': 'Head', 'other': 'Other',
+                'stamm': 'Trunk'}
+        labels = [trad[c] for c in self.learner.data.classes]
+        assert len(labels) >= topk, "Topk greater than the number of classes"
+        colors = (['k', 'g', 'c', 'm', 'w', 'y', 'b', 'r'] * max(1, int(len(labels)/8)))[:len(labels)]
+
         # Each image has a list of preds. If no entropy this list contains a single element.
         pms, preds = zip(*pm_preds)
         # Create tensor for each image: shape is entropy sample x nclasses
@@ -109,15 +112,14 @@ class ClassifModel(CustomModel):
         else:
             topk_p, topk_idx = preds.squeeze(0).topk(topk, axis=1)
 
-        trad = {'arme': 'Arm', 'beine': 'Leg', 'fusse': 'Feet', 'hande': 'Hand', 'kopf': 'Head', 'other': 'Other',
-                'stamm': 'Trunk', 'mean': 'Mean'}
-        labels = [trad[c] for c in self.learner.data.classes]
         res = {}
         for i, (pm, idxs, probs) in enumerate(zip(pms, topk_idx, topk_p)):
-            res[pm['patch_path']] = [f'{labels[idx]}: {p:.{d}f}' for idx, p in zip(idxs, probs)]
+            res[pm['patch_path']] = [(f'{labels[idx]}: {p:.{d}f}', colors[idx]) for idx, p in zip(idxs, probs)]
             if self.with_entropy:
-                res[pm['patch_path']] = [v + f' \u00B1 {s:.{d}f}' for v, s in zip(res[pm['patch_path']], topk_std[i])]
-                res[pm['patch_path']].append(f'Entropy: {entropy_ims[i]:.{d}f}')
+                res[pm['patch_path']] = [(v0 + f' \u00B1 {s:.{d}f}', v1)
+                                         for (v0, v1), s in zip(res[pm['patch_path']], topk_std[i])]
+                res[pm['patch_path']].append((f'Entropy: {entropy_ims[i]:.{d}f}',
+                                              'b' if entropy_ims[i] < entropy_thresh else 'r'))
         return res
 
     def correct_predictions(self, preds, neighbors, cats, consider_top=2, method=2):
@@ -495,7 +497,7 @@ def main(args):
         else:
             preds = model.prepare_predictions(pm_preds)
             neighbors = {p['patch_path']: patcher.neighboring_patches(p, im.shape, d=1) for p in patch_maps}
-            preds = model.correct_predictions(preds, neighbors, cats=model.learner.data.classes)
+            # preds = model.correct_predictions(preds, neighbors, cats=model.learner.data.classes)
             title = f'Body localization'
             plot_name = f'{file}_body_loc{ext}'
 
