@@ -99,7 +99,7 @@ class ClassifModel(CustomModel):
                 'stamm': 'Trunk'}
         labels = [trad[c] for c in self.learner.data.classes]
         assert len(labels) >= topk, "Topk greater than the number of classes"
-        colors = (['k', 'g', 'c', 'm', 'w', 'y', 'b', 'r'] * max(1, int(len(labels)/8)))[:len(labels)]
+        colors = (['k', 'g', 'c', 'm', 'w', 'lime', 'maroon', 'darkorange'] * max(1, int(len(labels)/8)))[:len(labels)]
 
         # Each image has a list of preds. If no entropy this list contains a single element.
         pms, preds = zip(*pm_preds)
