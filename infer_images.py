@@ -102,7 +102,7 @@ class ClassifModel(CustomModel):
         # Create tensor for each image: shape is entropy sample x nclasses
         preds = [torch.cat([elem[2].unsqueeze(0) for elem in sublst], dim=0) for sublst in preds]
         # Create tensor for whole batch: shape is entropy sample x bs x nclasses
-        preds = torch.cat([p.unsqueeze(0) for p in preds], dim=1)
+        preds = torch.cat([p.unsqueeze(1) for p in preds], dim=1)
 
         if self.with_entropy:
             entropy_ims = entropy.entropy(preds)
