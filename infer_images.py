@@ -1,8 +1,6 @@
 import os
 import cv2
-import sys
 import random
-import argparse
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -17,52 +15,15 @@ from radam import *
 
 from PatchExtractor import PatchExtractor, DrawHelper
 from ObjDetecPatchSamplerDataset import ObjDetecPatchSamplerDataset
-
-class Compose(object):
-    def __init__(self, transforms):
-        self.transforms = transforms
-
-    def __call__(self, im, target):
-        for t in self.transforms:
-            im, target = t(im, target)
-        return im, target
-
-
-class RandomHorizontalFlip(object):
-    def __init__(self, prob):
-        self.prob = prob
-
-    def __call__(self, image, target):
-        if random.random() < self.prob:
-            height, width = image.shape[-2:]
-            image = image.flip(-1)
-            bbox = target["boxes"]
-            bbox[:, [0, 2]] = width - bbox[:, [2, 0]]
-            target["boxes"] = bbox
-            if "masks" in target:
-                target["masks"] = target["masks"].flip(-1)
-            # if "keypoints" in target:
-            #     keypoints = target["keypoints"]
-            #     keypoints = _flip_coco_person_keypoints(keypoints, width)
-            #     target["keypoints"] = keypoints
-        return image, target
-
-
-class ToTensor(object):
-    def __call__(self, image, target):
-        image = torchvision.transforms.functional.to_tensor(image)
-        return image, target
+import common
 
 class CustomModel(object):
-    def __init__(self, seed, classes, model_path, output_dir):
-        self.seed = seed
-        self.classes = classes
-        self.n_classes = len(self.classes)
-        self.load_model(model_path)
-        self.device = torch.device('cpu') if not torch.cuda.is_available() else torch.device('cuda')
+    def __init__(self, model_path, output_dir, use_cpu):
+        self.model_path = model_path
         self.output_dir = output_dir
+        self.device = torch.device('cuda') if not use_cpu and torch.cuda.is_available() else torch.device('cpu')
 
-    def load_model(self, model_path):
+    def load_model(self):
         raise NotImplementedError
 
     def predict_imgs(self, ims):
@@ -76,22 +37,33 @@ class CustomModel(object):
 
 
 class ClassifModel(CustomModel):
-    def __init__(self, seed, model_path, output_dir):
-        super().__init__(seed, [], model_path, output_dir)
-        self.classes = self.model.data.classes
-        self.n_classes = len(self.classes)
+    def __init__(self, model_path, output_dir, use_cpu):
+        super().__init__(model_path, output_dir, use_cpu)
         fvision.defaults.device = torch.device(self.device)
 
-    def load_model(self, model_path):
-        self.model = fvision.load_learner(os.path.dirname(model_path), os.path.basename(model_path))
+    def load_model(self):
+        self.model = fvision.load_learner(os.path.dirname(self.model_path), os.path.basename(self.model_path))
 
     def prepare_img_for_inference(self, im):
-        t = fvision.pil2tensor(im, dtype=im.dtype)  # converts to numpy tensor
-        t = fvision.Image(t.float() / 255.)  # Convert to float
-        return t
+        return fvision.Image(fvision.pil2tensor(im, np.float32).div_(255))
 
     def predict_imgs(self, ims):
         return [self.model.predict(self.prepare_img_for_inference(im)) for im in ims]
+
+    def gradcam(self, im, patches, patch_size=512):
+        from cnn_viz.visualisation.core import GradCam
+        from cnn_viz.visualisation.core.utils import image_net_postprocessing
+        from cnn_viz.utils import tensor2img
+        vis = GradCam(self.model.model, torch.device('cpu'))
+        print("Computing heatmap")
+        for pm, p in tqdm(patches):
+            xb, _ = self.model.data.one_item(self.prepare_img_for_inference(p), detach=False, denorm=False)
+            hm = vis(xb, self.model.model._conv_head, postprocessing=image_net_postprocessing)[0]
+            hm = tensor2img(fvision.denormalize(hm, *[torch.FloatTensor(x) for x in fvision.imagenet_stats]) * 255)
+            hm = cv2.resize(hm.astype(np.uint8), (patch_size, patch_size))
+            h, w = pm['idx_h'], pm['idx_w']
+            im[h:h + patch_size, w:w + patch_size] = hm
+        return im
 
     def show_preds(self, img_arr, preds, title, fname):
         plt.figure()
@@ -135,17 +107,75 @@ class ClassifModel(CustomModel):
         return res
 
 
+class EffnetClassifModel(ClassifModel):
+    def __init__(self, model_path, output_dir, use_cpu, data_sample, bs, input_size):
+        super().__init__(model_path, output_dir, use_cpu)
+        test = 'strong_labels_test'
+        train = 'strong_labels_train'
+        self.data = fvision.ImageDataBunch.from_folder(path=data_sample, train=train, valid=test, size=input_size, bs=bs)
+        self.data.normalize(fvision.imagenet_stats)
+        self.classes = self.data.classes
+        self.n_classes = len(self.classes)
+        self.load_model()
+
+    def load_model(self):
+        from efficientnet_pytorch import EfficientNet
+        model = EfficientNet.from_pretrained('efficientnet-b6')
+        model._fc = torch.nn.Linear(model._fc.in_features, self.data.c)
+        common.load_custom_pretrained_weights(model, self.model_path)
+        self.model = fvision.Learner(model=model, data=self.data)
+
+
+
+class Compose(object):
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, im, target):
+        for t in self.transforms:
+            im, target = t(im, target)
+        return im, target
+
+
+class RandomHorizontalFlip(object):
+    def __init__(self, prob):
+        self.prob = prob
+
+    def __call__(self, image, target):
+        if random.random() < self.prob:
+            height, width = image.shape[-2:]
+            image = image.flip(-1)
+            bbox = target["boxes"]
+            bbox[:, [0, 2]] = width - bbox[:, [2, 0]]
+            target["boxes"] = bbox
+            if "masks" in target:
+                target["masks"] = target["masks"].flip(-1)
+            # if "keypoints" in target:
+            #     keypoints = target["keypoints"]
+            #     keypoints = _flip_coco_person_keypoints(keypoints, width)
+            #     target["keypoints"] = keypoints
+        return image, target
+
+
+class ToTensor(object):
+    def __call__(self, image, target):
+        image = torchvision.transforms.functional.to_tensor(image)
+        return image, target
+
+
 class ObjDetecModel(CustomModel):
-    def __init__(self, seed, classes, model_path, output_dir):
-        super().__init__(seed, classes, model_path, output_dir)
+    def __init__(self, classes, model_path, output_dir, use_cpu):
+        super().__init__(model_path, output_dir, use_cpu)
+        self.classes = classes
+        self.n_classes = len(self.classes)
+        self.load_model()
         self.model.to(self.device)
         cmap = plt.get_cmap('tab20b')
-        random.seed(self.seed)
         self.bbox_colors = random.sample([cmap(i) for i in np.linspace(0, 1, self.n_classes)], self.n_classes)
 
-    def load_model(self, model_path):
+    def load_model(self):
         self.model = self.get_instance_segmentation_model()
-        self.model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
+        self.model.load_state_dict(torch.load(self.model_path, map_location=torch.device('cpu')))
 
     def get_instance_segmentation_model(self):
         # load an instance segmentation model pre-trained on COCO
@@ -374,117 +404,118 @@ class ObjDetecModel(CustomModel):
         classes, boxes, masks = (np.concatenate(val) for val in objs)
         return {'labels': classes, 'boxes': boxes, 'masks': masks.reshape((masks.shape[0], 1, *masks.shape[1:])).astype(np.float)}
 
-def plot_img(img_arr, title, output_path):
-    plt.figure()
-    fig, ax = plt.subplots(1, figsize=(12, 9))
-    ax.imshow(img_arr)
-    plt.axis('off')
-    plt.title(title)
-    plt.savefig(output_path)
-    plt.close()
-
 def unbatch(pm_preds):
     pms, preds = zip(*pm_preds)
     pms = [p for pm in pms for p in pm]
     preds = [p for pred in preds for p in pred]
     return zip(pms, preds)
 
-def main():
-    parser = argparse.ArgumentParser(description="Apply model to image patches")
-    parser.add_argument('--img-dir', type=str, help="source image root directory absolute path")
-    parser.add_argument('--img', type=str, help="absolute path, single image use, will take precedence over img_dir")
-    parser.add_argument('--model', type=str, help="model path")
-    parser.add_argument('-b', '--batch-size', default=3, type=int, help="batch size")
-    parser.add_argument('-p', '--patch-size', default=512, type=int, help="patch size")
-    parser.add_argument('-conf', '--conf-thresh', default=.5, type=float, help="Confidence threshold for detections")
-    parser.add_argument('--draw-patches', action='store_true', help="Draws patches")
-    parser.add_argument('--obj-detec', action='store_true', help="Applies object detection model")
-    parser.add_argument('--classif', action='store_true', help="Applies classification model")
-    parser.add_argument('--classes', type=str, nargs='*', help="classes for detections")
-    parser.add_argument('--out-dir', type=str, help="if save-output set, output dir absolute path")
-    parser.add_argument('--save-output', action='store_true', help="Save graphs")
-    parser.add_argument('--save-dets', action='store_true', help="Save detections")
-    parser.add_argument('--no-graphs', action='store_true', help="Do not create graphs")
-    parser.add_argument('--show-gt', action='store_true', help="Show gt of object detection dataset")
-    parser.add_argument('--seed', default=42, type=int, help="batch size")
-    args = parser.parse_args()
+def main(args):
+    img_list = [args.img]  if args.img is not None else common.list_files(args.img_dir, full_path=True)
 
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-
-    if args.img is not None:
-        if not os.path.exists(args.img):
-            raise Exception("Error, specified image path doesn't exist:", args.img)
-        img_list = [args.img]
-    else:
-        if args.img_dir is None or not os.path.exists(args.img_dir):
-            raise Exception("Error, both --img and --img-dir are invalid")
-        img_list = [os.path.join(args.img_dir, img) for img in sorted(os.listdir(args.img_dir))]
-
-    if args.save_output or args.save_dets:
-        if args.out_dir is None:
-            raise Exception("Error, --save-output (or --save-dets) is set but no --out-dir")
-        elif not os.path.exists(args.out_dir):
-            os.makedirs(args.out_dir)
-    else:
-        args.out_dir = None
-
-    if args.obj_detec and args.classif:
-        raise Exception("Error, both object detection and classification are set")
-    elif args.obj_detec:
+    if args.obj_detec:
         classes = ['__background__', 'pustule', 'brown_spot'] if args.classes is None else args.classes
-        model = ObjDetecModel(args.seed, classes, args.model, args.out_dir)
-    elif args.classif:
-        model = ClassifModel(args.seed, args.model, args.out_dir)
+        model = ObjDetecModel(classes, args.model, args.out_dir, args.cpu)
     else:
-        raise Exception("Error, neither object detection nor classification was chosen")
-    patcher = PatchExtractor(args.patch_size)
-    # pics problem causing pics
-    #img_list = [os.path.join(args.img_dir, i) for i in ['run12_00012.jpg', 'run12_00023.jpg', 'run12_00028.jpg', 'run13_00014.jpg', 'run13_00015.jpg', 'run13_00016.jpg', 'run13_00097.jpg', 'run13_00114.jpg']]
-    # test set pics
-    # img_list = [os.path.join(args.img_dir, i) for i in ['run13_00099.jpg', 'run13_00016.jpg', 'run13_00083.jpg', 'run13_00014.jpg', 'run13_00123.jpg', 'run13_00073.jpg', 'run13_00143.jpg', 'run13_00064.jpg', 'run13_00117.jpg', 'run13_00150.jpg', 'run13_00002.jpg', 'run13_00110.jpg', 'run13_00028.jpg', 'run13_00032.jpg', 'run13_00074.jpg']]
+        if args.effnet:
+            model = EffnetClassifModel(args.model, args.out_dir, args.cpu, args.data_sample, args.bs, args.input_size)
+        else:
+            model = ClassifModel(args.model, args.out_dir, args.cpu)
+
+    patcher = PatchExtractor(args.ps)
     for img_id, img_path in enumerate(img_list):
         file, ext = os.path.splitext(os.path.basename(img_path))
         im = cv2.cvtColor(patcher.load_image(img_path), cv2.COLOR_BGR2RGB)
-        gt = ObjDetecModel.get_img_gt(img_path)
-        if args.obj_detec and args.show_gt and not args.no_graphs:
-            model.show_preds(im, [gt], title=f'Ground Truth for {file}{ext}', fname=f'{file}_00_gt{ext}')
+        
+        if args.obj_detec:
+            gt = ObjDetecModel.get_img_gt(img_path)
+            if args.out_dir is not None and gt is None:
+                raise Exception("No ground truth available, but user requested to save dets")
+            if args.show_gt:
+                model.show_preds(im, [gt], title=f'Ground Truth for {file}{ext}', fname=f'{file}_00_gt{ext}')
+        
         print("Creating patches for", img_path)
-        pm = patcher.patch_grid(img_path, im)
-        # create batches
-        b_pm = [pm[i:min(len(pm), i+args.batch_size)] for i in range(0, len(pm), args.batch_size)]
-        # lst of batches with a batch being a tuple containing lst of patch maps and lst of corresponding image patches
-        b_patches = [(b, [patcher.extract_patch(im, pms['idx_h'], pms['idx_w']) for pms in b]) for b in b_pm]
+        patch_maps = patcher.patch_grid(img_path, im)
+        b_pms = common.batch_list(patch_maps, args.bs)
+        # lst of tuples containing batch of patch maps with corresponding image patches
+        b_pms_patches = [(b, [PatchExtractor.extract_patch(im, pm['ps'], pm['idx_h'], pm['idx_w']) for pm in b])
+                         for b in b_pms]
+
         print("Applying model to patches")
-        pm_preds = unbatch([(pms, model.predict_imgs(ims)) for pms, ims in tqdm(b_patches)])
+        pm_preds = unbatch([(pms, model.predict_imgs(patches)) for pms, patches in tqdm(b_pms_patches)])
+        # TODO args.heatmap
+
         if args.obj_detec:
             pm_preds = [p for p in pm_preds if p[1]['labels'].size > 0]
             if len(pm_preds) > 0:
-                preds = model.adjust_bboxes_to_full_img(im, pm_preds, patcher.patch_size)
+                preds = model.adjust_bboxes_to_full_img(im, pm_preds, args.ps)
                 preds = [model.merge_preds(preds)]
+                if args.out_dir is not None:
+                    model.save_dets(img_id, preds[0], gt=gt)
+                preds = [model.filter_preds_by_conf(preds[0], args.conf_thresh)]
             else:
                 preds = []
-            if args.save_dets:
-                if gt is None:
-                    raise Exception("No ground truth available")
-                model.save_dets(img_id, preds[0], gt=gt)
-            if len(pm_preds) > 0:
-                preds = [model.filter_preds_by_conf(preds[0], args.conf_thresh)]
             title = f'Predictions with confidence > {args.conf_thresh}'
             plot_name = f'{file}_01_conf_{args.conf_thresh}{ext}'
-        elif args.classif:
-            neighbors = {p['patch_path']: patcher.neighboring_patches(p, im.shape, d=1) for p in pm}
-            #DEBUG NEIGHBORS:
-            #[print("Error", p, "does not seem correct") for neigh in neighbors.values() for p in neigh if p not in [a['patch_path'] for a in pm]]
+        else:
+            neighbors = {p['patch_path']: patcher.neighboring_patches(p, im.shape, d=1) for p in patch_maps}
             preds = {pm['patch_path']: pred for pm, pred in pm_preds}
             preds = model.prediction_validation2(preds, neighbors, cats=model.model.data.classes)
             title = f'Body localization'
-            plot_name = f'{file}_body_loc_{ext}'
+            plot_name = f'{file}_body_loc{ext}'
+
         if args.draw_patches:
-            DrawHelper().draw_patches(im, pm, patcher.patch_size)
+            DrawHelper().draw_patches(im, patch_maps, args.ps)
         if not args.no_graphs:
             model.show_preds(im, preds, title=f'{title} for {file}{ext}', fname=plot_name)
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description="Apply model to images")
+    parser.add_argument('--img-dir', type=str, help="source image root directory absolute path")
+    parser.add_argument('--img', type=str, help="absolute path, single image use, will take precedence over img_dir")
+    parser.add_argument('--model', type=str, help="model path")
+    parser.add_argument('--bs', default=3, type=int, help="batch size")
+    parser.add_argument('--ps', default=512, type=int, help="patch size")
+    parser.add_argument('--input-size', default=256, type=int, help="model input size")
+    parser.add_argument('--draw-patches', action='store_true', help="Draws patches")
+    parser.add_argument('--out-dir', type=str, help="if save-out set, output dir absolute path")
+    parser.add_argument('--no-graphs', action='store_true', help="Do not create graphs")
+    parser.add_argument('--cpu', action='store_true', help="Use CPU (defaults use cuda if available)")
+    parser.add_argument('--gpuid', type=int, help="For single gpu, gpu id to be used")
+    common.add_multi_gpus_args(parser)
+
+    # classif args
+    parser.add_argument('--classif', action='store_true', help="Applies classification model")
+    parser.add_argument('--data-sample', type=str, help="optional, needed to recreate effnet learner")
+    parser.add_argument('--effnet', action='store_true', help="efficientnet model if set, need --data-sample")
+    parser.add_argument('--heatmap', action='store_true', help="For classif, creates gradcam image")
+
+    # obj detec args
+    parser.add_argument('--obj-detec', action='store_true', help="Applies object detection model")
+    parser.add_argument('--conf-thresh', default=.5, type=float, help="Confidence threshold for detections")
+    parser.add_argument('--classes', type=str, nargs='*', help="classes for detections")
+    parser.add_argument('--show-gt', action='store_true', help="Show gt of object detection dataset")
+    args = parser.parse_args()
+
+    if args.img is not None:
+        common.check_file_valid(args.img)
+    else:
+        common.check_dir_valid(args.img_dir)
+
+    if args.out_dir is not None:
+        common.check_dir_valid(args.out_dir)
+
+    if args.obj_detec and args.classif:
+        raise Exception("Error, both object detection and classif are set")
+    elif not args.obj_detec and not args.classif:
+        raise Exception("Error, neither object detection or classif were set")
+
+    if args.effnet:
+        assert args.data_sample is not None, "Efficient net model needs a sample data dir to be loaded"
+
+    if not args.cpu:
+        common.maybe_set_gpu(args.gpuid, args.num_gpus)
+
+    common.time_method(main, args)
+
