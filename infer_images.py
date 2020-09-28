@@ -38,28 +38,32 @@ class CustomModel(object):
 
 
 class ClassifModel(CustomModel):
-    def __init__(self, model_path, output_dir, use_cpu, with_entropy):
+    def __init__(self, model_path, output_dir, use_cpu, with_entropy, n_times=10):
         super().__init__(model_path, output_dir, use_cpu)
         fvision.defaults.device = torch.device(self.device)
         self.load_model()
         self.with_entropy = with_entropy
         if self.with_entropy:
             entropy.convert_learner(self.learner)
+            self.n_times = n_times
 
     def load_model(self):
         self.learner = fvision.load_learner(os.path.dirname(self.model_path), os.path.basename(self.model_path))
 
     def prepare_img_for_inference(self, ims):
-        return [fvision.Image(fvision.pil2tensor(im, np.float32).div_(255)) for im in ims]
+        ims = [fvision.Image(fvision.pil2tensor(im, np.float32).div_(255)) for im in ims]
+        return torch.cat([self.learner.data.one_item(im)[0] for im in ims], dim=0)
 
     def predict_imgs(self, ims):
+        """Returns tensor of shape n_times x n_images x n_classes"""
         ims = self.prepare_img_for_inference(ims)
-        preds = [[self.learner.predict(im)] for im in ims]
+        preds = self.learner.pred_batch(batch=[ims, -1], with_dropout=False).unsqueeze(0)
         if self.with_entropy:
             entropy.switch_custom_dropout(self.learner.model, True)
-            entropy_preds = [self.learner.predict_with_mc_dropout(im) for im in ims]
+            entropy_preds = [self.learner.pred_batch(batch=[ims, -1], with_dropout=True) for _ in range(self.n_times)]
             entropy.switch_custom_dropout(self.learner.model, False)
-            preds = [p + pe for p, pe in zip(preds, entropy_preds)]
+            entropy_preds = torch.cat([e.unsqueeze(0) for e in entropy_preds], dim=0)
+            preds = torch.cat([preds, entropy_preds], dim=0)
         return preds
 
     def gradcam(self, im, patches, patch_size=512):
@@ -94,19 +98,15 @@ class ClassifModel(CustomModel):
         plt.show()
         plt.close()
 
-    def prepare_predictions(self, pm_preds, topk=3, d=2, entropy_thresh=1.25):
+    def prepare_predictions(self, pms, preds, topk=3, d=2, entropy_thresh=1.25):
         trad = {'arme': 'Arm', 'beine': 'Leg', 'fusse': 'Feet', 'hande': 'Hand', 'kopf': 'Head', 'other': 'Other',
                 'stamm': 'Trunk'}
         labels = [trad[c] for c in self.learner.data.classes]
         assert len(labels) >= topk, "Topk greater than the number of classes"
         colors = (['k', 'g', 'c', 'm', 'w', 'lime', 'maroon', 'darkorange'] * max(1, int(len(labels)/8)))[:len(labels)]
 
-        # Each image has a list of preds. If no entropy this list contains a single element.
-        pms, preds = zip(*pm_preds)
-        # Create tensor for each image: shape is entropy sample x nclasses
-        preds = [torch.cat([elem[2].unsqueeze(0) for elem in sublst], dim=0) for sublst in preds]
-        # Create tensor for whole batch: shape is entropy sample x bs x nclasses
-        preds = torch.cat([p.unsqueeze(1) for p in preds], dim=1)
+        # cats all batches, produces tensor of shape n_times x n_images x n_classes
+        preds = torch.cat(preds, dim=1)
 
         if self.with_entropy:
             entropy_ims = entropy.entropy(preds)
@@ -477,15 +477,15 @@ def main(args):
         patch_maps = patcher.patch_grid(img_path, im)
         b_pms = common.batch_list(patch_maps, args.bs)
 
-        pm_preds = []
+        preds = []
         for batch in tqdm(b_pms) if len(b_pms) > 1 else b_pms:
             patches = [PatchExtractor.extract_patch(im, pm['ps'], pm['idx_h'], pm['idx_w']) for pm in batch]
             batch_preds = model.predict_imgs(patches)
-            pm_preds.extend(zip(batch, batch_preds))
+            preds.append(batch_preds)
             # TODO handle args.heatmap
 
         if args.obj_detec:
-            pm_preds = [p for p in pm_preds if p[1]['labels'].size > 0]
+            pm_preds = [p for p in zip(patch_maps, preds) if p[1]['labels'].size > 0]
             if len(pm_preds) > 0:
                 preds = model.adjust_bboxes_to_full_img(im, pm_preds, args.ps)
                 preds = [model.merge_preds(preds)]
@@ -497,7 +497,7 @@ def main(args):
             title = f'Predictions with confidence > {args.conf_thresh}'
             plot_name = f'{file}_01_conf_{args.conf_thresh}{ext}'
         else:
-            preds = model.prepare_predictions(pm_preds)
+            preds = model.prepare_predictions(patch_maps, preds)
             neighbors = {p['patch_path']: patcher.neighboring_patches(p, im.shape, d=1) for p in patch_maps}
             # preds = model.correct_predictions(preds, neighbors, cats=model.learner.data.classes)
             title = f'Body localization'
