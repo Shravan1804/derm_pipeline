@@ -105,7 +105,7 @@ class ClassifModel(CustomModel):
         assert len(labels) >= topk, "Topk greater than the number of classes"
         colors = (['k', 'g', 'c', 'm', 'w', 'lime', 'maroon', 'darkorange'] * max(1, int(len(labels)/8)))[:len(labels)]
 
-        # cats all batches, produces tensor of shape n_times x n_images x n_classes
+        # cats the list of batches, produces tensor of shape n_times x n_images x n_classes
         preds = torch.cat(preds, dim=1)
 
         if self.with_entropy:
