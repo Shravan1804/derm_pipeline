@@ -155,7 +155,10 @@ class PatchExtractor:
 
     @staticmethod
     def are_neighbors(p1, p2, d=1):
-        """If two patch of different patch size, will use the largest patch size for the distance"""
+        """p1, p2 the patch filenames.
+        If two patch of different patch size, will use the largest patch size for the distance"""
+        if PatchExtractor.get_full_img_from_patch(p1) != PatchExtractor.get_full_img_from_patch(p2):
+            return False
         ps, ps2 = PatchExtractor.get_patch_size(p1), PatchExtractor.get_patch_size(p2)
         if ps2 > ps:
             p1, p2, ps, ps2 = p2, p1, ps2, ps
