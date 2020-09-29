@@ -154,18 +154,18 @@ class PatchExtractor:
         return res
 
     @staticmethod
-    def are_neighbors(p1, p2, d=1, first=True):
-        ps = PatchExtractor.get_position(p1)
-        assert ps == PatchExtractor.get_position(p2), "Error, provided patches do not have the same patch size"
+    def are_neighbors(p1, p2, d=1):
+        """If two patch of different patch size, will use the largest patch size for the distance"""
+        ps, ps2 = PatchExtractor.get_patch_size(p1), PatchExtractor.get_patch_size(p2)
+        if ps2 > ps:
+            p1, p2, ps, ps2 = p2, p1, ps2, ps
         dist = ps * d
-        h1, w1 = PatchExtractor.get_position(p1)
+        (h1, w1), (h2, w2) = PatchExtractor.get_position(p1), PatchExtractor.get_position(p2)
         hmin1, hmax1 = max(0, h1 - dist), h1 + ps + dist
         wmin1, wmax1 = max(0, w1 - dist), w1 + ps + dist
-        h2, w2 = PatchExtractor.get_position(p2)
-        # recursion for hypothetic case where one patch is englobed in the second
-        return (hmin1 <= h2 + ps <= hmax1 and wmin1 <= w2 + ps <= wmax1) or\
-               (hmin1 <= h2 <= hmax1 and wmin1 <= w2 <= wmax1) or\
-               (first and PatchExtractor.are_neighbors(p2, p1, d, False))
+        h_ok, hps_ok = hmin1 <= h2 <= hmax1, hmin1 <= h2 + ps <= hmax1
+        w_ok, wps_ok = wmin1 <= w2 <= wmax1, wmin1 <= w2 + ps <= wmax1
+        return (h_ok and w_ok) or (h_ok and wps_ok) or (hps_ok and w_ok) or (hps_ok and wps_ok)
 
     def save_patches(self, source, dest, dirname, grids, mask_prefix=None):
         dest = common.maybe_create(dest, dirname)
