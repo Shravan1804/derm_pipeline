@@ -154,14 +154,16 @@ class PatchExtractor:
         return res
 
     @staticmethod
-    def are_neighbors(p1, p2, d=1):
+    def are_neighbors(p1, p2, d=1, ps=512):
         """p1, p2 the patch filenames.
-        If two patch of different patch size, will use the largest patch size for the distance"""
+        If two patch of different patch size, will use the largest patch size for the distance,
+        Uses parameter ps=512 only if ps not available in patch_name"""
         if PatchExtractor.get_full_img_from_patch(p1) != PatchExtractor.get_full_img_from_patch(p2):
             return False
-        ps, ps2 = PatchExtractor.get_patch_size(p1), PatchExtractor.get_patch_size(p2)
-        if ps2 > ps:
-            p1, p2, ps, ps2 = p2, p1, ps2, ps
+        if PatchExtractor.contains_ps(p1) and PatchExtractor.contains_ps(p2):
+            ps, ps2 = PatchExtractor.get_patch_size(p1), PatchExtractor.get_patch_size(p2)
+            if ps2 > ps:
+                p1, p2, ps, ps2 = p2, p1, ps2, ps
         dist = ps * d
         (h1, w1), (h2, w2) = PatchExtractor.get_position(p1), PatchExtractor.get_position(p2)
         hmin1, hmax1 = max(0, h1 - dist), h1 + ps + dist
@@ -169,6 +171,38 @@ class PatchExtractor:
         h_ok, hps_ok = hmin1 <= h2 <= hmax1, hmin1 <= h2 + ps <= hmax1
         w_ok, wps_ok = wmin1 <= w2 <= wmax1, wmin1 <= w2 + ps <= wmax1
         return (h_ok and w_ok) or (h_ok and wps_ok) or (hps_ok and w_ok) or (hps_ok and wps_ok)
+
+    @staticmethod
+    def get_neighbors_dict(patches, d=1):
+        """Returns dict of patches with neighbors; arr of same but with patch indexes;
+        arr of arr of index of patches with 0th item arr of patches with 0 neighbors, 1st item 1 neighbor, etc;
+        arr of patch group, index 0 is patch name 0 group id, group id is nb of neighbors"""
+        pidx = {p: i for i, p in enumerate(patches)}    # patch name to patch index in lst patches
+        full_im__p = {}     # full img name to patch name
+        neigh = {}      # patch name to neighboring patches names
+        for p in patches:
+            neigh[p] = []
+            full_im = PatchExtractor.get_full_img_from_patch(p)
+            if full_im in full_im__p:
+                full_im__p[full_im].append(p)
+            else:
+                full_im__p[full_im] = [p]
+
+        neigh_pidx = []     # item 0 corresponds to patch at index 0, item is a lst of neighboring patch indexes
+        groups_pidx = [[]]  # item 0 corresponds to patches with 0 neighbors, item is lst of patch indexes
+        pidx_groups = np.zeros(patches.size, dtype=np.int)  # patch index to corresponding patch group
+        for p1 in patches:
+            idxs = []
+            for p2 in full_im__p[PatchExtractor.get_full_img_from_patch(p1)]:
+                if p1 != p2 and PatchExtractor.are_neighbors(p1, p2, d):
+                    neigh[p1].append(p2)
+                    idxs.append(pidx[p2])
+            neigh_pidx.append(sorted(idxs))
+            if len(idxs) > len(groups_pidx):
+                groups_pidx.extend([[]]*(len(idxs) - len(groups_pidx)))
+            groups_pidx[len(idxs)].append(pidx[p1])
+            pidx_groups[pidx[p1]] = len(idxs)
+        return neigh, np.array(neigh_pidx), np.array(groups_pidx), pidx_groups
 
     def save_patches(self, source, dest, dirname, grids, mask_prefix=None):
         dest = common.maybe_create(dest, dirname)
@@ -191,6 +225,10 @@ class PatchExtractor:
         name, _ = os.path.splitext(os.path.basename(patch_name))
         return int(name.split(PatchExtractor.SEP)[1].split('_h')[0].replace('_ps', ''))
 
+    @staticmethod
+    def contains_ps(patch_name):
+        """Returns true if patch name contains patch size"""
+        return '_ps' in patch_name
     @staticmethod
     def get_position(patch_name):
         """Extracts patch coordinates from its filename"""
