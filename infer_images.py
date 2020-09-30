@@ -1,8 +1,10 @@
 import os
 import cv2
+import types
 import random
 import numpy as np
 from tqdm import tqdm
+from functools import partial
 import matplotlib.pyplot as plt
 import matplotlib.patches as plt_patches
 
@@ -82,6 +84,7 @@ class ClassifModel(CustomModel):
         return im
 
     def show_preds(self, img_arr, preds, title, fname):
+        preds = self.predictions_to_labels(preds)
         plt.figure()
         fig, ax = plt.subplots(1, figsize=(20, 20))
         for patch, pred in preds.items():
@@ -98,57 +101,93 @@ class ClassifModel(CustomModel):
         plt.show()
         plt.close()
 
-    def prepare_predictions(self, pms, preds, topk=3, d=2, entropy_thresh=1.25):
+    def predictions_to_labels(self, model_preds, topk=3, deci=2, entropy_thresh=1.25):
         trad = {'arme': 'Arm', 'beine': 'Leg', 'fusse': 'Feet', 'hande': 'Hand', 'kopf': 'Head', 'other': 'Other',
                 'stamm': 'Trunk'}
         labels = [trad[c] for c in self.learner.data.classes]
         assert len(labels) >= topk, "Topk greater than the number of classes"
         colors = (['k', 'g', 'c', 'm', 'w', 'lime', 'maroon', 'darkorange'] * max(1, int(len(labels)/8)))[:len(labels)]
 
-        # cats the list of batches, produces tensor of shape n_times x n_images x n_classes
-        preds = torch.cat(preds, dim=1)
-
         if self.with_entropy:
-            entropy_ims = entropy.entropy(preds)
-            topk_idx, topk_p, topk_std = entropy.custom_top_k_preds(preds, topk)
+            topk_idx, topk_p, topk_std = entropy.custom_top_k_preds(model_preds.entropy_preds, topk)
         else:
-            topk_p, topk_idx = preds.squeeze(0).topk(topk, axis=1)
+            topk_p, topk_idx = model_preds.preds.topk(topk, axis=1)
 
         res = {}
-        for i, (pm, idxs, probs) in enumerate(zip(pms, topk_idx, topk_p)):
-            res[pm['patch_path']] = [(f'{labels[idx]}: {p:.{d}f}', colors[idx]) for idx, p in zip(idxs, probs)]
+        for i, (pm, idxs, probs) in enumerate(zip(model_preds.patches, topk_idx, topk_p)):
+            res[pm] = [(f'{labels[idx]}: {p:.{deci}f}', colors[idx]) for idx, p in zip(idxs, probs)]
+            res[pm] = [(f'{"(corr) " if model_preds.corrected[i] else ""}{r}', c) for r, c in res[pm]]
             if self.with_entropy:
-                res[pm['patch_path']] = [(v0 + f' \u00B1 {s:.{d}f}', v1)
-                                         for (v0, v1), s in zip(res[pm['patch_path']], topk_std[i])]
-                res[pm['patch_path']].append((f'Entropy: {entropy_ims[i]:.{d}f}',
-                                              'b' if entropy_ims[i] < entropy_thresh else 'r'))
+                res[pm] = [(v0 + f' \u00B1 {s:.{deci}f}', v1) for (v0, v1), s in zip(res[pm], topk_std[i])]
+                entropy_color = 'b' if model_preds.entropy[i] < entropy_thresh else 'r'
+                res[pm].append((f'Entropy: {model_preds.entropy[i]:.{deci}f}', entropy_color))
         return res
 
-    def correct_predictions(self, preds, neighbors, cats, consider_top=2, method=2):
-        return preds
-        if method == 1:
-            pred_probs = {k: v[2].numpy() for k, v in preds.items()}
-            preds = {k: [f'orig: {str(v[0])}'] for k, v in preds.items()}
-            summed_neighbors_preds = {k: sum([pred_probs[p] for p in neighbors[k]]) for k in preds.keys()}
-            for patch in preds.keys():
-                neighbors_preds = summed_neighbors_preds[patch]
-                topk = neighbors_preds.argsort()[::-1][:consider_top]
-                top_preds = list(zip(np.array(self.classes)[topk], neighbors_preds[topk]))
-                preds[patch] = [f'{i + 1}: {p[0]}' for i, p in enumerate(top_preds)] + preds[patch]
-            return preds
-        elif method == 2:
-            pred_probs = {k: v[2].numpy() for k, v in preds.items()}
-            res = {k: [f'orig: {str(v[0])}'] for k, v in preds.items()}
-            for k in res.keys():
-                orig = int(preds[k][1])
-                neigh_preds = {}
-                for neighbor in neighbors[k]:
-                    for top in pred_probs[neighbor].argsort()[::-1][:consider_top]:
-                        neigh_preds[top] = neigh_preds.get(top, 0) + 1
-                most_probable = [t[0] for t in sorted(neigh_preds.items(), key=lambda item: item[1])[::-1][:consider_top]]
-                if orig not in most_probable:
-                    res[k].append(f'corr: {cats[int(most_probable[0])]}')
-            return res
+    def prepare_predictions(self, pms, preds):
+        res = types.SimpleNamespace()
+        res.patches = np.array([pm['patch_path'] for pm in pms])
+        # cats the list of batches, produces tensor of shape n_times x n_images x n_classes
+        res.entropy_preds = torch.cat(preds, dim=1)
+        if self.with_entropy:
+            res.entropy = entropy.entropy(res.entropy_preds)
+            res.std = res.entropy_preds.std(axis=0)
+            res.preds = res.entropy_preds.mean(axis=0)
+        else:
+            res.preds = res.entropy_preds.squeeze(0)
+        res.pred_class = res.preds.argmax(axis=1)
+        res.corrected = np.zeros(res.patches.size, dtype=np.bool)
+        return res
+
+
+def correct_predictions(model_preds, patch_size, neigh_dist=1, topk=2, with_entropy=False,
+                        entropy_thresh=1.25, method="in_top_probs"):
+    """Corrects individual patch predictions by looking at neighboring patches"""
+    _, neigh_pidx, _, pidx_groups = PatchExtractor.get_neighbors_dict(model_preds.patches, neigh_dist, patch_size)
+    # group is the number of neighbors, if patch has n neighbors it belongs to group n
+
+    # indexes of patches to be corrected
+    if with_entropy:
+        corr_all = (model_preds.entropy > entropy_thresh).nonzero()[0]
+        model_preds.orig_std = model_preds.std
+        # TODO: update neigh_pidx, pidx_groups so that neighbors with high entropy are removed
+    else:
+        corr_all = np.arange(model_preds.patches.size)
+
+    corr_groups = pidx_groups[corr_all]     # groups of patches to be corrected
+    idx_sort = np.argsort(corr_groups)      # idx to sort corr_groups so that the same groups are adjacent
+    corr_groups, idx_start = np.unique(corr_groups[idx_sort], return_index=True)
+    corr_idx = np.split(idx_sort, idx_start[1:])    # lst of arr of idx of patches of same group
+    if corr_groups[0] == 0:     # if no neighbors, cannot correct patch label
+        corr_groups, corr_idx = corr_groups[1:], corr_idx[1:]
+
+    model_preds.orig_preds = model_preds.preds
+    model_preds.orig_pred_class = model_preds.pred_class
+
+    for idx in corr_idx:    # iterate over all groups of patches with same number of neighbors
+        cidx = corr_all[idx]
+        # neigh_pidx orig shape irregular => orig type is object => need to cast to ints in order to use as index
+        cidx_neighs = np.array(neigh_pidx[cidx].tolist())
+        if method == "in_summed_probs":
+            # interp.preds[cidx] shape is nb_images x nb_classes
+            # interp.preds[idx_neighs] shape is nb_images x nb_neighbors x nb_classes
+            model_preds.preds[cidx] = model_preds.preds[cidx_neighs].sum(axis=1)
+            model_preds.pred_class[cidx] = model_preds.preds[cidx].argmax(axis=1)
+            # interp.std[idx_neighs] shape is nb_images x nb_neighbors x nb_classes
+            if with_entropy:
+                model_preds.std[cidx] = model_preds.std[cidx_neighs].sum(axis=1)
+        elif method == "in_top_probs":
+            topk_p, topk_idx = map(partial(torch.flatten, start_dim=1), model_preds.preds[cidx_neighs].topk(topk, axis=2))
+            top = np.apply_along_axis(common.most_common, axis=1, arr=topk_idx.numpy(), top=topk, return_index=False)
+            top = np.hstack([top, model_preds.pred_class[cidx].unsqueeze(1).numpy()])
+            model_preds.pred_class[cidx] = torch.tensor(np.apply_along_axis(pred_among_most_probable, axis=1, arr=top))
+    model_preds.corrected = model_preds.orig_pred_class != model_preds.pred_class
+
+def pred_among_most_probable(arr):
+    """Arr contains the most common neighbors preds + the model prediction as the last element"""
+    if arr[-1] in arr[:-1]:
+        return arr[-1]
+    else:
+        return arr[0]
 
 
 class EffnetClassifModel(ClassifModel):
@@ -456,10 +495,10 @@ def main(args):
         model = ObjDetecModel(classes, args.model, args.out_dir, args.cpu)
     else:
         if args.effnet:
-            model = EffnetClassifModel(args.model, args.out_dir, args.cpu, args.entropy, args.data_sample,
+            model = EffnetClassifModel(args.model, args.out_dir, args.cpu, args.with_entropy, args.data_sample,
                                        args.bs, args.input_size)
         else:
-            model = ClassifModel(args.model, args.out_dir, args.cpu, args.entropy)
+            model = ClassifModel(args.model, args.out_dir, args.cpu, args.with_entropy)
 
     patcher = PatchExtractor(args.ps)
     for img_id, img_path in enumerate(img_list):
@@ -498,8 +537,9 @@ def main(args):
             plot_name = f'{file}_01_conf_{args.conf_thresh}{ext}'
         else:
             preds = model.prepare_predictions(patch_maps, preds)
-            neighbors = {p['patch_path']: patcher.neighboring_patches(p, im.shape, d=1) for p in patch_maps}
-            # preds = model.correct_predictions(preds, neighbors, cats=model.learner.data.classes)
+            if args.pred_correction:
+                correct_predictions(preds, args.ps, with_entropy=args.with_entropy, entropy_thresh=args.entropy_thresh,
+                                    method=args.corr_method)
             title = f'Body localization'
             plot_name = f'{file}_body_loc{ext}'
 
@@ -529,7 +569,10 @@ if __name__ == '__main__':
     parser.add_argument('--data-sample', type=str, help="optional, needed to recreate effnet learner")
     parser.add_argument('--effnet', action='store_true', help="efficientnet model if set, need --data-sample")
     parser.add_argument('--heatmap', action='store_true', help="For classif, creates gradcam image")
-    parser.add_argument('--entropy', action='store_true', help="Compute image entropy")
+    parser.add_argument('--with-entropy', action='store_true', help="Compute image entropy")
+    parser.add_argument('--entropy-thresh', default=1.25, type=float, help="Threshold to find patch to correct")
+    parser.add_argument('--pred-correction', action='store_true', help="Corrects preds by checking neighboring patches")
+    parser.add_argument('--corr-method', type=str, default='in_top_probs', help="in_top_probs or in_summed_probs")
 
     # obj detec args
     parser.add_argument('--obj-detec', action='store_true', help="Applies object detection model")
