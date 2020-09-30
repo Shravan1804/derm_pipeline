@@ -197,12 +197,12 @@ class PatchExtractor:
                 if p1 != p2 and PatchExtractor.are_neighbors(p1, p2, d):
                     neigh[p1].append(p2)
                     idxs.append(pidx[p2])
-            neigh_pidx.append(sorted(idxs))
+            neigh_pidx.append(np.array(sorted(idxs)))
             if len(idxs) > len(groups_pidx)-1:
                 groups_pidx.extend([[]]*(len(idxs) - (len(groups_pidx) - 1)))
             groups_pidx[len(idxs)].append(pidx[p1])
             pidx_groups[pidx[p1]] = len(idxs)
-        return neigh, np.array(neigh_pidx), np.array(groups_pidx), pidx_groups
+        return neigh, np.array(neigh_pidx), np.array([np.array(g) for g in groups_pidx]), pidx_groups
 
     def save_patches(self, source, dest, dirname, grids, mask_prefix=None):
         dest = common.maybe_create(dest, dirname)
