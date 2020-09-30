@@ -198,8 +198,8 @@ class PatchExtractor:
                     neigh[p1].append(p2)
                     idxs.append(pidx[p2])
             neigh_pidx.append(sorted(idxs))
-            if len(idxs) > len(groups_pidx):
-                groups_pidx.extend([[]]*(len(idxs) - len(groups_pidx)))
+            if len(idxs) > len(groups_pidx)-1:
+                groups_pidx.extend([[]]*(len(idxs) - (len(groups_pidx) - 1)))
             groups_pidx[len(idxs)].append(pidx[p1])
             pidx_groups[pidx[p1]] = len(idxs)
         return neigh, np.array(neigh_pidx), np.array(groups_pidx), pidx_groups
@@ -228,7 +228,7 @@ class PatchExtractor:
     @staticmethod
     def contains_ps(patch_name):
         """Returns true if patch name contains patch size"""
-        return '_ps' in patch_name
+        return '_ps' in str(patch_name)
     @staticmethod
     def get_position(patch_name):
         """Extracts patch coordinates from its filename"""
