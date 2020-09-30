@@ -2,6 +2,7 @@ import os
 import cv2
 import time
 import datetime
+import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 
@@ -10,6 +11,16 @@ def flatten(lst):
     """Flattens lst of lsts"""
     return [elem for sublst in lst for elem in sublst]
 
+
+def most_common(arr, top=3, return_index=False, return_counts=False):
+    u, c = np.unique(arr, return_counts=True)
+    sorted_c = c.argsort()[::-1]
+    res = u[sorted_c[:top]]
+    if return_index:
+        res = res, sorted_c[:top]
+    if return_counts:
+        res = *res, c[res[-1]]
+    return res
 
 def maybe_create(*d):
     """Receives arbitrary number of dirnames, joins them and create them if they don't exist. Returns joined path."""
@@ -86,7 +97,6 @@ def get_root_logdir(logdir):
 
 def set_seeds(seed, cuda_seeded=False):
     import random
-    import numpy as np
     import torch
     random.seed(seed)
     np.random.seed(seed)

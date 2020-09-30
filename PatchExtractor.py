@@ -173,7 +173,7 @@ class PatchExtractor:
         return (h_ok and w_ok) or (h_ok and wps_ok) or (hps_ok and w_ok) or (hps_ok and wps_ok)
 
     @staticmethod
-    def get_neighbors_dict(patches, d=1):
+    def get_neighbors_dict(patches, d=1, ps=512):
         """Returns dict of patches with neighbors; arr of same but with patch indexes;
         arr of arr of index of patches with 0th item arr of patches with 0 neighbors, 1st item 1 neighbor, etc;
         arr of patch group, index 0 is patch name 0 group id, group id is nb of neighbors"""
@@ -194,7 +194,7 @@ class PatchExtractor:
         for p1 in patches:
             idxs = []
             for p2 in full_im__p[PatchExtractor.get_full_img_from_patch(p1)]:
-                if p1 != p2 and PatchExtractor.are_neighbors(p1, p2, d):
+                if p1 != p2 and PatchExtractor.are_neighbors(p1, p2, d, ps):
                     neigh[p1].append(p2)
                     idxs.append(pidx[p2])
             neigh_pidx.append(np.array(sorted(idxs)))
