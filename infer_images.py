@@ -176,7 +176,8 @@ def correct_predictions(model_preds, patch_size, neigh_dist=1, topk=2, with_entr
             if with_entropy:
                 model_preds.std[cidx] = model_preds.std[cidx_neighs].sum(axis=1)
         elif method == "in_top_probs":
-            topk_p, topk_idx = map(partial(torch.flatten, start_dim=1), model_preds.preds[cidx_neighs].topk(topk, axis=2))
+            topk_p, topk_idx = model_preds.preds[cidx_neighs,].topk(topk, axis=2)
+            topk_p, topk_idx = map(partial(torch.flatten, start_dim=1), (topk_p, topk_idx))
             top = np.apply_along_axis(common.most_common, axis=1, arr=topk_idx.numpy(), top=topk, return_index=False)
             top = np.hstack([top, model_preds.pred_class[cidx].unsqueeze(1).numpy()])
             model_preds.pred_class[cidx] = torch.tensor(np.apply_along_axis(pred_among_most_probable, axis=1, arr=top))
