@@ -73,7 +73,7 @@ def entropy(probs, softmax=False):
     """
     probs = fv.to_np(probs)
     prob = probs.mean(axis=0)
-
+    assert np.all(prob > 0), f"Cannot compute entropy when some probabilities are negative: {prob[prob <= 0]}"
     entrop = - (np.log(prob) * prob).sum(axis=1)
     return entrop
 
