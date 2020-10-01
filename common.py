@@ -118,7 +118,7 @@ def check_dir_valid(dirpath):
 
 
 def maybe_set_gpu(gpuid, num_gpus):
-    if num_gpus != 1:
+    if gpuid is not None and num_gpus != 1:
         print("Warning cannot fix more than 1 gpus, requested", num_gpus)
     else:
         import torch
