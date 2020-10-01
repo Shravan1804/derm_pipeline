@@ -133,14 +133,14 @@ class ClassifModel(CustomModel):
             res.std = res.entropy_preds.std(axis=0)
             res.preds = res.entropy_preds.mean(axis=0)
         else:
-            res.preds = res.entropy_preds.squeeze(0)
+            res.preds = res.entropy_preds.squeeze(0).detach().clone()
         res.pred_class = res.preds.argmax(axis=1)
         res.corrected = np.zeros(res.patches.size, dtype=np.bool)
         return res
 
 
 def correct_predictions(model_preds, patch_size, neigh_dist=1, topk=2, with_entropy=False,
-                        entropy_thresh=1.25, method="in_top_probs"):
+                        entropy_thresh=1.25, method="in_top_neigh_probs"):
     """Corrects individual patch predictions by looking at neighboring patches"""
     _, neigh_pidx, _, pidx_groups = PatchExtractor.get_neighbors_dict(model_preds.patches, neigh_dist, patch_size)
     # group is the number of neighbors, if patch has n neighbors it belongs to group n
@@ -148,7 +148,7 @@ def correct_predictions(model_preds, patch_size, neigh_dist=1, topk=2, with_entr
     # indexes of patches to be corrected
     if with_entropy:
         corr_all = (model_preds.entropy > entropy_thresh).nonzero()[0]
-        model_preds.orig_std = model_preds.std
+        model_preds.orig_std = model_preds.std.detach().clone()
         # TODO: update neigh_pidx, pidx_groups so that neighbors with high entropy are removed
     else:
         corr_all = np.arange(model_preds.patches.size)
@@ -160,22 +160,22 @@ def correct_predictions(model_preds, patch_size, neigh_dist=1, topk=2, with_entr
     if corr_groups[0] == 0:     # if no neighbors, cannot correct patch label
         corr_groups, corr_idx = corr_groups[1:], corr_idx[1:]
 
-    model_preds.orig_preds = model_preds.preds
-    model_preds.orig_pred_class = model_preds.pred_class
+    model_preds.orig_preds = model_preds.preds.detach().clone()
+    model_preds.orig_pred_class = model_preds.pred_class.detach().clone()
 
     for idx in corr_idx:    # iterate over all groups of patches with same number of neighbors
         cidx = corr_all[idx]
         # neigh_pidx orig shape irregular => orig type is object => need to cast to ints in order to use as index
         cidx_neighs = np.array(neigh_pidx[cidx].tolist())
-        if method == "in_summed_probs":
+        if method == "mean_neigh_probs":
             # interp.preds[cidx] shape is nb_images x nb_classes
             # interp.preds[idx_neighs] shape is nb_images x nb_neighbors x nb_classes
-            model_preds.preds[cidx] = model_preds.preds[cidx_neighs].sum(axis=1)
+            model_preds.preds[cidx] = model_preds.preds[cidx_neighs,].mean(axis=1)
             model_preds.pred_class[cidx] = model_preds.preds[cidx].argmax(axis=1)
             # interp.std[idx_neighs] shape is nb_images x nb_neighbors x nb_classes
             if with_entropy:
-                model_preds.std[cidx] = model_preds.std[cidx_neighs].sum(axis=1)
-        elif method == "in_top_probs":
+                model_preds.std[cidx] = model_preds.std[cidx_neighs,].mean(axis=1)
+        elif method == "in_top_neigh_probs":
             topk_p, topk_idx = model_preds.preds[cidx_neighs,].topk(topk, axis=2)
             topk_p, topk_idx = map(partial(torch.flatten, start_dim=1), (topk_p, topk_idx))
             top = np.apply_along_axis(common.most_common, axis=1, arr=topk_idx.numpy(), top=topk, return_index=False)
@@ -538,6 +538,7 @@ def main(args):
             plot_name = f'{file}_01_conf_{args.conf_thresh}{ext}'
         else:
             preds = model.prepare_predictions(patch_maps, preds)
+            preds.classes = model.learner.data.classes
             if args.pred_correction:
                 correct_predictions(preds, args.ps, with_entropy=args.with_entropy, entropy_thresh=args.entropy_thresh,
                                     method=args.corr_method)
@@ -573,7 +574,7 @@ if __name__ == '__main__':
     parser.add_argument('--with-entropy', action='store_true', help="Compute image entropy")
     parser.add_argument('--entropy-thresh', default=1.25, type=float, help="Threshold to find patch to correct")
     parser.add_argument('--pred-correction', action='store_true', help="Corrects preds by checking neighboring patches")
-    parser.add_argument('--corr-method', type=str, default='in_top_probs', help="in_top_probs or in_summed_probs")
+    parser.add_argument('--corr-method', type=str, default='in_top_probs', help="in_top_neigh_probs or mean_neigh_probs")
 
     # obj detec args
     parser.add_argument('--obj-detec', action='store_true', help="Applies object detection model")
