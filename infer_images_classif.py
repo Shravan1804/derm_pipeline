@@ -143,6 +143,7 @@ def correct_predictions(model_preds, patch_size, neigh_dist=1, topk=2, with_entr
         cidx = corr_all[idx]
         # neigh_pidx orig shape irregular => orig type is object => need to cast to ints in order to use as index
         cidx_neighs = np.array(neigh_pidx[cidx].tolist())
+        # METHODS MUST UPDATE model_preds.preds AND model_preds.std, AS IT IS NEEDED IN predictions_to_labels
         if method == "mean_neigh_probs":
             # interp.preds[cidx] shape is nb_images x nb_classes
             # interp.preds[idx_neighs] shape is nb_images x nb_neighbors x nb_classes
@@ -152,19 +153,22 @@ def correct_predictions(model_preds, patch_size, neigh_dist=1, topk=2, with_entr
             if with_entropy:
                 model_preds.std[cidx] = model_preds.std[cidx_neighs,].mean(axis=1)
         elif method == "in_top_neigh_probs":
+            # topk_idx, topk_p shapes are nb_images x nb_neighbors x topk
             topk_p, topk_idx = model_preds.preds[cidx_neighs,].topk(topk, axis=2)
             topk_p, topk_idx = map(partial(torch.flatten, start_dim=1), (topk_p, topk_idx))
             top = np.apply_along_axis(common.most_common, axis=1, arr=topk_idx.numpy(), top=topk, return_index=False)
             top = np.hstack([top, model_preds.pred_class[cidx].unsqueeze(1).numpy()])
             model_preds.pred_class[cidx] = torch.tensor(np.apply_along_axis(pred_among_most_probable, axis=1, arr=top))
+            # update only the preds which were corrected
+            change = cidx[model_preds.orig_pred_class[cidx] != model_preds.pred_class[cidx]]
+            model_preds.preds[change, model_preds.pred_class[change]] = 1
+            if with_entropy:
+                model_preds.std[change, model_preds.pred_class[change]] = 0
     model_preds.corrected = model_preds.orig_pred_class != model_preds.pred_class
 
 def pred_among_most_probable(arr):
     """Arr contains the most common neighbors preds + the model prediction as the last element"""
-    if arr[-1] in arr[:-1]:
-        return arr[-1]
-    else:
-        return arr[0]
+    return arr[-1] if arr[-1] in arr[:-1] else arr[0]
 
 
 class EffnetClassifModel(ClassifModel):

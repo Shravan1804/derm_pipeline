@@ -13,6 +13,7 @@ def flatten(lst):
 
 
 def most_common(arr, top=3, return_index=False, return_counts=False):
+    """Returns most common elements in array"""
     u, c = np.unique(arr, return_counts=True)
     sorted_c = c.argsort()[::-1]
     res = u[sorted_c[:top]]
