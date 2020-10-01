@@ -140,36 +140,34 @@ class PatchExtractor:
         return im[id_h:id_h + ps, id_w:id_w + ps]
 
     @staticmethod
-    def neighboring_patches(pm, im_dim, d=1, include_self=True):
-        img_name, ps = os.path.basename(pm['full_img']), pm['ps']
-        max_h, max_w = im_dim[0] - ps, im_dim[1] - ps
-        step_h, step_w = ps - PatchExtractor.get_overlap(im_dim[0], ps), ps - PatchExtractor.get_overlap(im_dim[1], ps)
-        scope_h = [i * step_h for i in range(-d, d+1)]
-        scope_w = [i * step_w for i in range(-d, d + 1)]
-        neighbors = [(a, b) for a, b in [(m + pm['idx_h'], n + pm['idx_w']) for m in scope_h for n in scope_w]
-                     if 0 <= a <= max_h and 0 <= b <= max_w
-                     and (include_self or not (a == pm['idx_h'] and b == pm['idx_w']))]
-        res = [PatchExtractor.get_patch_name(img_name, ps, h, w) for h, w in neighbors]
-        # print(pm['patch_path'], 'neighbors:', [r['patch_path'] for r in res])
-        return res
+    def get_overlap_from_full_img_patches(patches, ps=512):
+        """Computes the overlap between patches by looking at two consecutive patches from the full img"""
+        if PatchExtractor.contains_ps(patches[0]):
+            ps = PatchExtractor.get_patch_size(patches[0])
+        # sort patch names first by h then by w
+        sorted_patches = sorted(patches, key=lambda x: PatchExtractor.get_position(x))
+        p1, p2 = sorted_patches[:2]     # p1, p2 consecutive in the image width
+        (h1, w1), (h2, w2) = PatchExtractor.get_position(p1), PatchExtractor.get_position(p2)
+        # p1, p3 consecutive in the image height since patches lst is sorted first by h then by w
+        p3 = [p for p in sorted_patches if p != p1 and PatchExtractor.get_position(p)[1] == w1][0]
+        h3, w3 = PatchExtractor.get_position(p3)
+        return ps - (h3 - h1), ps - (w2 - w1)
+
 
     @staticmethod
-    def are_neighbors(p1, p2, d=1, ps=512):
-        """p1, p2 the patch filenames.
-        If two patch of different patch size, will use the largest patch size for the distance,
+    def are_neighbors(p1, p2, d=1, o=(26, 26), ps=512):
+        """p1, p2 the patch filenames, o the overlap (oh, ow) between patches, will use p1 patch size if available
         Uses parameter ps=512 only if ps not available in patch_name"""
         if PatchExtractor.get_full_img_from_patch(p1) != PatchExtractor.get_full_img_from_patch(p2):
             return False
-        if PatchExtractor.contains_ps(p1) and PatchExtractor.contains_ps(p2):
-            ps, ps2 = PatchExtractor.get_patch_size(p1), PatchExtractor.get_patch_size(p2)
-            if ps2 > ps:
-                p1, p2, ps, ps2 = p2, p1, ps2, ps
-        dist = ps * d
+        if PatchExtractor.contains_ps(p1):
+            ps = PatchExtractor.get_patch_size(p1)
+        disth, distw = (ps - o[0]) * d, (ps - o[1]) * d
         (h1, w1), (h2, w2) = PatchExtractor.get_position(p1), PatchExtractor.get_position(p2)
-        hmin1, hmax1 = max(0, h1 - dist), h1 + ps + dist
-        wmin1, wmax1 = max(0, w1 - dist), w1 + ps + dist
-        h_ok, hps_ok = hmin1 <= h2 <= hmax1, hmin1 <= h2 + ps <= hmax1
-        w_ok, wps_ok = wmin1 <= w2 <= wmax1, wmin1 <= w2 + ps <= wmax1
+        hmin1, hmax1 = max(0, h1 - disth), h1 + 2 * disth
+        wmin1, wmax1 = max(0, w1 - distw), w1 + 2 * distw
+        h_ok, hps_ok = hmin1 < h2 < hmax1, hmin1 < h2 + disth < hmax1
+        w_ok, wps_ok = wmin1 < w2 < wmax1, wmin1 < w2 + distw < wmax1
         return (h_ok and w_ok) or (h_ok and wps_ok) or (hps_ok and w_ok) or (hps_ok and wps_ok)
 
     @staticmethod
@@ -187,19 +185,22 @@ class PatchExtractor:
                 full_im__p[full_im].append(p)
             else:
                 full_im__p[full_im] = [p]
+        # full img name to overlap between patches
+        full_im__o = {k: PatchExtractor.get_overlap_from_full_img_patches(v) for k, v in full_im__p.items()}
 
         neigh_pidx = []     # item 0 corresponds to patch at index 0, item is a lst of neighboring patch indexes
         groups_pidx = [[]]  # item 0 corresponds to patches with 0 neighbors, item is lst of patch indexes
         pidx_groups = np.zeros(patches.size, dtype=np.int)  # patch index to corresponding patch group
         for p1 in patches:
             idxs = []
-            for p2 in full_im__p[PatchExtractor.get_full_img_from_patch(p1)]:
-                if p1 != p2 and PatchExtractor.are_neighbors(p1, p2, d, ps):
+            full_im = PatchExtractor.get_full_img_from_patch(p1)
+            for p2 in full_im__p[full_im]:
+                if p1 != p2 and PatchExtractor.are_neighbors(p1, p2, d, full_im__o[full_im], ps):
                     neigh[p1].append(p2)
                     idxs.append(pidx[p2])
             neigh_pidx.append(np.array(sorted(idxs)))
             if len(idxs) > len(groups_pidx)-1:
-                groups_pidx.extend([[]]*(len(idxs) - (len(groups_pidx) - 1)))
+                groups_pidx.extend([[] for _ in range(len(idxs) - (len(groups_pidx) - 1))])
             groups_pidx[len(idxs)].append(pidx[p1])
             pidx_groups[pidx[p1]] = len(idxs)
         return neigh, np.array(neigh_pidx), np.array([np.array(g) for g in groups_pidx]), pidx_groups
