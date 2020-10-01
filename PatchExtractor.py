@@ -140,18 +140,32 @@ class PatchExtractor:
         return im[id_h:id_h + ps, id_w:id_w + ps]
 
     @staticmethod
-    def get_overlap_from_full_img_patches(patches, ps=512):
+    def get_overlap_from_full_img_patches(patches, default=(26, 26), ps=512):
         """Computes the overlap between patches by looking at two consecutive patches from the full img"""
+        full_im = PatchExtractor.get_full_img_from_patch(patches[0])
+        for p in patches:
+            assert full_im == PatchExtractor.get_full_img_from_patch(p), "Provided patches come from different imgs"
         if PatchExtractor.contains_ps(patches[0]):
             ps = PatchExtractor.get_patch_size(patches[0])
         # sort patch names first by h then by w
         sorted_patches = sorted(patches, key=lambda x: PatchExtractor.get_position(x))
-        p1, p2 = sorted_patches[:2]     # p1, p2 consecutive in the image width
-        (h1, w1), (h2, w2) = PatchExtractor.get_position(p1), PatchExtractor.get_position(p2)
-        # p1, p3 consecutive in the image height since patches lst is sorted first by h then by w
-        p3 = [p for p in sorted_patches if p != p1 and PatchExtractor.get_position(p)[1] == w1][0]
-        h3, w3 = PatchExtractor.get_position(p3)
-        return ps - (h3 - h1), ps - (w2 - w1)
+        patch_pos = [PatchExtractor.get_position(x) for x in sorted_patches]
+        oh_found, ow_found = False, False
+        for h1, w1 in patch_pos:
+            for h2, w2 in patch_pos:
+                if not oh_found and w1 == w2 and 0 < h2 - h1 <= ps:     # consecutive patch in height of image
+                    oh_found = True
+                    oh = ps - (h2 - h1)
+                if not ow_found and h1 == h2 and 0 < w2 - w1 <= ps:     # consecutive patch in width of image
+                    ow_found = True
+                    ow = ps - (w2 - w1)
+                if oh_found and ow_found:
+                    break
+            if oh_found and ow_found:
+                break
+        oh = oh if oh_found else default[0]
+        ow = ow if ow_found else default[1]
+        return oh, ow
 
 
     @staticmethod
