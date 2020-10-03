@@ -209,7 +209,7 @@ def main(args):
 
         preds = []
         for batch in tqdm(b_pms) if len(b_pms) > 1 else b_pms:
-            patches = [PatchExtractor.extract_patch(im, pm['ps'], pm['idx_h'], pm['idx_w']) for pm in batch]
+            patches = [PatchExtractor.extract_patch(im, pm) for pm in batch]
             batch_preds = model.predict_imgs(patches)
             preds.append(batch_preds)
             # TODO handle args.heatmap

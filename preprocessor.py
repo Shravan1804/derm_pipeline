@@ -138,8 +138,8 @@ class Patch(ImgTransform):
 
     def process(self, name, img):
         for pm in self.patcher.patch_grid(name, im_arr=img):
-            param = PatchExtractor.get_patch_suffix_from_pm(pm)
-            yield self.processed_name(name, param), self.patcher.pm_to_patch(img, pm), True
+            param = 'h' + str(pm['h']) + '_w' + str(pm['w'])
+            yield self.processed_name(name, param), self.patcher.extract_patch(img, pm), True
 
 
 def main(args):
