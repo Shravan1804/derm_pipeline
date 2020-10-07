@@ -37,9 +37,9 @@ def prepare_patch(patch, learn):
 
 def _grad_cam_top_out_acts_grad(learn, layers, patch, cls=-1, topk=3):
     x = prepare_patch(patch, learn)
-    with ExitStack() as stackbwd, ExitStack() as stack:
-        hookg = [stackbwd.enter_context(HookBwd(layer)) for layer in layers]
-        hook = [stackbwd.enter_context(Hook(layer)) for layer in layers]
+    with ExitStack() as stack:
+        hookg = [stack.enter_context(HookBwd(layer)) for layer in layers]
+        hook = [stack.enter_context(Hook(layer)) for layer in layers]
         output = learn.model.eval()(x.cuda() if torch.cuda.is_available() else x)
         acts = [h.stored for h in hook]
         top_preds = output[0].cpu().detach().numpy().argsort()[::-1][:topk]
