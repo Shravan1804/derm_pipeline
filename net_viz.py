@@ -83,8 +83,8 @@ def plot_grad_cam(patch, layer_names, cam_maps, ncol=5):
     fig.tight_layout(rect=[0, 0, 1, 0.85])
 
 
-def update_heatmap_with_acts(patch, grad_scaled_acts, cmap='magma'):
-    """Heavy magic to reproduce matplotlib viz ... Returns the patch heatmap"""
+def create_heatmap(patch, grad_scaled_acts, cmap='magma'):
+    """Heavy magic to reproduce matplotlib viz ... grad_scaled_acts np array, returns the patch heatmap"""
     my_cm = cm.get_cmap(cmap)
     normed_data = (grad_scaled_acts - np.min(grad_scaled_acts)) / (np.max(grad_scaled_acts) - np.min(grad_scaled_acts))
     mapped_data = my_cm(normed_data, bytes=True)
