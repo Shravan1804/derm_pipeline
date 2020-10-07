@@ -2,6 +2,7 @@ import math
 from contextlib import ExitStack
 
 import numpy as np
+from matplotlib import pyplot as plt
 
 import torch
 import fastai.vision as fv
