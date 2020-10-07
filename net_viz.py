@@ -2,8 +2,10 @@ import math
 from contextlib import ExitStack
 
 import numpy as np
+from matplotlib import cm
 from matplotlib import pyplot as plt
 
+import PIL
 import torch
 import fastai.vision as fv
 
@@ -49,7 +51,7 @@ def _grad_cam_top_out_acts_grad(learn, layers, patch, cls=-1, topk=3):
     return top_preds, output, acts, grads
 
 
-def grad_cam(learn, layers_with_names, patch, cls=-1, topk=3):
+def grad_cam(learn, layers_with_names, patch, cls=-1, topk=3, relu=False, ret=False):
     layers, layer_names = zip(*layers_with_names)
     labs = learn.data.classes
     top_preds, output, acts, grads = _grad_cam_top_out_acts_grad(learn, layers, patch, cls, topk)
@@ -57,8 +59,12 @@ def grad_cam(learn, layers_with_names, patch, cls=-1, topk=3):
     with torch.no_grad():
         ws = [grad[0].mean(dim=[1, 2], keepdim=True) for grad in grads]
         cam_maps = [(w * act[0]).sum(0) for w, act in zip(ws, acts)]
+        if relu:
+            cam_maps = [fv.F.relu(c) for c in cam_maps]
         print(f'Patch predicted as {labs[int(top_preds[0])]}, showing grad cam for class {labs[cls]}')
         plot_grad_cam(patch, layer_names, [c.detach().cpu() for c in cam_maps])
+        if ret:
+            return cam_maps
 
 
 def plot_grad_cam(patch, layer_names, cam_maps, ncol=5):
@@ -75,6 +81,17 @@ def plot_grad_cam(patch, layer_names, cam_maps, ncol=5):
     for ax in axs:
         ax.axis('off')
     fig.tight_layout(rect=[0, 0, 1, 0.85])
+
+
+def update_heatmap_with_acts(patch, grad_scaled_acts, cmap='magma'):
+    """Heavy magic to reproduce matplotlib viz ... Returns the patch heatmap"""
+    my_cm = cm.get_cmap(cmap)
+    normed_data = (grad_scaled_acts - np.min(grad_scaled_acts)) / (np.max(grad_scaled_acts) - np.min(grad_scaled_acts))
+    mapped_data = my_cm(normed_data, bytes=True)
+    acts_heat = PIL.Image.fromarray(mapped_data).resize(patch.shape[:-1], resample=PIL.Image.BILINEAR)
+    acts_heat = PIL.Image.fromarray(np.array(acts_heat)[:, :, :3])
+
+    return np.array(PIL.Image.blend(PIL.Image.fromarray(patch), acts_heat, 0.6))
 
 
 #https://stackoverflow.com/questions/44865023/how-can-i-create-a-circular-mask-for-a-numpy-array
