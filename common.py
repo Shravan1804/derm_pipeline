@@ -207,11 +207,15 @@ def load_rgb_img(path):
     return cv2.cvtColor(cv2.imread(path, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB)
 
 
+def img_on_ax(im, ax, title=None):
+    ax.imshow(im)
+    ax.set_title(title)
+    ax.axis('off')
+
+
 def plt_show_img(im, title, show=True, save_path=None):
     fig, ax = plt.subplots()
-    ax.imshow(im)
-    ax.axis('off')
-    ax.set_title(title)
+    img_on_ax(im, ax, title=title)
     if save_path is not None:
         plt_save_fig(save_path, close=False)
     if show:
