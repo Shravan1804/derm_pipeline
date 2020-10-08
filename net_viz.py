@@ -96,7 +96,7 @@ def grad_cam(learn, layers_with_names, patches, cls=None, relu=False, ret=False)
 
 
 def plot_grad_cam(patches, layer_names, cam_maps, ncols=5, cmap='magma'):
-    nrows = math.ceil(((len(patches) + 1) * len(cam_maps)) / ncols)
+    nrows = math.ceil(((len(cam_maps) + 1) * len(patches)) / ncols)
     fig, axs = plt.subplots(nrows, ncols, figsize=(ncols * 3, nrows * 3))
     axs = axs.flatten()
 
