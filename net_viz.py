@@ -90,19 +90,19 @@ def grad_cam(learn, layers_with_names, patches, cls=None, relu=False, ret=False)
     labs = np.array(learn.data.classes)
     print(f'Prediction / GradCAM class: {[f"{labs[t]}/{labs[c]}" for t, c in zip(top_preds[:, 0], cls)]}')
 
-    plot_grad_cam(patches, layer_names, cam_maps)
+    plot_grad_cam(patches, [labs[c] for c in cls], layer_names, cam_maps)
 
     return res if ret else None
 
 
-def plot_grad_cam(patches, layer_names, cam_maps, ncols=5, cmap='magma'):
+def plot_grad_cam(patches, patch_names, layer_names, cam_maps, ncols=5, cmap='magma'):
     nrows = math.ceil(((len(cam_maps) + 1) * len(patches)) / ncols)
     fig, axs = plt.subplots(nrows, ncols, figsize=(ncols * 3, nrows * 3))
     axs = axs.flatten()
 
     ax_i = 0
-    for pi, patch in enumerate(patches):
-        common.img_on_ax(patch, axs[ax_i], title='Patch')
+    for pi, (patch, patch_name) in enumerate(zip(patches, patch_names)):
+        common.img_on_ax(patch, axs[ax_i], title=patch_name)
         ax_i += 1
         for cam, title in zip(cam_maps, layer_names):
             common.img_on_ax(patch, axs[ax_i], title=title)
