@@ -67,8 +67,9 @@ def _grad_cam(learn, layers, patches, cls, relu, to_cpu=True, fix_corner_artifac
             cam_maps = [(grad.mean(dim=[2, 3], keepdim=True) * act).sum(1) for act, grad in zip(acts, grads)]
             if fix_corner_artifact and 'efficientnet' in str(type(learn.model)):
                 for cam_map in cam_maps:
-                    # last row first and last elements abnormally high for any pics, with effnet
-                    cam_map[:, -1, [0, -1]] /= 10
+                    # with effnet, last row first and last elements abnormally high for any pics
+                    cam_map[:, -1, 0] = (cam_map[:, -2, 0] + cam_map[:, -2, 1] + cam_map[:, -1, 1]) / 3
+                    cam_map[:, -1, -1] = (cam_map[:, -2, -1] + cam_map[:, -2, -2] + cam_map[:, -1, -2]) / 3
             if relu:
                 cam_maps = [c for cs in cam_maps for c in (cs, fv.F.relu(cs), fv.F.relu(-cs))]
 
