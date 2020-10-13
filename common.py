@@ -7,6 +7,10 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 
+body_loc_trad = {'arme': 'Arm', 'beine': 'Leg', 'fusse': 'Feet', 'hande': 'Hand', 'kopf': 'Head', 'other': 'Other',
+                 'stamm': 'Trunk', 'mean': 'Mean'}
+
+
 def flatten(lst):
     """Flattens lst of lsts"""
     return [elem for sublst in lst for elem in sublst]

@@ -95,7 +95,8 @@ def grad_cam(learn, layers_with_names, patches, cls=None, relu=False, ret=False)
     labs = np.array(learn.data.classes)
     print(f'Prediction / GradCAM class: {[f"{labs[t]}/{labs[c]}" for t, c in zip(top_preds[:, 0], cls)]}')
 
-    plot_grad_cam(patches, [labs[c] for c in cls], layer_names, cam_maps)
+    patch_names = [common.body_loc_trad.get(labs[c], labs[c]) for c in cls]
+    plot_grad_cam(patches, patch_names, layer_names, cam_maps)
 
     return res if ret else None
 
