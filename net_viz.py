@@ -39,7 +39,7 @@ def prepare_patch(patch, learn):
     return learn.data.one_item(x, detach=False, denorm=False)[0]
 
 
-def _grad_cam(learn, layers, patches, cls, relu, to_cpu=True):
+def _grad_cam(learn, layers, patches, cls, relu, to_cpu=True, fix_corner_artifact=True):
     """Computes grad cam for provided patches at provided layer for specified classes
     Returns:
         cls: the labels used for gradcam, shape bs
@@ -65,6 +65,10 @@ def _grad_cam(learn, layers, patches, cls, relu, to_cpu=True):
             # cannot use torch.cat since layers will have different nb of features
             acts, grads = [h.stored for h in hooks], [h.stored for h in hookgs]
             cam_maps = [(grad.mean(dim=[2, 3], keepdim=True) * act).sum(1) for act, grad in zip(acts, grads)]
+            if fix_corner_artifact and 'efficientnet' in str(type(learn.model)):
+                for cam_map in cam_maps:
+                    # last row first and last elements abnormally high for any pics, with effnet
+                    cam_map[:, -1, [0, -1]] /= 10
             if relu:
                 cam_maps = [c for cs in cam_maps for c in (cs, fv.F.relu(cs), fv.F.relu(-cs))]
 
