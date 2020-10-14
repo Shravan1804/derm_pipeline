@@ -111,23 +111,60 @@ class ClassifModel:
         else:
             res.preds = res.entropy_preds.squeeze(0).detach().clone()
         res.pred_class = res.preds.argmax(axis=1)
-        res.corrected = np.zeros(res.patches.size, dtype=np.bool)
+        res.corrected = torch.zeros_like(res.pred_class, dtype=bool)
         return res
 
 
-def correct_predictions(model_preds, patch_size, neigh_dist=1, topk=2, with_entropy=False,
-                        entropy_thresh=1.25, method="in_top_neigh_probs"):
+def correction_candidates(model_preds, neigh_pidx, with_entropy):
+    if with_entropy:
+        # all patch with entropy higher than most can be candidates
+        candidates = torch.tensor(model_preds.entropy > np.quantile(model_preds.entropy, [.85])[0])
+    else:
+        candidates = torch.zeros_like(model_preds.pred_class, dtype=bool)
+
+    top2_p, top2_idx = model_preds.preds.topk(2, axis=1)
+
+    for pid, (pred, top2_i, top2_p) in enumerate(zip(model_preds.pred_class, top2_idx, top2_p)):
+        # patch with "other" class in top 2 preds must be corrected since model is so confident with this class
+        candidates[pid] = candidates[pid] or (5 in top2_i[1:])
+        # unique prediction among neighbors
+        candidates[pid] = candidates[pid] or (pred not in model_preds.pred_class[neigh_pidx[pid]])
+        # Top pred proba should be at least 15% larger than second top pred proba
+        candidates[pid] = candidates[pid] or (top2_p[0] - top2_p[1] < .15)
+
+    # model is almost never wrong with the "other" class
+    candidates = candidates & ~(model_preds.pred_class == 5)
+
+    return candidates.numpy()
+
+
+def correct_patch_with_other_class(model_preds, corr_all, with_entropy=False):
+    """Sets the preds to other if other present in top 2 preds, returns unchanged patch indexes
+    Changes the preds, assumes already backed up"""
+    top2_p, top2_idx = model_preds.preds[corr_all, ].topk(2, axis=1)
+    change = np.apply_along_axis(lambda top2_i: 5 in top2_i[1:], axis=1, arr=top2_idx.numpy())
+    idx = corr_all[change]
+    model_preds.pred_class[idx] = 5
+    model_preds.preds[idx, model_preds.pred_class[idx]] = 1
+    if with_entropy:
+        model_preds.std[idx, model_preds.pred_class[idx]] = 0
+    return corr_all[~change]
+
+
+def correct_predictions(model_preds, neigh_dist=1, topk=2, with_entropy=False, method="mean_neigh_probs"):
     """Corrects individual patch predictions by looking at neighboring patches"""
-    _, neigh_pidx, _, pidx_groups = PatchExtractor.get_neighbors_dict(model_preds.patches, neigh_dist, patch_size)
+    model_preds.orig_preds = model_preds.preds.detach().clone()
+    model_preds.orig_pred_class = model_preds.pred_class.detach().clone()
+    if with_entropy:
+        model_preds.orig_std = model_preds.std.detach().clone()
+
+    _, neigh_pidx, _, pidx_groups = PatchExtractor.get_neighbors_dict(model_preds.patches, neigh_dist)
     # group is the number of neighbors, if patch has n neighbors it belongs to group n
 
-    # indexes of patches to be corrected
-    if with_entropy:
-        corr_all = (model_preds.entropy > entropy_thresh).nonzero()[0]
-        model_preds.orig_std = model_preds.std.detach().clone()
-        # TODO: update neigh_pidx, pidx_groups so that neighbors with high entropy are removed
-    else:
-        corr_all = np.arange(model_preds.patches.size)
+    # indexes of patches to be corrected, numpy nonzero returns tuple while torch returns tensor directly
+    corr_all = correction_candidates(model_preds, neigh_pidx, with_entropy).nonzero()[0]
+
+    corr_all = correct_patch_with_other_class(model_preds, corr_all)
 
     corr_groups = pidx_groups[corr_all]     # groups of patches to be corrected
     idx_sort = np.argsort(corr_groups)      # idx to sort corr_groups so that the same groups are adjacent
@@ -136,20 +173,17 @@ def correct_predictions(model_preds, patch_size, neigh_dist=1, topk=2, with_entr
     if corr_groups[0] == 0:     # if no neighbors, cannot correct patch label
         corr_groups, corr_idx = corr_groups[1:], corr_idx[1:]
 
-    model_preds.orig_preds = model_preds.preds.detach().clone()
-    model_preds.orig_pred_class = model_preds.pred_class.detach().clone()
-
     for idx in corr_idx:    # iterate over all groups of patches with same number of neighbors
         cidx = corr_all[idx]
         # neigh_pidx orig shape irregular => orig type is object => need to cast to ints in order to use as index
         cidx_neighs = np.array(neigh_pidx[cidx].tolist())
         # METHODS MUST UPDATE model_preds.preds AND model_preds.std, AS IT IS NEEDED IN predictions_to_labels
         if method == "mean_neigh_probs":
-            # interp.preds[cidx] shape is nb_images x nb_classes
-            # interp.preds[idx_neighs] shape is nb_images x nb_neighbors x nb_classes
+            # model_preds.preds[cidx] shape is nb_images x nb_classes
+            # model_preds.preds[idx_neighs] shape is nb_images x nb_neighbors x nb_classes
             model_preds.preds[cidx] = model_preds.preds[cidx_neighs,].mean(axis=1)
             model_preds.pred_class[cidx] = model_preds.preds[cidx].argmax(axis=1)
-            # interp.std[idx_neighs] shape is nb_images x nb_neighbors x nb_classes
+            # model_preds.std[idx_neighs] shape is nb_images x nb_neighbors x nb_classes
             if with_entropy:
                 model_preds.std[cidx] = model_preds.std[cidx_neighs,].mean(axis=1)
         elif method == "in_top_neigh_probs":
@@ -165,6 +199,7 @@ def correct_predictions(model_preds, patch_size, neigh_dist=1, topk=2, with_entr
             if with_entropy:
                 model_preds.std[change, model_preds.pred_class[change]] = 0
     model_preds.corrected = model_preds.orig_pred_class != model_preds.pred_class
+
 
 def pred_among_most_probable(arr):
     """Arr contains the most common neighbors preds + the model prediction as the last element"""
@@ -217,8 +252,7 @@ def main(args):
         preds = model.prepare_predictions(patch_maps, preds)
         preds.classes = model.learner.data.classes
         if args.pred_correction:
-            correct_predictions(preds, args.ps, with_entropy=args.with_entropy, entropy_thresh=args.entropy_thresh,
-                                method=args.corr_method)
+            correct_predictions(preds, with_entropy=args.with_entropy, method=args.corr_method)
         title = f'Body localization'
         plot_name = f'{file}_body_loc{ext}'
 
@@ -248,9 +282,8 @@ if __name__ == '__main__':
     parser.add_argument('--effnet', action='store_true', help="efficientnet model if set, need --data-sample")
     parser.add_argument('--heatmap', action='store_true', help="For classif, creates gradcam image")
     parser.add_argument('--with-entropy', action='store_true', help="Compute image entropy")
-    parser.add_argument('--entropy-thresh', default=1.25, type=float, help="Threshold to find patch to correct")
     parser.add_argument('--pred-correction', action='store_true', help="Corrects preds by checking neighboring patches")
-    parser.add_argument('--corr-method', type=str, default='in_top_neigh_probs', help="in_top_neigh_probs or mean_neigh_probs")
+    parser.add_argument('--corr-method', type=str, default='mean_neigh_probs', help="in_top_neigh_probs or mean_neigh_probs")
 
     args = parser.parse_args()
 
