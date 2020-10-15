@@ -153,24 +153,27 @@ def correct_patch_with_other_class(model_preds, corr_all, with_entropy=False):
 
 def correct_predictions(model_preds, neigh_dist=1, topk=2, with_entropy=False, method="mean_neigh_probs"):
     """Corrects individual patch predictions by looking at neighboring patches"""
-    model_preds.orig_preds = model_preds.preds.detach().clone()
-    model_preds.orig_pred_class = model_preds.pred_class.detach().clone()
-    if with_entropy:
-        model_preds.orig_std = model_preds.std.detach().clone()
-
     _, neigh_pidx, _, pidx_groups = PatchExtractor.get_neighbors_dict(model_preds.patches, neigh_dist)
     # group is the number of neighbors, if patch has n neighbors it belongs to group n
 
     # indexes of patches to be corrected, numpy nonzero returns tuple while torch returns tensor directly
     corr_all = correction_candidates(model_preds, neigh_pidx, with_entropy).nonzero()[0]
+    if corr_all.size == 0: return
+
+    # backup preds before correction
+    model_preds.orig_preds = model_preds.preds.detach().clone()
+    model_preds.orig_pred_class = model_preds.pred_class.detach().clone()
+    if with_entropy:
+        model_preds.orig_std = model_preds.std.detach().clone()
 
     corr_all = correct_patch_with_other_class(model_preds, corr_all)
+    if corr_all.size == 0: return
 
     corr_groups = pidx_groups[corr_all]     # groups of patches to be corrected
     idx_sort = np.argsort(corr_groups)      # idx to sort corr_groups so that the same groups are adjacent
     corr_groups, idx_start = np.unique(corr_groups[idx_sort], return_index=True)
     corr_idx = np.split(idx_sort, idx_start[1:])    # lst of arr of idx of patches of same group
-    if corr_groups[0] == 0:     # if no neighbors, cannot correct patch label
+    if corr_groups.size > 0 and corr_groups[0] == 0:     # if no neighbors, cannot correct patch label
         corr_groups, corr_idx = corr_groups[1:], corr_idx[1:]
 
     for idx in corr_idx:    # iterate over all groups of patches with same number of neighbors
