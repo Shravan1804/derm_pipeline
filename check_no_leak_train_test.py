@@ -8,6 +8,8 @@ import concurrency
 
 def get_image_name(args, path):
     img = os.path.splitext(os.path.basename(path))[0]
+    img = img.split(args.patch_sep)[0] if args.patch else img
+    img = '_'.join(img.split('_')[:-1]) if args.crops else img
     return img.split(args.patch_sep)[0] if args.patch else img
 
 
@@ -69,6 +71,7 @@ if __name__ == '__main__':
     parser.add_argument('--dir1', type=str, required=True, help="first directory (e.g. train dir)")
     parser.add_argument('--dir2', type=str, required=True, help="second directory (e.g. test dir)")
     parser.add_argument('--classif', action='store_true', help="expect class subdirs in provided dirs")
+    parser.add_argument('--crops', action='store_true', help="dir contains imgs_crops => checks if same orig img")
     parser.add_argument('--patch', action='store_true', help="dir contains patches => checks if same img in both dirs")
     parser.add_argument('--patch-sep', type=str, default='__SEP__', help="patch name separator")
     parser.add_argument('--verbose', action='store_true', help="show occurrences")
