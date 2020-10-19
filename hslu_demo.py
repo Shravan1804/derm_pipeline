@@ -98,7 +98,7 @@ def prepare_batch_for_inference(learn, batch):
     return torch.cat([learn.data.one_item(b)[0] for b in batch], dim=0)
 
 
-def get_learner(model_path='/home/navarinilab/models/20201019_body_loc.pkl'):
+def get_learner(model_path):
     assert os.path.exists(model_path) and model_path.endswith('.pkl'), f"Error with learner path: {model_path}"
     return fv.load_learner(os.path.dirname(model_path), os.path.basename(model_path))
 
