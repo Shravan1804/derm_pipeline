@@ -113,7 +113,7 @@ def write_preds(im_arr, pos, preds_idx, preds_prob, labels):
 
 
 def create_body_region_mapping(learn, im_arr, patch_size=512, batch_size=12, topk=3):
-    patch_size, oh, ow, pos, patches = patch_img(im_arr, ps=512)
+    patch_size, oh, ow, pos, patches = patch_img(im_arr, ps=patch_size)
     batches = batch_list(patches, batch_size)
 
     preds = []
