@@ -211,6 +211,17 @@ def load_rgb_img(path):
     return cv2.cvtColor(cv2.imread(path, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB)
 
 
+def prepare_img_axs(im_shape, nrows, ncols, figsize_fact=8, no_axis=True):
+    h_w_ratio = im_shape[0] / im_shape[1]
+    base_figsize = (ncols*figsize_fact, nrows*figsize_fact*h_w_ratio)
+    fig, axs = plt.subplots(nrows, ncols, figsize=base_figsize)
+    axs = axs.flatten()
+    if no_axis:
+        for ax in axs:
+            ax.axis('off')
+    return fig, axs
+
+
 def img_on_ax(im, ax, title=None):
     ax.imshow(im)
     ax.set_title(title)

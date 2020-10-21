@@ -134,12 +134,10 @@ class PatchExtractor:
         im = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
         return self.maybe_resize(im)
 
-    def save_patches(self, source, dest, dirname, grids, mask_prefix=None):
+    def save_patches(self, source, dest, dirname, grids):
         dest = common.maybe_create(dest, dirname)
         for img, patches in grids.items():
             im = self.load_image(os.path.join(source, dirname, img))
-            if mask_prefix is not None and dirname.startswith(mask_prefix) and len(im.shape) > 3:     # mask img are 2D
-                im = im[:, :, 0]    # discard all but first channel
             for pm in patches:
                 cv2.imwrite(os.path.join(dest, pm['patch_path']), self.extract_patch(im, pm))
 
@@ -251,13 +249,13 @@ class PatchExtractor:
         return PatchExtractor.create_pm(img_path, ps, oh, ow, h, w, randomly_sampled, patch_name)
 
 
-def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest, m_prefix):
+def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest):
     pms = []
     for c in dirs:
         print(f"Process {proc_id}: patching {c} patches")
         grids = patcher.dir_images_to_patches(os.path.join(data, c))
         print(f"Process {proc_id}: saving {c} patches")
-        patcher.save_patches(data, dest, c, grids, m_prefix)
+        patcher.save_patches(data, dest, c, grids)
         pms.append((c, grids))
     pmq.put(pms)
 
@@ -278,7 +276,7 @@ def main(args):
     pmq = mp.Queue()
     jobs = []
     for i, dirs in zip(range(workers), batched_dirs):
-        jobs.append(mp.Process(target=multiprocess_patching, args=(i, pmq, patcher, args.data, dirs, args.dest, args.mdir_prefix)))
+        jobs.append(mp.Process(target=multiprocess_patching, args=(i, pmq, patcher, args.data, dirs, args.dest)))
         jobs[i].start()
     pms = concurrency.unload_mpqueue(pmq, jobs)
     for j in jobs:
@@ -294,7 +292,6 @@ def get_patcher_arg_parser(desc="Creates patch dataset from image dataset"):
     parser.add_argument('-p', '--patch-sizes', nargs='+', default=[512], type=int, help="patch sizes")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
     parser.add_argument('--level', default=0, type=int, help="nested level of class folders compared to args.data")
-    parser.add_argument('--mdir-prefix', type=str, default='masks_', help="prefix of mask dirs")
     return parser
 
 
@@ -302,12 +299,12 @@ if __name__ == '__main__':
     parser = get_patcher_arg_parser()
     args = parser.parse_args()
 
+    common.check_dir_valid(args.data)
+    args.data = args.data.rstrip('/')
+
     args.patch_sizes = sorted(args.patch_sizes)
 
-    args.data = args.data.rstrip('/')
-    common.check_dir_valid(args.data)
     if args.dest is None:
-        args.dest = common.maybe_create(os.path.dirname(args.data),
-                                        f'{os.path.basename(args.data)}_patched_{"_".join(map(str, args.patch_sizes))}')
+        args.dest = common.maybe_create(f'{args.data}_patched_{"_".join(map(str, args.patch_sizes))}')
 
     common.time_method(main, args)

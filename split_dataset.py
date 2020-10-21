@@ -73,9 +73,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     common.check_dir_valid(args.data)
+    args.data = args.data.rstrip('/')
 
     if args.dest is None:
-        args.dest = common.maybe_create(os.path.dirname(args.data), os.path.basename(args.data) + '_splitted')
+        args.dest = common.maybe_create(f'{args.data}_splitted')
     else:
         common.check_dir_valid(args.dest)
         args.dest = args.dest.rstrip('/')
