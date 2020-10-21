@@ -43,7 +43,7 @@ def main(args):
     random.seed(args.seed)
     np.random.seed(args.seed)
 
-    dirs = [d for d in common.listdir(args.data) if d not in args.label_dirs]
+    dirs = [d for d in common.list_dirs(args.data) if d not in args.label_dirs]
     if args.coco_json:
         # with coco format, images are in single dir
         splits = dataset_split(args, dirs[0])
