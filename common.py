@@ -16,6 +16,29 @@ def flatten(lst):
     return [elem for sublst in lst for elem in sublst]
 
 
+def merge(lst, cond_fn, merge_fn):
+    """Applies merge_fn on pairs of lst items if cond_fn is satisfied"""
+    for i, item_a in enumerate(lst):
+        sub_lst = lst[:i] + lst[i+1:]
+        for j, item_b in enumerate(sub_lst):
+            if cond_fn(item_a, item_b):
+                new_lst = sub_lst[:j] + sub_lst[j+1:] + [merge_fn(item_a, item_b)]
+                return merge(new_lst, cond_fn, merge_fn)
+    return lst
+
+
+def int_to_bins(n, bins, rand=False):
+    """Divides integer into bins. If rand true, random split else equal split"""
+    if n <= 0 or bins <= 0:
+        return np.array([])
+    if rand:
+        temp = np.concatenate([np.zeros(n, dtype=np.bool), np.ones(bins-1, dtype=np.bool)])
+        np.random.shuffle(temp)
+        return np.array([(~t).sum() for t in np.split(temp, temp.nonzero()[0])])
+    else:
+        return np.arange(n+bins-1, n-1, -1) // bins
+
+
 def most_common(arr, top=3, return_index=False, return_counts=False):
     """Returns most common elements in array"""
     u, c = np.unique(arr, return_counts=True)
@@ -211,8 +234,7 @@ def load_rgb_img(path):
     return cv2.cvtColor(cv2.imread(path, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB)
 
 
-def prepare_img_axs(im_shape, nrows, ncols, figsize_fact=8, no_axis=True):
-    h_w_ratio = im_shape[0] / im_shape[1]
+def prepare_img_axs(h_w_ratio, nrows, ncols, figsize_fact=8, no_axis=True):
     base_figsize = (ncols*figsize_fact, nrows*figsize_fact*h_w_ratio)
     fig, axs = plt.subplots(nrows, ncols, figsize=base_figsize)
     axs = axs.flatten()
