@@ -216,9 +216,9 @@ def main(args):
 
     patcher = PatchExtractor(args.ps)
     for img_id, img_path in enumerate(img_list):
-        print(f"Image {img_id}/{len(img_list)}: {img_path}")
+        print(f"Image {img_id+1}/{len(img_list)}: {img_path}")
         file, ext = os.path.splitext(os.path.basename(img_path))
-        im = cv2.cvtColor(patcher.load_image(img_path), cv2.COLOR_BGR2RGB)
+        im = common.load_rgb_img(img_path)
 
         patch_maps = patcher.patch_grid(img_path, im)
         b_pms = common.batch_list(patch_maps, args.bs)
@@ -237,10 +237,11 @@ def main(args):
         title = f'Body localization'
         plot_name = f'{file}_body_loc{ext}'
 
-        if args.draw_patches:
+        if not args.not_draw_patches:
             DrawHelper().draw_patches(im, patch_maps, args.ps)
         if not args.no_graphs:
             model.show_preds(im, preds, title=f'{title} for {file}{ext}', fname=plot_name)
+
 
 if __name__ == '__main__':
     import argparse
@@ -250,8 +251,7 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=str, help="model path")
     parser.add_argument('--bs', default=3, type=int, help="batch size")
     parser.add_argument('--ps', default=512, type=int, help="patch size")
-    parser.add_argument('--input-size', default=256, type=int, help="model input size")
-    parser.add_argument('--draw-patches', action='store_true', help="Draws patches")
+    parser.add_argument('--not-draw-patches', action='store_true', help="Do not draws patches")
     parser.add_argument('--out-dir', type=str, help="if save-out set, output dir absolute path")
     parser.add_argument('--no-graphs', action='store_true', help="Do not create graphs")
     parser.add_argument('--cpu', action='store_true', help="Use CPU (defaults use cuda if available)")
