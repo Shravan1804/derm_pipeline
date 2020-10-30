@@ -15,19 +15,18 @@ import entropy
 
 
 class ClassifModel:
-    def __init__(self, model_path, output_dir, use_cpu, with_entropy, n_times=10):
-        self.model_path = model_path
+    def __init__(self, model_path, output_dir, use_cpu, with_entropy, bs, n_times=10):
         self.output_dir = output_dir
         self.device = torch.device('cuda') if not use_cpu and torch.cuda.is_available() else torch.device('cpu')
         fvision.defaults.device = torch.device(self.device)
-        self.load_model()
+        self.learner = fvision.load_learner(os.path.dirname(model_path), os.path.basename(model_path))
+        self.classes = self.learner.data.classes
+        self.learner.data.batch_size = bs
         self.with_entropy = with_entropy
         if self.with_entropy:
             entropy.convert_learner(self.learner)
             self.n_times = n_times
 
-    def load_model(self):
-        self.learner = fvision.load_learner(os.path.dirname(self.model_path), os.path.basename(self.model_path))
 
     def prepare_img_for_inference(self, ims):
         ims = [fvision.Image(fvision.pil2tensor(im, np.float32).div_(255)) for im in ims]
@@ -84,6 +83,7 @@ class ClassifModel:
         labels = [trad[c] for c in self.learner.data.classes]
         assert len(labels) >= topk, "Topk greater than the number of classes"
         colors = (['k', 'g', 'c', 'm', 'w', 'lime', 'maroon', 'darkorange'] * max(1, int(len(labels)/8)))[:len(labels)]
+        #colors = ['y'] * len(labels)
 
         topk_p, topk_idx = model_preds.preds.topk(topk, axis=1)
         if self.with_entropy:
@@ -209,32 +209,10 @@ def pred_among_most_probable(arr):
     return arr[-1] if arr[-1] in arr[:-1] else arr[0]
 
 
-class EffnetClassifModel(ClassifModel):
-    def __init__(self, model_path, output_dir, use_cpu, with_entropy, data_sample, bs, input_size):
-        test = 'strong_labels_test'
-        train = 'strong_labels_train'
-        self.data = fvision.ImageDataBunch.from_folder(path=data_sample, train=train, valid=test, size=input_size, bs=bs)
-        self.data.normalize(fvision.imagenet_stats)
-        self.classes = self.data.classes
-        self.n_classes = len(self.classes)
-        super().__init__(model_path, output_dir, use_cpu, with_entropy)
-
-    def load_model(self):
-        from efficientnet_pytorch import EfficientNet
-        model = EfficientNet.from_name('efficientnet-b6')
-        model._fc = torch.nn.Linear(model._fc.in_features, self.data.c)
-        common.load_custom_pretrained_weights(model, self.model_path)
-        self.learner = fvision.Learner(model=model, data=self.data)
-
-
 def main(args):
     img_list = [args.img] if args.img is not None else common.list_files(args.img_dir, full_path=True)
 
-    if args.effnet:
-        model = EffnetClassifModel(args.model, args.out_dir, args.cpu, args.with_entropy, args.data_sample,
-                                   args.bs, args.input_size)
-    else:
-        model = ClassifModel(args.model, args.out_dir, args.cpu, args.with_entropy)
+    model = ClassifModel(args.model, args.out_dir, args.cpu, args.with_entropy, args.bs)
 
     patcher = PatchExtractor(args.ps)
     for img_id, img_path in enumerate(img_list):
@@ -281,8 +259,6 @@ if __name__ == '__main__':
     common.add_multi_gpus_args(parser)
 
     # classif args
-    parser.add_argument('--data-sample', type=str, help="optional, needed to recreate effnet learner")
-    parser.add_argument('--effnet', action='store_true', help="efficientnet model if set, need --data-sample")
     parser.add_argument('--heatmap', action='store_true', help="For classif, creates gradcam image")
     parser.add_argument('--with-entropy', action='store_true', help="Compute image entropy")
     parser.add_argument('--pred-correction', action='store_true', help="Corrects preds by checking neighboring patches")
@@ -297,9 +273,6 @@ if __name__ == '__main__':
 
     if args.out_dir is not None:
         common.check_dir_valid(args.out_dir)
-
-    if args.effnet:
-        assert args.data_sample is not None, "Efficient net model needs a sample data dir to be loaded"
 
     if not args.cpu:
         common.maybe_set_gpu(args.gpuid, args.num_gpus)
