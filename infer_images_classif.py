@@ -1,36 +1,26 @@
 import os
-import cv2
 import types
 import numpy as np
 from tqdm import tqdm
 from functools import partial
 import matplotlib.pyplot as plt
 
-import fastai.vision as fvision
 from radam import *
 
-from PatchExtractor import PatchExtractor, DrawHelper
 import common
 import entropy
+from infer_images import FastaiModel
+from PatchExtractor import PatchExtractor, DrawHelper
 
 
-class ClassifModel:
+class ClassifModel(FastaiModel):
     def __init__(self, model_path, output_dir, use_cpu, with_entropy, bs, n_times=10):
+        super().__init__(model_path, use_cpu, bs)
         self.output_dir = output_dir
-        self.device = torch.device('cuda') if not use_cpu and torch.cuda.is_available() else torch.device('cpu')
-        fvision.defaults.device = torch.device(self.device)
-        self.learner = fvision.load_learner(os.path.dirname(model_path), os.path.basename(model_path))
-        self.classes = self.learner.data.classes
-        self.learner.data.batch_size = bs
         self.with_entropy = with_entropy
         if self.with_entropy:
             entropy.convert_learner(self.learner)
             self.n_times = n_times
-
-
-    def prepare_img_for_inference(self, ims):
-        ims = [fvision.Image(fvision.pil2tensor(im, np.float32).div_(255)) for im in ims]
-        return torch.cat([self.learner.data.one_item(im)[0] for im in ims], dim=0)
 
     def predict_imgs(self, ims):
         """Returns tensor of shape n_times x n_images x n_classes"""
@@ -44,7 +34,7 @@ class ClassifModel:
             preds = torch.cat([preds, entropy_preds], dim=0)
         return preds
 
-    def gradcam(self, im, patches, patch_size=512):
+    """def gradcam(self, im, patches, patch_size=512):
         from cnn_viz.visualisation.core import GradCam
         from cnn_viz.visualisation.core.utils import image_net_postprocessing
         from cnn_viz.utils import tensor2img
@@ -57,7 +47,7 @@ class ClassifModel:
             hm = cv2.resize(hm.astype(np.uint8), (patch_size, patch_size))
             h, w = pm['idx_h'], pm['idx_w']
             im[h:h + patch_size, w:w + patch_size] = hm
-        return im
+        return im"""
 
     def show_preds(self, img_arr, preds, title, fname):
         preds = self.predictions_to_labels(preds)
@@ -235,7 +225,7 @@ def main(args):
         if args.pred_correction:
             correct_predictions(preds, with_entropy=args.with_entropy, method=args.corr_method)
         title = f'Body localization'
-        plot_name = f'{file}_body_loc{ext}'
+        plot_name = f'{file}_body_loc.jpg'
 
         if not args.not_draw_patches:
             DrawHelper().draw_patches(im, patch_maps, args.ps)
