@@ -11,6 +11,30 @@ body_loc_trad = {'arme': 'Arm', 'beine': 'Leg', 'fusse': 'Feet', 'hande': 'Hand'
                  'stamm': 'Trunk', 'mean': 'Mean'}
 
 
+def get_cmap(n, name='Dark2'):
+    ''' source https://stackoverflow.com/questions/14720331/how-to-generate-random-colors-in-matplotlib
+    Returns a function that maps each index in 0, 1, ..., n-1 to a distinct
+    RGB color; the keyword argument name must be a standard mpl colormap name.'''
+    return plt.cm.get_cmap(name, n)
+
+
+def grouped_barplot(ax, vars_vals, var_labels, group_labels, barWidth=.25):
+    """vars_vals: lst of variables values (lst, one item per group)"""
+    assert len(vars_vals) == len(var_labels)
+    assert np.array([len(v) == len(group_labels) for v in vars_vals]).all()
+    ax.axis('on')
+    cmap = get_cmap(len(vars_vals))
+    pos = np.arange(len(group_labels))
+    for var_vals, var_label, c in zip(vars_vals, var_labels, [cmap(i) for i in range(len(vars_vals))]):
+        ax.bar(pos, var_vals, color=c, width=barWidth, edgecolor='white', label=var_label)
+        pos = [x + barWidth for x in pos]
+    ax.set_xlabel('Metrics', fontweight='bold')
+    ax.set_ylabel('Percentage', fontweight='bold')
+    ax.set_xticks([r + barWidth for r in range(len(group_labels))])
+    ax.set_xticklabels(group_labels)
+    ax.legend()
+
+
 def flatten(lst):
     """Flattens lst of lsts"""
     return [elem for sublst in lst for elem in sublst]
