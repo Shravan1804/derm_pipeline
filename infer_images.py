@@ -1,23 +1,19 @@
 import os
 
-import numpy as np
-
 import torch
-import fastai.vision as fv
-
-import common
-from PatchExtractor import PatchExtractor
+import fastai.vision.all as fv
 
 
 class FastaiModel:
     def __init__(self, model_path, use_cpu, bs):
+        fv.default_device(not use_cpu)
         self.device = torch.device('cuda') if not use_cpu and torch.cuda.is_available() else torch.device('cpu')
-        fv.defaults.device = torch.device(self.device)
-        self.learner = fv.load_learner(os.path.dirname(model_path), os.path.basename(model_path))
-        self.learner.data.batch_size = bs
-        self.classes = self.learner.data.classes
+        self.learner = fv.load_learner(model_path)
+        self.learner.dls.bs = bs
 
-    def prepare_img_for_inference(self, ims):
-        ims = [fv.Image(fv.pil2tensor(im, np.float32).div_(255)) for im in ims]
-        return torch.cat([self.learner.data.one_item(im)[0] for im in ims], dim=0)
-
+    def predict_imgs(self, ims):
+        """ims is a lst of raw images"""
+        dl = self.learner.dls.test_dl(ims, num_workers=0)
+        preds = self.learner.get_preds(dl=dl, with_decoded=True)[-1]
+        #preds = torch.randn((len(ims), *ims[0].shape[:2]))
+        return preds
