@@ -30,7 +30,7 @@ def rec(TP, TN, FP, FN):
     return TP/(TP + FN + epsilon)
 
 def prepare_truth_preds(inp, targ, cls_idx, bg, axis):
-    inp = inp.argmax(dim=axis)
+    #inp = inp.argmax(dim=axis)
     if bg is not None:
         mask = targ != bg
         inp, targ = inp[mask], targ[mask]
@@ -71,13 +71,23 @@ class SegmModel(FastaiModel):
         self.cats = cats
 
 
-def show_segm_preds(img_arr, pred_mask, gt_mask=None, save_path=None):
-    ncols = 2 if gt_mask is None else 3
+def compute_metrics(cats, pred_mask, gt_mask):
+    res = []
+    for cat_idx in range(len(cats)):
+        bg = None if cat_idx == 0 else 0
+        res.append([cls_perf(m, pred_mask, gt_mask, cat_idx, bg=bg) for m in [acc, prec, rec]])
+    return res, cats, ['accuracy', 'precision', 'recall']
+
+
+def show_segm_preds(img_arr, pred_mask, gt_mask=None, cats=None, save_path=None):
+    ncols = 2 if gt_mask is None else 4
     _, axs = common.prepare_img_axs(img_arr.shape[0] / img_arr.shape[1], 1, ncols)
     common.img_on_ax(img_arr, axs[0], title='Original image')
     for ax, m, label in zip(axs[1:], [pred_mask, gt_mask], ["Prediction", "Ground truth"]):
         common.img_on_ax(img_arr, ax, title=label)
         ax.imshow(m, cmap='jet', alpha=0.4)
+    if gt_mask is not None:
+        common.grouped_barplot(axs[-1], *compute_metrics(cats, pred_mask, gt_mask))
     if save_path is not None:
         plt.savefig(save_path, dpi=300)
     plt.show()
@@ -123,7 +133,7 @@ def main(args):
 
         if not args.no_graphs:
             save_path = None if args.out_dir is None else os.path.join(args.out_dir, f'{file}_segm.jpg')
-            show_segm_preds(im, pred_mask, gt_mask, save_path=save_path)
+            show_segm_preds(im, pred_mask, gt_mask, model.cats, save_path=save_path)
 
 
 if __name__ == '__main__':
