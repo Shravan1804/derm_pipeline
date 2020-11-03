@@ -281,3 +281,15 @@ def plt_show_img(im, title, show=True, save_path=None):
         plt_save_fig(save_path, close=False)
     if show:
         fig.show()
+
+
+def acc(TP, TN, FP, FN, epsilon=1e-8):
+    return (TP + TN) / (TP + TN + FP + FN + epsilon)
+
+
+def prec(TP, TN, FP, FN, epsilon=1e-8):
+    return TP / (TP + FP + epsilon)
+
+
+def rec(TP, TN, FP, FN, epsilon=1e-8):
+    return TP / (TP + FN + epsilon)
