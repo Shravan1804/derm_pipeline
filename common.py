@@ -260,6 +260,8 @@ def plt_save_fig(path, dpi=300, close=True):
 
 
 def img_bgr_to_rgb(im):
+    if len(im.shape) != 3:
+        raise Exception(f"Error cannot convert from bgr to rgb, im shape is {im.shape}")
     return cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
 
 

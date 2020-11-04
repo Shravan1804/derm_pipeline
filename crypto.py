@@ -15,7 +15,8 @@ import concurrency
 
 def decrypt_img(img_path, fkey):
     buffer = np.frombuffer(io.BytesIO(decrypt(img_path, fkey)).getbuffer())
-    return common.img_bgr_to_rgb(cv2.imdecode(buffer, cv2.IMREAD_UNCHANGED))
+    im = cv2.imdecode(buffer, cv2.IMREAD_UNCHANGED)
+    return common.img_bgr_to_rgb(im) if len(im.shape) > 2 else im
 
 def request_key(key_dir, user_key=None):
     if user_key is None:
