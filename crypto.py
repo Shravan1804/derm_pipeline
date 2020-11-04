@@ -1,14 +1,21 @@
 import os
+import io
 import pickle
 import argparse
 import multiprocessing as mp
 
+import cv2
+import numpy as np
 from bidict import bidict
 from cryptography.fernet import Fernet
 
 import common
 import concurrency
 
+
+def decrypt_img(img_path, fkey):
+    buffer = np.frombuffer(io.BytesIO(decrypt(img_path, fkey)).getbuffer())
+    return common.img_bgr_to_rgb(cv2.imdecode(buffer, cv2.IMREAD_UNCHANGED))
 
 def request_key(key_dir, user_key=None):
     if user_key is None:

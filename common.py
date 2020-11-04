@@ -259,8 +259,12 @@ def plt_save_fig(path, dpi=300, close=True):
         plt.close()
 
 
+def img_bgr_to_rgb(im):
+    return cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+
+
 def load_rgb_img(path):
-    return cv2.cvtColor(cv2.imread(path, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB)
+    return img_bgr_to_rgb(cv2.imread(path, cv2.IMREAD_UNCHANGED))
 
 
 def prepare_img_axs(h_w_ratio, nrows, ncols, figsize_fact=8, no_axis=True):
