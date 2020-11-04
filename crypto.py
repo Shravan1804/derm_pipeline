@@ -14,7 +14,7 @@ import concurrency
 
 
 def decrypt_img(img_path, fkey):
-    buffer = np.frombuffer(io.BytesIO(decrypt(img_path, fkey)).getbuffer())
+    buffer = np.frombuffer(io.BytesIO(decrypt(img_path, fkey)).getbuffer(), dtype=np.uint8)
     im = cv2.imdecode(buffer, cv2.IMREAD_UNCHANGED)
     return common.img_bgr_to_rgb(im) if len(im.shape) > 2 else im
 
