@@ -11,12 +11,16 @@ import concurrency
 
 
 def request_key(key_dir, user_key=None):
-    print("Please provide dataset encryption key")
-    user_key = input().encode() if user_key is None else user_key
-    user_fkey = load_user_provided_key(user_key)
-    crypted_key_file = [kf for kf in common.list_files(key_dir, full_path=True) if kf.endswith('.key')][0]
-    with open(crypted_key_file, "rb") as kf:
-        assert user_key == user_fkey.decrypt(kf.read()), f"Error with provided key, checked with {crypted_key_file}"
+    if user_key is None:
+        print("Please provide dataset encryption key")
+        user_key = input().encode()
+    try:
+        user_fkey = load_user_provided_key(user_key)
+        crypted_key = [kf for kf in common.list_files(key_dir, full_path=True) if kf.endswith('.key')][0]
+        with open(crypted_key, "rb") as kf:
+            assert user_key == user_fkey.decrypt(kf.read()), f"Error with provided key, checked with {crypted_key}"
+    except Exception:
+        raise Exception("Provided key invalid.")
     return user_fkey
 
 
