@@ -140,6 +140,11 @@ def get_exp_logdir(args, custom=''):
     d += f'_epo{args.epochs}_seed{args.seed}_world{ws}_{args.exp_name}'
     return d
 
+
+def zero_pad(it, max_it):
+    return str(it).zfill(len(str(max_it)) + 1)
+
+
 def get_root_logdir(logdir):
     if logdir is not None and os.path.exists(logdir) and os.path.isdir(logdir):
         return logdir
