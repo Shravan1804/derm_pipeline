@@ -132,7 +132,7 @@ def now():
 
 def get_exp_logdir(args, custom=''):
     ws = args.num_machines * args.num_gpus
-    d = f'{now()}_{custom}_{args.model}_bs{args.batch_size}'
+    d = f'{now()}_{custom}_{args.model}_bs{args.bs}'
     if args.lr:
         d += f'_lr{args.lr}'
     if args.wd:
