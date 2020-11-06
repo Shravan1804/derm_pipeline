@@ -187,20 +187,22 @@ def add_multi_gpus_args(parser):
     parser.add_argument("--num-machines", type=int, default=1)
 
 
-def add_common_train_args(parser, pdefaults=dict(), phelp=dict()):
+def add_common_train_args(parser, pdef=dict(), phelp=dict()):
     parser.add_argument('-name', '--exp-name', required=True, help='Custom string to append to experiment log dir')
-    parser.add_argument('--logdir', type=str, default=pdefaults.get('logdir', get_root_logdir(None)), help="Root directory where logs will be saved, default to $HOME/logs")
+    parser.add_argument('--logdir', type=str, default=pdef.get('--logdir', get_root_logdir(None)),
+                        help=phelp.get('--logdir', "Root directory where logs will be saved, default to $HOME/logs"))
     parser.add_argument('--exp-logdir', type=str, help="Experiment logdir, will be created in root log dir")
-    parser.add_argument('--model', type=str, default=pdefaults.get('model', None), help=phelp.get('model', "Model name"))
+    parser.add_argument('--model', type=str, default=pdef.get('--model', None), help=phelp.get('--model', "Model name"))
 
-    parser.add_argument('--seed', type=int, default=pdefaults.get('seed', 42), help="Random seed")
-    parser.add_argument('--epochs', type=int, default=pdefaults.get('epo', 26), help='Number of total epochs to run')
-    parser.add_argument('-b', '--batch-size', default=pdefaults.get('bs', 6), type=int, help="Batch size")
+    parser.add_argument('--seed', type=int, default=pdef.get('--seed', 42), help="Random seed")
+    parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 26), help='Number of total epochs to run')
+    parser.add_argument('--bs', default=pdef.get('--bs', 6), type=int, help="Batch size")
     parser.add_argument('--gpuid', type=int, help="For single gpu, gpu id to be used")
 
-    parser.add_argument('--wd', default=pdefaults.get('wd', None), type=float, help='weight decay')
-    parser.add_argument('--lr', type=float, default=pdefaults.get('lr', None), help=phelp.get('lr', 'Learning rate'))
-    parser.add_argument('--lr-steps', default=pdefaults.get('lr-steps', [8, 11]), nargs='+', type=int, help='decrease lr every step-size epochs')
+    parser.add_argument('--wd', default=pdef.get('--wd', None), type=float, help='weight decay')
+    parser.add_argument('--lr', type=float, default=pdef.get('--lr', None), help=phelp.get('--lr', 'Learning rate'))
+    parser.add_argument('--lr-steps', default=pdef.get('--lr-steps', [8, 11]), nargs='+', type=int,
+                        help='decrease lr every step-size epochs')
 
 
 def add_classif_args(parser):
