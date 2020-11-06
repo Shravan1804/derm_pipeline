@@ -130,13 +130,16 @@ def now():
     return datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
 
-def get_exp_logdir(args, custom=''):
+def get_exp_logdir(args, custom='', show_train_hyp=False):
     ws = args.num_machines * args.num_gpus
     d = f'{now()}_{custom}_{args.model}_bs{args.bs}'
-    if args.lr:
-        d += f'_lr{args.lr}'
-    if args.wd:
-        d += f'_wd{args.wd}'
+    if args.cross_val:
+        d += f'_CV{args.nfolds}'
+    if show_train_hyp:
+        if args.lr:
+            d += f'_lr{args.lr}'
+        if args.wd:
+            d += f'_wd{args.wd}'
     d += f'_epo{args.epochs}_seed{args.seed}_world{ws}_{args.exp_name}'
     return d
 
