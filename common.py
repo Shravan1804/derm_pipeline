@@ -271,7 +271,7 @@ def get_data_fn(args, full_img_sep, stratify):
     get_splits = partial(split_data, full_img_sep=full_img_sep, stratify=stratify, seed=args.seed,
                          cross_val=args.cross_val, nfolds=args.nfolds, valid_size=args.valid_size)
     get_dls = partial(progressive_resizing_dls, bs=args.bs, input_size=args.input_size, num_gpus=args.num_gpus,
-                      progr_size=args.progr_size, factors=args.factors)
+                      progr_size=args.progr_size, factors=args.size_facts)
     return get_splits, get_dls
 
 
@@ -293,7 +293,7 @@ def get_full_img_dict(images, sep):
 def split_data(images, full_img_sep, stratify, seed=42, cross_val=False, nfolds=5, valid_size=.2):
     np.random.seed(seed)
 
-    full_images_dict = get_full_img_dict(images, full_img_sep, with_cls=stratify)
+    full_images_dict = get_full_img_dict(images, full_img_sep)
     full_images = np.array(list(full_images_dict.keys()))
     full_images_cls = np.array([os.path.dirname(f) for f in full_images])
 
