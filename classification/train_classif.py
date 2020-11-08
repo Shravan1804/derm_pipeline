@@ -7,9 +7,8 @@ import numpy as np
 
 import torch
 import fastai.vision.all as fv
-import fastai.callback.tensorboard as fc
 
-sys.path.insert(0, '../utils')
+sys.path.insert(0, '..')
 import common
 import crypto
 import train_utils
@@ -26,7 +25,7 @@ def get_classif_metrics(cats):
             inp = inp.argmax(dim=axis)
         if cls_idx is None:
             res = [cls_perf(perf, inp, targ, c, axis=None) for c in range(len(cats))]
-            return torch.tensor(perf(*torch.cat([r.unsqueeze(0) for r in res], dim=0).sum(axis=0).numpy().tolist()))
+            return torch.tensor(perf(*torch.cat([r.unsqueeze(0) for r in res], dim=0).sum(axis=0).tolist()))
         else:
             return torch.tensor(perf(*common.get_cls_TP_TN_FP_FN(targ == cls_idx, inp == cls_idx)))
 
@@ -61,7 +60,7 @@ def main(args):
             train_utils.setup_tensorboard(learn, args.exp_logdir, run, metrics_names)
             learn.fine_tune(args.epochs)
             save_path = os.path.join(args.exp_logdir, f'{common.zero_pad(fold, args.nfolds)}_{run}_model')
-            train_utils.save_learner(learn, is_fp16=(not args.full_precision), save_path)
+            train_utils.save_learner(learn, is_fp16=(not args.full_precision), save_path=save_path)
 
 
 if __name__ == '__main__':
