@@ -41,7 +41,7 @@ def get_classif_metrics(cats):
 def create_learner(args, dls, metrics):
     model = getattr(fv, args.model, None)
     assert model is not None, f"Provided model architecture {args.model} unknown."
-    learn = fv.unet_learner(dls, model, metrics=metrics)
+    learn = fv.cnn_learner(dls, model, metrics=metrics)
     if not args.full_precision:
         learn.to_fp16()
     return learn
@@ -52,7 +52,7 @@ def main(args):
     images = np.array(common.list_files_in_dirs(train_utils.get_data_path(args), full_path=True, posix_path=True))
     get_splits, get_dls = train_utils.get_data_fn(args, full_img_sep=PatchExtractor.SEP, stratify=True)
     cats = common.list_dirs(train_utils.get_data_path(args), full_path=False)
-    metrics_names, metrics = get_classif_metrics(cats, args.metrics)
+    metrics_names, metrics = get_classif_metrics(cats)
     for fold, tr, val in get_splits(images):
         for it, run, dls in get_dls(partial(classif_dls, tr=tr, val=val, args=args), max_bs=len(tr)):
             assert cats == dls.vocab, f"Category missmatch between metrics cats ({cats}) and dls cats ({dls.vocab})"
