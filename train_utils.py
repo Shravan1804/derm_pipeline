@@ -6,6 +6,7 @@ import numpy as np
 from sklearn.model_selection import KFold, ShuffleSplit, StratifiedKFold, StratifiedShuffleSplit
 
 import fastai.vision.all as fv
+import fastai.callback.tensorboard as fc
 
 import common
 import crypto
@@ -65,6 +66,12 @@ def get_root_logdir(logdir):
         return os.path.join(str(Path.home()), 'logs')
 
 
+def get_data_path(args, weak_labels=False):
+    if args.use_wl_sl:
+        return os.path.join(args.data, args.wl_train if weak_labels else args.sl_train)
+    else:
+        return args.data
+
 
 def get_data_fn(args, full_img_sep, stratify):
     get_splits = partial(split_data, full_img_sep=full_img_sep, stratify=stratify, seed=args.seed,
@@ -123,6 +130,7 @@ def create_dls_from_lst(blocks, get_y, bs, size, tr, val, args):
                         batch_tfms=tfms)
     return data.dataloaders(args.data, bs=bs)
 
+
 def progressive_resizing_dls(dls_fn, max_bs, bs, input_size, num_gpus, progr_size, factors):
     input_sizes = [int(input_size * f) for f in factors] if progr_size else [input_size]
     batch_sizes = [max(1, min(int(bs / f / f) * num_gpus, max_bs) // 2 * 2) for f in factors] if progr_size else [bs]
@@ -130,4 +138,53 @@ def progressive_resizing_dls(dls_fn, max_bs, bs, input_size, num_gpus, progr_siz
         run = f'{common.zero_pad(it, len(batch_sizes))}_{size}px_bs{bs}'
         print(f"Iteration {it}: running {run}")
         yield it, run, dls_fn(bs, size)
+
+
+class CustomTensorBoardCallback(fc.TensorBoardBaseCallback):
+    def __init__(self, log_dir, grouped_metrics):
+        super().__init__()
+        self.log_dir = log_dir
+        self.grouped_metrics = grouped_metrics
+
+    def before_fit(self):
+        self.run = not hasattr(self.learn, 'lr_finder') and not hasattr(self, "gather_preds") \
+                   and int(os.environ.get('RANK', 0)) == 0
+        if not self.run: return
+        self._setup_writer()
+
+    def after_batch(self):
+        self.writer.add_scalar('Loss/train_loss', self.smooth_loss, self.train_iter)
+        for i, h in enumerate(self.opt.hypers):
+            for k, v in h.items(): self.writer.add_scalar(f'Opt_hyper/{k}_{i}', v, self.train_iter)
+
+    def after_epoch(self):
+        grouped = {}
+        for n, v in zip(self.recorder.metric_names[2:-1], self.recorder.log[2:-1]):
+            if n in self.grouped_metrics:
+                perf = n.split('_')[1]
+                if perf in grouped:
+                    grouped[perf][n] = v
+                else:
+                    grouped[perf] = {n: v}
+            else:
+                log_group = 'Loss' if "loss" in n else 'Metrics'
+                self.writer.add_scalar(f'{log_group}/{n}', v, self.train_iter)
+        for n, v in grouped.items():
+            self.writer.add_scalars(f'Metrics/{n}', v, self.train_iter)
+
+
+def setup_tensorboard(learn, logdir, run_name, grouped_metrics):
+    learn.remove_cb(CustomTensorBoardCallback)
+    logdir = common.maybe_create(logdir, run_name)
+    learn.add_cb(CustomTensorBoardCallback(logdir, grouped_metrics))
+
+
+def save_learner(learn, is_fp16, save_path):
+    learn.remove_cb(CustomTensorBoardCallback)
+    if is_fp16:
+        learn.to_fp32()
+    learn.save(save_path)
+    if is_fp16:
+        learn.to_fp16()
+
 

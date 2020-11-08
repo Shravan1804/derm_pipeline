@@ -7,34 +7,47 @@ import numpy as np
 
 import torch
 import fastai.vision.all as fv
-import fastai.callback.tensorboard as fc
 
 sys.path.insert(0, '../utils')
 import common
 import crypto
 import train_utils
-from PatchExtractor import PatchExtractor
+from segmentation.crop_to_thresh import SEP as CROP_SEP
 
 
-def classif_dls(bs, size, tr, val, args):
-    return train_utils.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock), fv.parent_label, bs, size, tr, val, args)
+def get_img_mask(args, img_path):
+    file, ext = os.path.splitext(img_path)
+    mpath = f'{file.replace(args.img_dir, args.mask_dir)}{args.mext}'
+    return crypto.decrypt_img(mpath, args.user_key) if args.encrypted else mpath
 
 
-def get_classif_metrics(cats):
-    def cls_perf(perf, inp, targ, cls_idx, axis=-1):
+def segm_dls(bs, size, tr, val, args):
+    return train_utils.create_dls_from_lst((fv.ImageBlock, fv.MaskBlock(args.cats)), lambda x: get_img_mask(args, x),
+                                           bs, size, tr, val, args)
+
+
+def get_segm_metrics(cats):
+    def cls_perf(perf, inp, targ, cls_idx, bg=None, axis=1):
+        """If bg sets then computes perf without background"""
+        assert bg != cls_idx and cls_idx is not None, f"Cannot compute class {cls_idx} perf as bg = {bg}"
         if axis is not None:
             inp = inp.argmax(dim=axis)
+        if bg is not None:
+            mask = targ != bg
+            inp, targ = inp[mask], targ[mask]
         if cls_idx is None:
-            res = [cls_perf(perf, inp, targ, c, axis=None) for c in range(len(cats))]
+            res = [cls_perf(perf, inp, targ, c, bg, axis=None) for c in range(0 if bg is None else 1, len(cats))]
             return torch.tensor(perf(*torch.cat([r.unsqueeze(0) for r in res], dim=0).sum(axis=0).numpy().tolist()))
         else:
             return torch.tensor(perf(*common.get_cls_TP_TN_FP_FN(targ == cls_idx, inp == cls_idx)))
 
     metrics_fn = {}
     for cat_id, cat in zip([*range(len(cats))] + [None], cats + ["all"]):
-        for perf_fn in ['acc', 'prec', 'rec']:
-            code = f"def {cat}_{perf_fn}(inp, targ): return cls_perf(common.{perf_fn}, inp, targ, {cat_id})"
-            exec(code, {"cls_perf": cls_perf, 'common': common}, metrics_fn)
+        for bg in [None, 0] if cat_id != 0 else [None]:
+            for perf_fn in ['acc', 'prec', 'rec']:
+                fn_name = f'{cat}_{perf_fn}{"" if bg is None else "_no_bg"}'
+                code = f"def {fn_name}(inp, targ): return cls_perf(common.{perf_fn}, inp, targ, {cat_id}, {bg})"
+                exec(code, {"cls_perf": cls_perf, 'common': common}, metrics_fn)
     return list(metrics_fn.keys()), list(metrics_fn.values())
 
 
@@ -49,13 +62,11 @@ def create_learner(args, dls, metrics):
 
 def main(args):
     print("Running script with args:", args)
-    images = np.array(common.list_files_in_dirs(train_utils.get_data_path(args), full_path=True, posix_path=True))
-    get_splits, get_dls = train_utils.get_data_fn(args, full_img_sep=PatchExtractor.SEP, stratify=True)
-    cats = common.list_dirs(train_utils.get_data_path(args), full_path=False)
-    metrics_names, metrics = get_classif_metrics(cats, args.metrics)
+    images = np.array(common.list_files(os.path.join(args.data, args.img_dir), full_path=True, posix_path=True))
+    get_splits, get_dls = train_utils.get_data_fn(args, full_img_sep=CROP_SEP, stratify=False)
+    metrics_names, metrics = get_segm_metrics(args.cats)
     for fold, tr, val in get_splits(images):
-        for it, run, dls in get_dls(partial(classif_dls, tr=tr, val=val, args=args), max_bs=len(tr)):
-            assert cats == dls.vocab, f"Category missmatch between metrics cats ({cats}) and dls cats ({dls.vocab})"
+        for it, run, dls in get_dls(partial(segm_dls, tr=tr, val=val, args=args), max_bs=len(tr)):
             learn = create_learner(args, dls, metrics) if it == 0 else learn
             learn.dls = dls
             train_utils.setup_tensorboard(learn, args.exp_logdir, run, metrics_names)
@@ -67,12 +78,12 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Train Fastai segmentation")
     parser.add_argument('--data', type=str, required=True, help="Root dataset dir")
+    parser.add_argument('--img-dir', type=str, default="images", help="Images dir")
+    parser.add_argument('--mask-dir', type=str, default="masks", help="Masks dir")
+    parser.add_argument('--mext', type=str, default=".png", help="Masks file extension")
+    parser.add_argument('--cats', type=str, nargs='+', default=["other", "pustules", "spots"], help="Segm categories")
     parser.add_argument('--encrypted', action='store_true', help="Data is encrypted")
     parser.add_argument('--user-key', type=str, help="Data encryption key")
-    parser.add_argument('--use-wl-sl', action='store_true', help="Data dir contains wl and sl data")
-    parser.add_argument('--wl-train', type=str, default='weak_labels', help="weak labels (wl) dir")
-    parser.add_argument('--sl-train', type=str, default='strong_labels_train', help="strong labels (sl) dir")
-    parser.add_argument('--sl-test', type=str, default='strong_labels_test', help="sl test dir")
 
     parser.add_argument('--cross-val', action='store_true', help="Perform 5-fold cross validation on sl train set")
     parser.add_argument('--nfolds', default=5, type=int, help="Number of folds for cross val")

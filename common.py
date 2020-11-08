@@ -247,6 +247,14 @@ def plt_show_img(im, title, show=True, save_path=None):
         fig.show()
 
 
+def get_cls_TP_TN_FP_FN(cls_truth, cls_preds):
+    TP = (cls_preds & cls_truth).sum().item()
+    TN = (~cls_preds & ~cls_truth).sum().item()
+    FP = (cls_preds & ~cls_truth).sum().item()
+    FN = (~cls_preds & cls_truth).sum().item()
+    return TP, TN, FP, FN
+
+
 def acc(TP, TN, FP, FN, epsilon=1e-8):
     return (TP + TN) / (TP + TN + FP + FN + epsilon)
 
