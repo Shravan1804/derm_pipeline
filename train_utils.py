@@ -40,7 +40,7 @@ def common_train_args(parser, pdef=dict(), phelp=dict()):
     parser.add_argument('--no-norm', action='store_true', help="Do not normalizes images to imagenet stats")
     parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
 
-    parser.add_argument('--gpu', type=int, nargs='+', help="Id of gpu to be used by script")
+    parser.add_argument('--gpu', type=int, help="Id of gpu to be used by script")
     parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
     parser.add_argument("--num-machines", type=int, default=1, help="number of machines")
 
@@ -220,6 +220,7 @@ def prepare_training(args, image_data):
         args.gpu = 0
     elif args.num_gpus > 1:
         assert args.gpu is not None, "GPU id is needed"
+    torch.cuda.set_device(args.gpu)
 
     if args.encrypted:
         args.user_key = crypto.request_key(args.data, args.user_key)
