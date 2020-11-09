@@ -43,14 +43,9 @@ def create_learner(args, dls, metrics):
         from efficientnet_pytorch import EfficientNet
         model = EfficientNet.from_pretrained(args.model)
         model._fc = torch.nn.Linear(model._fc.in_features, dls.c)
-        learn = fv.Learner(dls, model, splitter=lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params))
+        return fv.Learner(dls, model, splitter=lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params))
     else:
-        model = getattr(fv, args.model, None)
-        assert model is not None, f"Provided model architecture {args.model} unknown."
-        learn = fv.cnn_learner(dls, model, metrics=metrics)
-    if not args.full_precision:
-        learn.to_fp16()
-    return learn
+        return fv.cnn_learner(dls, getattr(fv, args.model, None), metrics=metrics)
 
 
 def main(args):
@@ -62,7 +57,7 @@ def main(args):
     for fold, tr, val in get_splits(images):
         for it, run, dls in get_dls(partial(classif_dls, tr=tr, val=val, args=args), max_bs=len(tr)):
             assert cats == dls.vocab, f"Category missmatch between metrics cats ({cats}) and dls cats ({dls.vocab})"
-            learn = create_learner(args, dls, metrics) if it == 0 else learn
+            learn = train_utils.prepare_learner(args, create_learner(args, dls, metrics)) if it == 0 else learn
             learn.dls = dls
             train_utils.setup_tensorboard(learn, args.exp_logdir, run, metrics_names)
             learn.fine_tune(args.epochs)

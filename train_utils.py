@@ -231,3 +231,11 @@ def prepare_training(args, image_data):
         args.exp_logdir = common.maybe_create(args.logdir, get_exp_logdir(args, image_data))
     print("Creation of log directory: ", args.exp_logdir)
 
+
+def prepare_learner(args, learn):
+    if not args.full_precision:
+        learn.to_fp16()
+    if args.num_gpus > 1:
+        learn.to_parallel(device_ids=list(range(args.num_gpus)))
+
+

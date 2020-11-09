@@ -54,12 +54,7 @@ def get_segm_metrics(cats):
 
 
 def create_learner(args, dls, metrics):
-    model = getattr(fv, args.model, None)
-    assert model is not None, f"Provided model architecture {args.model} unknown."
-    learn = fv.unet_learner(dls, model, metrics=metrics)
-    if not args.full_precision:
-        learn.to_fp16()
-    return learn
+    return fv.unet_learner(dls, getattr(fv, args.model, None), metrics=metrics)
 
 
 def main(args):
@@ -69,7 +64,7 @@ def main(args):
     metrics_names, metrics = get_segm_metrics(args.cats)
     for fold, tr, val in get_splits(images):
         for it, run, dls in get_dls(partial(segm_dls, tr=tr, val=val, args=args), max_bs=len(tr)):
-            learn = create_learner(args, dls, metrics) if it == 0 else learn
+            learn = train_utils.prepare_learner(args, create_learner(args, dls, metrics)) if it == 0 else learn
             learn.dls = dls
             train_utils.setup_tensorboard(learn, args.exp_logdir, run, metrics_names)
             learn.fine_tune(args.epochs)
