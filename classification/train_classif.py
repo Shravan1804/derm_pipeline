@@ -39,9 +39,16 @@ def get_classif_metrics(cats):
 
 
 def create_learner(args, dls, metrics):
-    model = getattr(fv, args.model, None)
-    assert model is not None, f"Provided model architecture {args.model} unknown."
-    learn = fv.cnn_learner(dls, model, metrics=metrics)
+    if "efficientnet" in args.model:
+        from efficientnet_pytorch import EfficientNet
+        model = EfficientNet.from_pretrained(args.model)
+        model._fc = torch.nn.Linear(model._fc.in_features, dls.c)
+        learn = fv.Learner(dls, model, splitter=lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params))
+        learn.split(lambda m: (model._conv_head,))
+    else:
+        model = getattr(fv, args.model, None)
+        assert model is not None, f"Provided model architecture {args.model} unknown."
+        learn = fv.cnn_learner(dls, model, metrics=metrics)
     if not args.full_precision:
         learn.to_fp16()
     return learn

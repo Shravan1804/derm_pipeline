@@ -5,6 +5,7 @@ from functools import partial
 import numpy as np
 from sklearn.model_selection import KFold, ShuffleSplit, StratifiedKFold, StratifiedShuffleSplit
 
+import torch
 import fastai.vision.all as fv
 import fastai.callback.tensorboard as fc
 
@@ -186,5 +187,16 @@ def save_learner(learn, is_fp16, save_path):
     learn.save(save_path)
     if is_fp16:
         learn.to_fp16()
+
+
+def split_model(model, splits):
+    """Inspired from fastai 1, splits model on requested top level children"""
+    top_children = list(model.children())
+    idxs = [top_children.index(split) for split in splits]
+    assert idxs == sorted(idxs), f"Provided splits ({splits}) are not sorted."
+    assert len(idxs) > 0, f"Provided splits ({splits}) not found in top level children: {top_children}"
+    if idxs[0] != 0: idxs = [0] + idxs
+    if idxs[-1] != len(top_children): idxs.append(len(top_children))
+    return [torch.nn.Sequential(*top_children[i:j]) for i, j in zip(idxs[:-1], idxs[1:])]
 
 
