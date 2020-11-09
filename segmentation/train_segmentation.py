@@ -67,7 +67,8 @@ def main(args):
             learn = train_utils.prepare_learner(args, create_learner(args, dls, metrics)) if it == 0 else learn
             learn.dls = dls
             train_utils.setup_tensorboard(learn, args.exp_logdir, run, metrics_names)
-            learn.fine_tune(args.epochs)
+            with learn.distrib_ctx:
+                learn.fine_tune(args.epochs)
             save_path = os.path.join(args.exp_logdir, f'{common.zero_pad(fold, args.nfolds)}_{run}_model')
             train_utils.save_learner(learn, is_fp16=(not args.full_precision), save_path=save_path)
 

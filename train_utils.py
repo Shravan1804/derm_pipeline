@@ -14,13 +14,6 @@ import common
 import crypto
 
 
-def maybe_set_gpu(gpuid, num_gpus):
-    if gpuid is not None:
-        assert num_gpus == 1, f"Warning cannot fix more than 1 gpus, requested {num_gpus}"
-        if torch.cuda.is_available() and gpuid is not None:
-            torch.cuda.set_device(gpuid)
-
-
 def common_train_args(parser, pdef=dict(), phelp=dict()):
     parser.add_argument('--data', type=str, required=True, help="Root dataset dir")
     parser.add_argument('--use-wl', action='store_true', help="Data dir contains wl and sl data")
@@ -47,9 +40,9 @@ def common_train_args(parser, pdef=dict(), phelp=dict()):
     parser.add_argument('--no-norm', action='store_true', help="Do not normalizes images to imagenet stats")
     parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
 
-    parser.add_argument('--gpuid', type=int, help="For single gpu, gpu id to be used")
+    parser.add_argument('--gpu', type=int, nargs='+', help="Id of gpu to be used by script")
     parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
-    parser.add_argument("--num-machines", type=int, default=1)
+    parser.add_argument("--num-machines", type=int, default=1, help="number of machines")
 
     parser.add_argument('--seed', type=int, default=pdef.get('--seed', 42), help="Random seed")
 
@@ -94,7 +87,7 @@ def get_data_path(args, weak_labels=False):
 def get_data_fn(args, full_img_sep, stratify):
     get_splits = partial(split_data, full_img_sep=full_img_sep, stratify=stratify, seed=args.seed,
                          cross_val=args.cross_val, nfolds=args.nfolds, valid_size=args.valid_size)
-    get_dls = partial(progressive_resizing_dls, bs=args.bs, input_size=args.input_size, num_gpus=args.num_gpus,
+    get_dls = partial(progressive_resizing_dls, bs=args.bs, input_size=args.input_size,
                       progr_size=args.progr_size, factors=args.size_facts)
     return get_splits, get_dls
 
@@ -149,8 +142,7 @@ def create_dls_from_lst(blocks, get_y, bs, size, tr, val, args):
     return data.dataloaders(args.data, bs=bs)
 
 
-def progressive_resizing_dls(dls_fn, max_bs, bs, input_size, num_gpus, progr_size, factors):
-    bs *= num_gpus
+def progressive_resizing_dls(dls_fn, max_bs, bs, input_size, progr_size, factors):
     input_sizes = [int(input_size * f) for f in factors] if progr_size else [input_size]
     batch_sizes = [max(1, min(int(bs / f / f), max_bs) // 2 * 2) for f in factors] if progr_size else [bs]
     for it, (bs, size) in enumerate(zip(batch_sizes, input_sizes)):
@@ -222,7 +214,12 @@ def prepare_training(args, image_data):
     common.check_dir_valid(args.data)
     common.set_seeds(args.seed)
 
-    maybe_set_gpu(args.gpuid, args.num_gpus)
+    assert torch.cuda.is_available(), "Cannot run without CUDA device"
+
+    if args.num_gpus == 1 and args.gpu is None:
+        args.gpu = 0
+    elif args.num_gpus > 1:
+        assert args.gpu is not None, "GPU id is needed"
 
     if args.encrypted:
         args.user_key = crypto.request_key(args.data, args.user_key)
@@ -235,7 +232,5 @@ def prepare_training(args, image_data):
 def prepare_learner(args, learn):
     if not args.full_precision:
         learn.to_fp16()
-    if args.num_gpus > 1:
-        learn.to_parallel(device_ids=list(range(args.num_gpus)))
     return learn
 

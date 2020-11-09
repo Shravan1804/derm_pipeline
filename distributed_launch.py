@@ -19,7 +19,7 @@ def main(
     processes = []
     for i,gpu in enumerate(gpus):
         current_env["RANK"] = str(i)
-        cmd = [sys.executable, "-u", script, f"--gpu={gpu}"] + args
+        cmd = [sys.executable, "-u", script, f"--gpu={gpu} --num-gpus={len(gpus)}"] + args
         process = subprocess.Popen(cmd, env=current_env)
         processes.append(process)
 
