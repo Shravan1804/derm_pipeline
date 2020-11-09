@@ -44,7 +44,6 @@ def create_learner(args, dls, metrics):
         model = EfficientNet.from_pretrained(args.model)
         model._fc = torch.nn.Linear(model._fc.in_features, dls.c)
         learn = fv.Learner(dls, model, splitter=lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params))
-        learn.split(lambda m: (model._conv_head,))
     else:
         model = getattr(fv, args.model, None)
         assert model is not None, f"Provided model architecture {args.model} unknown."
@@ -72,39 +71,11 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Train Fastai segmentation")
-    parser.add_argument('--data', type=str, required=True, help="Root dataset dir")
-    parser.add_argument('--encrypted', action='store_true', help="Data is encrypted")
-    parser.add_argument('--user-key', type=str, help="Data encryption key")
-    parser.add_argument('--use-wl-sl', action='store_true', help="Data dir contains wl and sl data")
-    parser.add_argument('--wl-train', type=str, default='weak_labels', help="weak labels (wl) dir")
-    parser.add_argument('--sl-train', type=str, default='strong_labels_train', help="strong labels (sl) dir")
-    parser.add_argument('--sl-test', type=str, default='strong_labels_test', help="sl test dir")
-
-    parser.add_argument('--cross-val', action='store_true', help="Perform 5-fold cross validation on sl train set")
-    parser.add_argument('--nfolds', default=5, type=int, help="Number of folds for cross val")
-    parser.add_argument('--valid-size', default=.2, type=float, help='If no cross val, splits train set with this %')
-
-    parser.add_argument('--input-size', default=512, type=int, help="Model input will be resized to this value")
-    parser.add_argument('--progr-size', action='store_true', help="Applies progressive resizing")
-    parser.add_argument('--size-facts', default=[.25, .5, 1], nargs='+', type=float, help='Incr. progr. size factors')
-
-    parser.add_argument('--norm', action='store_true', help="Normalizes images to imagenet stats")
-    parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
-    train_utils.add_common_train_args(parser, pdef={'--bs': 6, '--model': 'resnet34'})
-    train_utils.add_multi_gpus_args(parser)
+    parser = argparse.ArgumentParser(description="Train Fastai classification")
+    train_utils.common_train_args(parser, pdef={'--bs': 6, '--model': 'resnet34'})
+    train_utils.common_img_args(parser, pdef={'--input-size': 256})
     args = parser.parse_args()
 
-    common.check_dir_valid(args.data)
-    common.set_seeds(args.seed)
-    train_utils.maybe_set_gpu(args.gpuid, args.num_gpus)
-
-    if args.encrypted:
-        args.user_key = crypto.request_key(args.data, args.user_key)
-
-    if args.exp_logdir is None:
-        args.exp_logdir = common.maybe_create(args.logdir, train_utils.get_exp_logdir(args, custom="progr_size"
-        if args.progr_size else ""))
-    print("Creation of log directory: ", args.exp_logdir)
+    train_utils.prepare_training(args, image_data=True)
 
     common.time_method(main, args)

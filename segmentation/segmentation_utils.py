@@ -13,7 +13,7 @@ def load_img_and_mask(img_path, mask_path):
     return common.load_rgb_img(img_path), cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
 
 
-def segmentation_args(parser, pdef=dict(), phelp=dict()):
+def common_segm_args(parser, pdef=dict(), phelp=dict()):
     parser.add_argument('--img-dir', type=str, default=pdef.get('--img-dir', "images"),
                         help=phelp.get('--img-dir', "Images dir"))
     parser.add_argument('--mask-dir', type=str, default=pdef.get('--mask-dir', "masks"),

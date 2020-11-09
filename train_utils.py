@@ -22,41 +22,59 @@ def maybe_set_gpu(gpuid, num_gpus):
             torch.cuda.set_device(gpuid)
 
 
-def add_multi_gpus_args(parser):
-    parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
-    parser.add_argument("--num-machines", type=int, default=1)
+def common_train_args(parser, pdef=dict(), phelp=dict()):
+    parser.add_argument('--data', type=str, required=True, help="Root dataset dir")
+    parser.add_argument('--use-wl', action='store_true', help="Data dir contains wl and sl data")
+    parser.add_argument('--wl-train', type=str, default='weak_labels', help="weak labels (wl) dir")
+    parser.add_argument('--sl-train', type=str, default='strong_labels_train', help="strong labels (sl) dir")
+    parser.add_argument('--sl-test', type=str, default='strong_labels_test', help="sl test dir")
 
-
-def add_common_train_args(parser, pdef=dict(), phelp=dict()):
     parser.add_argument('-name', '--exp-name', required=True, help='Custom string to append to experiment log dir')
     parser.add_argument('--logdir', type=str, default=pdef.get('--logdir', get_root_logdir(None)),
                         help=phelp.get('--logdir', "Root directory where logs will be saved, default to $HOME/logs"))
     parser.add_argument('--exp-logdir', type=str, help="Experiment logdir, will be created in root log dir")
+
+    parser.add_argument('--encrypted', action='store_true', help="Data is encrypted")
+    parser.add_argument('--user-key', type=str, help="Data encryption key")
+
+    parser.add_argument('--cross-val', action='store_true', help="Perform 5-fold cross validation on sl train set")
+    parser.add_argument('--nfolds', default=5, type=int, help="Number of folds for cross val")
+    parser.add_argument('--valid-size', default=.2, type=float, help='If no cross val, splits train set with this %')
+
     parser.add_argument('--model', type=str, default=pdef.get('--model', None), help=phelp.get('--model', "Model name"))
+    parser.add_argument('--bs', default=pdef.get('--bs', 6), type=int, help="Batch size")
+    parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 26), help='Number of total epochs to run')
+
+    parser.add_argument('--no-norm', action='store_true', help="Do not normalizes images to imagenet stats")
+    parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
+
+    parser.add_argument('--gpuid', type=int, help="For single gpu, gpu id to be used")
+    parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
+    parser.add_argument("--num-machines", type=int, default=1)
 
     parser.add_argument('--seed', type=int, default=pdef.get('--seed', 42), help="Random seed")
-    parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 26), help='Number of total epochs to run')
-    parser.add_argument('--bs', default=pdef.get('--bs', 6), type=int, help="Batch size")
-    parser.add_argument('--gpuid', type=int, help="For single gpu, gpu id to be used")
-
-    parser.add_argument('--wd', default=pdef.get('--wd', None), type=float, help='weight decay')
-    parser.add_argument('--lr', type=float, default=pdef.get('--lr', None), help=phelp.get('--lr', 'Learning rate'))
-    parser.add_argument('--lr-steps', default=pdef.get('--lr-steps', [8, 11]), nargs='+', type=int,
-                        help='decrease lr every step-size epochs')
 
 
+def common_img_args(parser, pdef=dict(), phelp=dict()):
+    parser.add_argument('--input-size', default=pdef.get('--input-size', 512), type=int,
+                        help=phelp.get('--input-size', "Model input will be resized to this value"))
+    parser.add_argument('--progr-size', action='store_true',
+                        help=phelp.get('--progr-size', "Applies progressive resizing"))
+    parser.add_argument('--size-facts', default=pdef.get('--size-facts', [.25, .5, .75,  1]), nargs='+', type=float,
+                        help=phelp.get('--size-facts', 'Increase progressive size factors'))
 
-def get_exp_logdir(args, custom='', show_train_hyp=False):
+
+def get_exp_logdir(args, image_data):
     ws = args.num_machines * args.num_gpus
-    d = f'{common.now()}_{custom}_{args.model}_bs{args.bs}'
-    if args.cross_val:
-        d += f'_CV{args.nfolds}'
-    if show_train_hyp:
-        if args.lr:
-            d += f'_lr{args.lr}'
-        if args.wd:
-            d += f'_wd{args.wd}'
-    d += f'_epo{args.epochs}_seed{args.seed}_world{ws}_{args.exp_name}'
+    d = f'{common.now()}_{args.model}_bs{args.bs}_epo{args.epochs}_seed{args.seed}_world{ws}'
+    d += '' if args.no_norm else '_normed'
+    d += '_fp32' if args.full_precision else '_fp16'
+    d += f'_CV{args.nfolds}' if args.cross_val else f'_noCV_valid{args.valid_size}'
+    d += '_WL' if args.use_wl else '_SL'
+    if image_data:
+        d += f'_input{args.input_size}'
+        d += f'_progr-size{"_".join(map(str, args.size_facts))}' if args.progr_size else ""
+    d += f'_{args.exp_name}'
     return d
 
 
@@ -68,7 +86,7 @@ def get_root_logdir(logdir):
 
 
 def get_data_path(args, weak_labels=False):
-    if args.use_wl_sl:
+    if args.use_wl:
         return os.path.join(args.data, args.wl_train if weak_labels else args.sl_train)
     else:
         return args.data
@@ -120,7 +138,7 @@ def split_data(images, full_img_sep, stratify, seed=42, cross_val=False, nfolds=
 
 def create_dls_from_lst(blocks, get_y, bs, size, tr, val, args):
     tfms = fv.aug_transforms(size=size)
-    if args.norm:
+    if not args.no_norm:
         tfms.append(fv.Normalize.from_stats(*fv.imagenet_stats))
     data = fv.DataBlock(blocks=blocks,
                         get_items=lambda x: tr + val,
@@ -199,4 +217,17 @@ def split_model(model, splits):
     if idxs[-1] != len(top_children): idxs.append(len(top_children))
     return [torch.nn.Sequential(*top_children[i:j]) for i, j in zip(idxs[:-1], idxs[1:])]
 
+
+def prepare_training(args, image_data):
+    common.check_dir_valid(args.data)
+    common.set_seeds(args.seed)
+
+    maybe_set_gpu(args.gpuid, args.num_gpus)
+
+    if args.encrypted:
+        args.user_key = crypto.request_key(args.data, args.user_key)
+
+    if args.exp_logdir is None:
+        args.exp_logdir = common.maybe_create(args.logdir, get_exp_logdir(args, image_data))
+    print("Creation of log directory: ", args.exp_logdir)
 

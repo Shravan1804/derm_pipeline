@@ -12,6 +12,7 @@ sys.path.insert(0, '..')
 import common
 import crypto
 import train_utils
+import segmentation.segmentation_utils as segm_utils
 from segmentation.crop_to_thresh import SEP as CROP_SEP
 
 
@@ -78,38 +79,11 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Train Fastai segmentation")
-    parser.add_argument('--data', type=str, required=True, help="Root dataset dir")
-    parser.add_argument('--img-dir', type=str, default="images", help="Images dir")
-    parser.add_argument('--mask-dir', type=str, default="masks", help="Masks dir")
-    parser.add_argument('--mext', type=str, default=".png", help="Masks file extension")
-    parser.add_argument('--cats', type=str, nargs='+', default=["other", "pustules", "spots"], help="Segm categories")
-    parser.add_argument('--encrypted', action='store_true', help="Data is encrypted")
-    parser.add_argument('--user-key', type=str, help="Data encryption key")
-
-    parser.add_argument('--cross-val', action='store_true', help="Perform 5-fold cross validation on sl train set")
-    parser.add_argument('--nfolds', default=5, type=int, help="Number of folds for cross val")
-    parser.add_argument('--valid-size', default=.2, type=float, help='If no cross val, splits train set with this %')
-
-    parser.add_argument('--input-size', default=512, type=int, help="Model input will be resized to this value")
-    parser.add_argument('--progr-size', action='store_true', help="Applies progressive resizing")
-    parser.add_argument('--size-facts', default=[.25, .5, 1], nargs='+', type=float, help='Incr. progr. size factors')
-
-    parser.add_argument('--norm', action='store_true', help="Normalizes images to imagenet stats")
-    parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
-    train_utils.add_common_train_args(parser, pdef={'--bs': 6, '--model': 'resnet34'})
-    train_utils.add_multi_gpus_args(parser)
+    train_utils.common_train_args(parser, pdef={'--bs': 6, '--model': 'resnet34'})
+    train_utils.common_img_args(parser)
+    segm_utils.common_segm_args(parser, pdef={'--cats': ["other", "pustules", "spots"]})
     args = parser.parse_args()
 
-    common.check_dir_valid(args.data)
-    common.set_seeds(args.seed)
-    train_utils.maybe_set_gpu(args.gpuid, args.num_gpus)
-
-    if args.encrypted:
-        args.user_key = crypto.request_key(args.data, args.user_key)
-
-    if args.exp_logdir is None:
-        args.exp_logdir = common.maybe_create(args.logdir, train_utils.get_exp_logdir(args, custom="progr_size"
-        if args.progr_size else ""))
-    print("Creation of log directory: ", args.exp_logdir)
+    train_utils.prepare_training(args, image_data=True)
 
     common.time_method(main, args)
