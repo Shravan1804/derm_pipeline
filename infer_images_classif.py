@@ -22,6 +22,10 @@ class ClassifModel(FastaiModel):
             entropy.convert_learner(self.learner)
             self.n_times = n_times
 
+    def prepare_img_for_inference(self, ims):
+        ims = [fv.Image(fv.pil2tensor(im, np.float32).div_(255)) for im in ims]
+        return torch.cat([self.learner.data.one_item(im)[0] for im in ims], dim=0)
+
     def predict_imgs(self, ims):
         """Returns tensor of shape n_times x n_images x n_classes"""
         ims = self.prepare_img_for_inference(ims)
@@ -270,6 +274,10 @@ if __name__ == '__main__':
     if args.pred_correction:
         corr_methods = ['in_top_neigh_probs', 'mean_neigh_probs']
         assert args.corr_method in corr_methods, f"Correction method not supported, please select among {corr_methods}"
+
+    if not args.cpu and not torch.cuda.is_available():
+        print("Warning, cannot use GPU as cuda is not available, will use CPU")
+        args.cpu = True
 
     common.time_method(main, args)
 

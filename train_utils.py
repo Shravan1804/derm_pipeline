@@ -6,7 +6,7 @@ import numpy as np
 from sklearn.model_selection import KFold, ShuffleSplit, StratifiedKFold, StratifiedShuffleSplit
 
 import torch
-import fastai.distributed
+import fastai.distributed   # needed for fastai multi gpu
 import fastai.vision.all as fv
 import fastai.callback.tensorboard as fc
 

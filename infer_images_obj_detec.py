@@ -309,9 +309,9 @@ def main(args):
         im = cv2.cvtColor(patcher.load_image(img_path), cv2.COLOR_BGR2RGB)
 
         gt = ObjDetecModel.get_img_gt(img_path)
-        if args.out_dir is not None and gt is None:
+        if args.show_gt and gt is None:
             raise Exception("No ground truth available, but user requested to save dets")
-        if args.show_gt:
+        else:
             model.show_preds(im, [gt], title=f'Ground Truth for {file}{ext}', fname=f'{file}_00_gt{ext}')
 
         patch_maps = patcher.patch_grid(img_path, im)

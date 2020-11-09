@@ -42,7 +42,8 @@ def create_learner(args, dls, metrics):
         from efficientnet_pytorch import EfficientNet
         model = EfficientNet.from_pretrained(args.model)
         model._fc = torch.nn.Linear(model._fc.in_features, dls.c)
-        return fv.Learner(dls, model, splitter=lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params))
+        return fv.Learner(dls, model, metrics=metrics,
+                          splitter=lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params))
     else:
         return fv.cnn_learner(dls, getattr(fv, args.model, None), metrics=metrics)
 
