@@ -8,9 +8,8 @@ import numpy as np
 import torch
 import fastai.vision.all as fv
 
-sys.path.insert(0, '..')
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 import common
-import crypto
 import train_utils
 from PatchExtractor import PatchExtractor
 

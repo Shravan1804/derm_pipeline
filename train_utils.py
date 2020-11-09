@@ -6,6 +6,7 @@ import numpy as np
 from sklearn.model_selection import KFold, ShuffleSplit, StratifiedKFold, StratifiedShuffleSplit
 
 import torch
+import fastai.distributed
 import fastai.vision.all as fv
 import fastai.callback.tensorboard as fc
 
@@ -14,10 +15,8 @@ import crypto
 
 
 def maybe_set_gpu(gpuid, num_gpus):
-    if gpuid is not None and num_gpus != 1:
-        print("Warning cannot fix more than 1 gpus, requested", num_gpus)
-    else:
-        import torch
+    if gpuid is not None:
+        assert num_gpus == 1, f"Warning cannot fix more than 1 gpus, requested {num_gpus}"
         if torch.cuda.is_available() and gpuid is not None:
             torch.cuda.set_device(gpuid)
 
@@ -237,5 +236,5 @@ def prepare_learner(args, learn):
         learn.to_fp16()
     if args.num_gpus > 1:
         learn.to_parallel(device_ids=list(range(args.num_gpus)))
-
+    return learn
 
