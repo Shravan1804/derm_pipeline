@@ -150,8 +150,9 @@ def create_dls_from_lst(blocks, get_y, bs, size, tr, val, args):
 
 
 def progressive_resizing_dls(dls_fn, max_bs, bs, input_size, num_gpus, progr_size, factors):
+    bs *= num_gpus
     input_sizes = [int(input_size * f) for f in factors] if progr_size else [input_size]
-    batch_sizes = [max(1, min(int(bs / f / f) * num_gpus, max_bs) // 2 * 2) for f in factors] if progr_size else [bs]
+    batch_sizes = [max(1, min(int(bs / f / f), max_bs) // 2 * 2) for f in factors] if progr_size else [bs]
     for it, (bs, size) in enumerate(zip(batch_sizes, input_sizes)):
         run = f'{common.zero_pad(it, len(batch_sizes))}_{size}px_bs{bs}'
         print(f"Iteration {it}: running {run}")
