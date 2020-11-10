@@ -16,16 +16,17 @@ import classification.classification_utils as classif_utils
 
 
 def classif_dls(bs, size, tr, val, args):
-    return train_utils.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock(vocab=args.cat)), fv.parent_label,
+    return train_utils.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock(vocab=args.cats)), fv.parent_label,
                                            bs, size, tr, val, args)
 
 
 def get_classif_metrics(args):
     metrics_fn = {}
+    device = f'cuda:{args.gpu}'
     for cat_id, cat in zip([*range(len(args.cats))] + [None], args.cats + ["all"]):
         for perf_fn in ['acc', 'prec', 'rec']:
             code = f"def {cat}_{perf_fn}(inp, targ):" \
-                   f"return cls_perf(common.{perf_fn}, inp, targ, {cat_id}, {args.cats}).to(cuda:{args.gpu})"
+                   f"return cls_perf(common.{perf_fn}, inp, targ, {cat_id}, {args.cats}).to({device})"
             exec(code, {"cls_perf": classif_utils.cls_perf, 'common': common}, metrics_fn)
     return list(metrics_fn.keys()), list(metrics_fn.values())
 

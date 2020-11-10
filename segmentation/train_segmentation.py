@@ -29,12 +29,13 @@ def segm_dls(bs, size, tr, val, args):
 
 def get_segm_metrics(args):
     metrics_fn = {}
+    device = f'cuda:{args.gpu}'
     for cat_id, cat in zip([*range(len(args.cats))] + [None], args.cats + ["all"]):
         for bg in [None, 0] if cat_id != 0 else [None]:
             for perf_fn in ['acc', 'prec', 'rec']:
                 fn_name = f'{cat}_{perf_fn}{"" if bg is None else "_no_bg"}'
                 code = f"def {fn_name}(inp, targ):" \
-                       f"return cls_perf(common.{perf_fn}, inp, targ, {cat_id}, {args.cats}, {bg}).to(cuda:{args.gpu})"
+                       f"return cls_perf(common.{perf_fn}, inp, targ, {cat_id}, {args.cats}, {bg}).to({device})"
                 exec(code, {"cls_perf": segm_utils.cls_perf, 'common': common}, metrics_fn)
     return list(metrics_fn.keys()), list(metrics_fn.values())
 
