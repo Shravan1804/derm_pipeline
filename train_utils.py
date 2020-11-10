@@ -232,3 +232,14 @@ def prepare_learner(args, learn):
         learn.to_fp16()
     return learn
 
+
+def basic_train(args, learn, fold, run, dls, metrics_names, save_model=True):
+    learn.dls = dls
+    cbT = setup_tensorboard(learn, args.exp_logdir, run, metrics_names)
+    with learn.distrib_ctx():
+        learn.fine_tune(args.epochs, cbs=[cbT])
+    if save_model:
+        save_path = os.path.join(args.exp_logdir, f'{common.zero_pad(fold, args.nfolds)}_{run}_model')
+        save_learner(learn, is_fp16=(not args.full_precision), save_path=save_path)
+
+

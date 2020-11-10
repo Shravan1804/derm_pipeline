@@ -49,12 +49,7 @@ def main(args):
     for fold, tr, val in get_splits(images):
         for it, run, dls in get_dls(partial(classif_dls, tr=tr, val=val, args=args), max_bs=len(tr)):
             learn = train_utils.prepare_learner(args, create_learner(args, dls, metrics)) if it == 0 else learn
-            learn.dls = dls
-            cbT = train_utils.setup_tensorboard(learn, args.exp_logdir, run, metrics_names)
-            with learn.distrib_ctx():
-                learn.fine_tune(args.epochs, cbs=[cbT])
-            save_path = os.path.join(args.exp_logdir, f'{common.zero_pad(fold, args.nfolds)}_{run}_model')
-            train_utils.save_learner(learn, is_fp16=(not args.full_precision), save_path=save_path)
+            train_utils.basic_train(args, learn, fold, run, dls, metrics_names)
 
 
 if __name__ == '__main__':
