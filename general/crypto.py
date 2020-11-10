@@ -5,7 +5,7 @@ import pickle
 import argparse
 import multiprocessing as mp
 
-import cv2
+import PIL
 import numpy as np
 from bidict import bidict
 from cryptography.fernet import Fernet
@@ -15,9 +15,12 @@ from general import common, concurrency
 
 
 def decrypt_img(img_path, fkey):
-    buffer = np.frombuffer(io.BytesIO(decrypt(img_path, fkey)).getbuffer(), dtype=np.uint8)
-    im = cv2.imdecode(buffer, cv2.IMREAD_UNCHANGED)
-    return common.img_bgr_to_rgb(im) if len(im.shape) > 2 else im
+    return np.array(PIL.Image.open(io.BytesIO(decrypt(img_path, fkey))))
+    # CV2 version, hangs in distributed mode
+    #import cv2
+    #im = cv2.imdecode(np.frombuffer(decrypt(img_path, fkey), np.uint8), cv2.IMREAD_UNCHANGED)
+    #return common.img_bgr_to_rgb(im) if len(im.shape) > 2 else im
+
 
 def request_key(key_dir, user_key=None):
     if user_key is None:
