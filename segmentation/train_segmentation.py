@@ -63,4 +63,4 @@ if __name__ == '__main__':
 
     train_utils.prepare_training(args, image_data=True)
 
-    common.time_method(main, args)
+    common.time_method(main, args, prepend=f"GPU {args.gpu} proc: ")

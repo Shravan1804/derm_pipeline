@@ -2,6 +2,7 @@ import os
 import cv2
 import time
 import datetime
+import contextlib
 from pathlib import Path
 
 import numpy as np
@@ -193,6 +194,7 @@ def fastai_load_model(model_params, radam=True):
         from radam import RAdam
     return fvision.load_learner(**model_params)
 
+
 def fastai_load_and_prepare_img(img_path):
     import fastai.vision as fvision
     im = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
@@ -200,9 +202,35 @@ def fastai_load_and_prepare_img(img_path):
     return fvision.Image(t.float() / 255.)  # Convert to float
 
 
-def time_method(m, args, *d):
+def print_prepend(msg):
+    # https://stackoverflow.com/questions/58866481/how-could-i-override-pythons-print-function-to-prepend-some-arbitrary-text-to-e
+    class PrintPrepender:
+        stdout = sys.stdout
+
+        def __init__(self, text_to_prepend):
+            self.text_to_prepend = text_to_prepend
+            self.buffer = [self.text_to_prepend]
+
+        def write(self, text):
+            lines = text.splitlines(keepends=True)
+            for line in lines:
+                self.buffer.append(line)
+                self.flush()
+                if line.endswith(os.linesep):
+                    self.buffer.append(self.text_to_prepend)
+
+        def flush(self, *args):
+            self.stdout.write(''.join(self.buffer))
+            self.stdout.flush()
+            self.buffer.clear()
+
+    return PrintPrepender(msg)
+
+
+def time_method(m, args, *d, prepend=None):
     start = time.time()
-    m(args, *d)
+    with contextlib.nullcontext if prepend is None else contextlib.redirect_stdout(print_prepend(prepend)):
+        m(args, *d)
     print(f"Work completed in {datetime.timedelta(seconds=time.time() - start)}.")
 
 

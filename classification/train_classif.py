@@ -64,4 +64,4 @@ if __name__ == '__main__':
     if args.cats is None:
         args.cats = common.list_dirs(train_utils.get_data_path(args), full_path=False)
 
-    common.time_method(main, args)
+    common.time_method(main, args, prepend=f"GPU {args.gpu} proc: ")
