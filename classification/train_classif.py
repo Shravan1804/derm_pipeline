@@ -7,6 +7,7 @@ import numpy as np
 
 import torch
 import fastai.vision.all as fv
+import fastai.distributed as fd
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 import common
@@ -34,7 +35,7 @@ def get_classif_metrics(args):
 def create_learner(args, dls, metrics):
     if "efficientnet" in args.model:
         from efficientnet_pytorch import EfficientNet
-        model = EfficientNet.from_pretrained(args.model)
+        model = fd.rank0_first(lambda: EfficientNet.from_pretrained(args.model))
         model._fc = torch.nn.Linear(model._fc.in_features, dls.c)
         return fv.Learner(dls, model, metrics=metrics,
                           splitter=lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params))
