@@ -1,15 +1,17 @@
 import os
 import re
+import sys
+import math
+import pickle
+import argparse
+import multiprocessing as mp
 
 import cv2
-import math
 import numpy as np
 import matplotlib.pyplot as plt
-import argparse
-import pickle
-import multiprocessing as mp
-import concurrency
-import common
+
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
+from general import common, concurrency
 
 
 class DrawHelper:

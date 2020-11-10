@@ -4,13 +4,11 @@ import subprocess
 from fastai.basics import *
 from fastcore.script import *
 
-sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import crypto
-
 @call_parse
 def main(
     gpus:Param("The GPUs to use for distributed training", str)='all',
     encrypted:Param("Is the data encrypted", store_true)=False,
+    debug:Param("All subprocess stdout will be ", store_true)=False,
     script:Param("Script to run", str, opt=False)='',
     args:Param("Args to pass to script", nargs='...', opt=False)=''
 ):
@@ -25,13 +23,16 @@ def main(
 
     if encrypted:
         print("Please provide datasets encryption key")
-        current_env["CRYPTO_KEY"] = input().encode()
+        current_env["CRYPTO_KEY"] = input()
+        args.append('--encrypted')
 
     processes = []
     for i, gpu in enumerate(gpus):
         current_env["RANK"] = str(i)
         cmd = [sys.executable, "-u", script, f"--gpu={gpu}", f"--num-gpus={len(gpus)}"] + args
-        process = subprocess.Popen(cmd, env=current_env)
+        process = subprocess.Popen(cmd, env=current_env,
+                                   stdout=subprocess.STDOUT if i != 0 and not debug else None,
+                                   stderr=subprocess.STDOUT if i != 0 and not debug else None)
         processes.append(process)
 
     for process in processes: process.wait()
