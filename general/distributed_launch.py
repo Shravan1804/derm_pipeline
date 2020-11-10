@@ -1,6 +1,11 @@
+import os
+import sys
 import subprocess
 from fastai.basics import *
 from fastcore.script import *
+
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
+from general import crypto
 
 @call_parse
 def main(
@@ -10,9 +15,6 @@ def main(
     args:Param("Args to pass to script", nargs='...', opt=False)=''
 ):
 
-    if encrypted:
-        
-
     "PyTorch distributed training launch helper that spawns multiple distributed processes"
     # Loosely based on torch.distributed.launch
     current_env = os.environ.copy()
@@ -21,8 +23,12 @@ def main(
     current_env["MASTER_ADDR"] = '127.0.0.1'
     current_env["MASTER_PORT"] = '29500'
 
+    if encrypted:
+        print("Please provide datasets encryption key")
+        current_env["CRYPTO_KEY"] = input().encode()
+
     processes = []
-    for i,gpu in enumerate(gpus):
+    for i, gpu in enumerate(gpus):
         current_env["RANK"] = str(i)
         cmd = [sys.executable, "-u", script, f"--gpu={gpu}", f"--num-gpus={len(gpus)}"] + args
         process = subprocess.Popen(cmd, env=current_env)

@@ -221,6 +221,7 @@ def prepare_training(args, image_data):
     torch.cuda.set_device(args.gpu)
 
     if args.encrypted:
+        args.user_key = os.environ.get('CRYPTO_KEY', "").encode()
         args.user_key = crypto.request_key(args.data, args.user_key)
 
     if args.exp_logdir is None:
