@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 from functools import partial
 
@@ -10,8 +11,8 @@ import fastai.vision.all as fv
 import fastai.distributed as fd   # needed for fastai multi gpu
 import fastai.callback.tensorboard as fc
 
-import common
-import crypto
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
+from general import common, crypto
 
 
 def common_train_args(parser, pdef=dict(), phelp=dict()):

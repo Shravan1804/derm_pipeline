@@ -1,10 +1,12 @@
 import os
+import sys
 
 import cv2
 
 import torch
 
-import common
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
+from general import common
 
 
 def get_mask_path(img_path, img_dir, mask_dir, mext):

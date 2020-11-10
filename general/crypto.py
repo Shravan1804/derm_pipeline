@@ -1,5 +1,6 @@
 import os
 import io
+import sys
 import pickle
 import argparse
 import multiprocessing as mp
@@ -9,8 +10,8 @@ import numpy as np
 from bidict import bidict
 from cryptography.fernet import Fernet
 
-import common
-import concurrency
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
+from general import common, concurrency
 
 
 def decrypt_img(img_path, fkey):

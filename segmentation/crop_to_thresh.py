@@ -1,11 +1,12 @@
 import os
+import sys
 import argparse
+import multiprocessing as mp
 
 import cv2
 
-import common
-import concurrency
-import multiprocessing as mp
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
+from general import common, concurrency
 import segmentation.segmentation_utils as seg_utils
 from segmentation.mask_utils import crop_img_and_mask_to_objs
 

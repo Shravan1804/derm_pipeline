@@ -5,13 +5,10 @@ from functools import partial
 
 import numpy as np
 
-import torch
 import fastai.vision.all as fv
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-import common
-import crypto
-import train_utils
+from general import common, crypto, train_utils
 import segmentation.segmentation_utils as segm_utils
 from segmentation.crop_to_thresh import SEP as CROP_SEP
 

@@ -10,9 +10,8 @@ import fastai.vision.all as fv
 import fastai.distributed as fd
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-import common
-import train_utils
-from PatchExtractor import PatchExtractor
+from general import common, train_utils
+from general.PatchExtractor import PatchExtractor
 import classification.classification_utils as classif_utils
 
 

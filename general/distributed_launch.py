@@ -1,13 +1,18 @@
-import subprocess, torch
+import subprocess
 from fastai.basics import *
 from fastcore.script import *
 
 @call_parse
 def main(
     gpus:Param("The GPUs to use for distributed training", str)='all',
+    encrypted:Param("Is the data encrypted", store_true)=False,
     script:Param("Script to run", str, opt=False)='',
     args:Param("Args to pass to script", nargs='...', opt=False)=''
 ):
+
+    if encrypted:
+        
+
     "PyTorch distributed training launch helper that spawns multiple distributed processes"
     # Loosely based on torch.distributed.launch
     current_env = os.environ.copy()

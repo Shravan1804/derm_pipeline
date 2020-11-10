@@ -1,7 +1,9 @@
-
+import os
+import sys
 import torch
 
-import common
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
+from general import common
 
 
 def cls_perf(perf, inp, targ, cls_idx, cats, axis=-1):

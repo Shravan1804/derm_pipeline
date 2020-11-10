@@ -1,10 +1,12 @@
+import os
+import sys
 import math
 
 import cv2
 import numpy as np
 
-import common
-import img_utils
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
+from general import common, img_utils
 
 
 def get_obj_proportion(mask, bg=0):
