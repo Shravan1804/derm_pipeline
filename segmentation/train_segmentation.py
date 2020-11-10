@@ -29,7 +29,7 @@ def segm_dls(bs, size, tr, val, args):
 
 def get_segm_metrics(args):
     metrics_fn = {}
-    device = f'cuda:{args.gpu}'
+    device = f"'cuda:{args.gpu}'"
     for cat_id, cat in zip([*range(len(args.cats))] + [None], args.cats + ["all"]):
         for bg in [None, 0] if cat_id != 0 else [None]:
             for perf_fn in ['acc', 'prec', 'rec']:

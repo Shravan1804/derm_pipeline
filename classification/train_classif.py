@@ -22,7 +22,7 @@ def classif_dls(bs, size, tr, val, args):
 
 def get_classif_metrics(args):
     metrics_fn = {}
-    device = f'cuda:{args.gpu}'
+    device = f"'cuda:{args.gpu}'"
     for cat_id, cat in zip([*range(len(args.cats))] + [None], args.cats + ["all"]):
         for perf_fn in ['acc', 'prec', 'rec']:
             code = f"def {cat}_{perf_fn}(inp, targ):" \
