@@ -20,6 +20,8 @@ def common_train_args(parser, pdef=dict(), phelp=dict()):
     parser.add_argument('--wl-train', type=str, default='weak_labels', help="weak labels (wl) dir")
     parser.add_argument('--sl-train', type=str, default='strong_labels_train', help="strong labels (sl) dir")
     parser.add_argument('--sl-test', type=str, default='strong_labels_test', help="sl test dir")
+    parser.add_argument('--cats', type=str, nargs='+', default=pdef.get('--cats', None),
+                        help=phelp.get('--cats', "Categories"))
 
     parser.add_argument('-name', '--exp-name', required=True, help='Custom string to append to experiment log dir')
     parser.add_argument('--logdir', type=str, default=pdef.get('--logdir', get_root_logdir(None)),
@@ -40,7 +42,7 @@ def common_train_args(parser, pdef=dict(), phelp=dict()):
     parser.add_argument('--no-norm', action='store_true', help="Do not normalizes images to imagenet stats")
     parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
 
-    parser.add_argument('--gpu', type=int, help="Id of gpu to be used by script")
+    parser.add_argument('--gpu', type=int, required=True, help="Id of gpu to be used by script")
     parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
     parser.add_argument("--num-machines", type=int, default=1, help="number of machines")
 
@@ -152,9 +154,10 @@ def progressive_resizing_dls(dls_fn, max_bs, bs, input_size, progr_size, factors
 
 
 class CustomTensorBoardCallback(fc.TensorBoardBaseCallback):
-    def __init__(self, log_dir, grouped_metrics):
+    def __init__(self, log_dir, run_name, grouped_metrics):
         super().__init__()
         self.log_dir = log_dir
+        self.run_name = run_name
         self.grouped_metrics = grouped_metrics
 
     def before_fit(self):
@@ -164,9 +167,9 @@ class CustomTensorBoardCallback(fc.TensorBoardBaseCallback):
         self._setup_writer()
 
     def after_batch(self):
-        self.writer.add_scalar('Loss/train_loss', self.smooth_loss, self.train_iter)
+        self.writer.add_scalar(f'{self.run_name}_Loss/train_loss', self.smooth_loss, self.train_iter)
         for i, h in enumerate(self.opt.hypers):
-            for k, v in h.items(): self.writer.add_scalar(f'Opt_hyper/{k}_{i}', v, self.train_iter)
+            for k, v in h.items(): self.writer.add_scalar(f'{self.run_name}_Opt_hyper/{k}_{i}', v, self.train_iter)
 
     def after_epoch(self):
         grouped = {}
@@ -179,15 +182,14 @@ class CustomTensorBoardCallback(fc.TensorBoardBaseCallback):
                     grouped[perf] = {n: v}
             else:
                 log_group = 'Loss' if "loss" in n else 'Metrics'
-                self.writer.add_scalar(f'{log_group}/{n}', v, self.train_iter)
+                self.writer.add_scalar(f'{self.run_name}_{log_group}/{n}', v, self.train_iter)
         for n, v in grouped.items():
-            self.writer.add_scalars(f'Metrics/{n}', v, self.train_iter)
+            self.writer.add_scalars(f'{self.run_name}_Metrics/{n}', v, self.train_iter)
 
 
 def setup_tensorboard(learn, logdir, run_name, grouped_metrics):
     learn.remove_cb(CustomTensorBoardCallback)
-    logdir = common.maybe_create(logdir, run_name)
-    learn.add_cb(CustomTensorBoardCallback(logdir, grouped_metrics))
+    return CustomTensorBoardCallback(logdir, run_name, grouped_metrics)
 
 
 def save_learner(learn, is_fp16, save_path):
@@ -215,11 +217,6 @@ def prepare_training(args, image_data):
     common.set_seeds(args.seed)
 
     assert torch.cuda.is_available(), "Cannot run without CUDA device"
-
-    if args.num_gpus == 1 and args.gpu is None:
-        args.gpu = 0
-    elif args.num_gpus > 1:
-        assert args.gpu is not None, "GPU id is needed"
     torch.cuda.set_device(args.gpu)
 
     if args.encrypted:
