@@ -39,7 +39,7 @@ def create_learner(args, dls, metrics):
         return fv.Learner(dls, model, metrics=metrics,
                           splitter=lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params))
     else:
-        return fv.cnn_learner(dls, getattr(fv, args.model, None), metrics=metrics)
+        return fd.rank0_first(lambda: fv.cnn_learner(dls, getattr(fv, args.model, None), metrics=metrics))
 
 
 def main(args):

@@ -6,6 +6,7 @@ from functools import partial
 import numpy as np
 
 import fastai.vision.all as fv
+import fastai.distributed as fd
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common, crypto, train_utils
@@ -38,7 +39,7 @@ def get_segm_metrics(args):
 
 
 def create_learner(args, dls, metrics):
-    return fv.unet_learner(dls, getattr(fv, args.model, None), metrics=metrics)
+    return fd.rank0_first(lambda: fv.unet_learner(dls, getattr(fv, args.model, None), metrics=metrics))
 
 
 def main(args):

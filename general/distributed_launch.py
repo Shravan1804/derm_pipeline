@@ -31,8 +31,8 @@ def main(
         current_env["RANK"] = str(i)
         cmd = [sys.executable, "-u", script, f"--gpu={gpu}", f"--num-gpus={len(gpus)}"] + args
         process = subprocess.Popen(cmd, env=current_env,
-                                   stdout=subprocess.STDOUT if i != 0 and not debug else None,
-                                   stderr=subprocess.STDOUT if i != 0 and not debug else None)
+                                   stdout=subprocess.DEVNULL if i != 0 and not debug else None,
+                                   stderr=subprocess.DEVNULL if i != 0 and not debug else None)
         processes.append(process)
 
     for process in processes: process.wait()
