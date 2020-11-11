@@ -112,7 +112,7 @@ def get_full_img_dict(images, sep):
 
 def split_data(images, full_img_sep, stratify, seed=42, cross_val=False, nfolds=5, valid_size=.2):
     np.random.seed(seed)
-
+    images = images if type(images) is np.ndarray else np.array(images)
     full_images_dict = get_full_img_dict(images, full_img_sep)
     full_images = np.array(list(full_images_dict.keys()))
     full_images_cls = np.array([os.path.dirname(f) for f in full_images])
@@ -145,11 +145,11 @@ def create_dls_from_lst(blocks, get_y, bs, size, tr, val, args):
     return data.dataloaders(args.data, bs=bs)
 
 
-def progressive_resizing_dls(dls_fn, max_bs, bs, input_size, progr_size, factors):
+def progressive_resizing_dls(dls_fn, sl_data, max_bs, bs, input_size, progr_size, factors):
     input_sizes = [int(input_size * f) for f in factors] if progr_size else [input_size]
     batch_sizes = [max(1, min(int(bs / f / f), max_bs) // 2 * 2) for f in factors] if progr_size else [bs]
     for it, (bs, size) in enumerate(zip(batch_sizes, input_sizes)):
-        run = f'{common.zero_pad(it, len(batch_sizes))}_{size}px_bs{bs}'
+        run = f'it{common.zero_pad(it, len(batch_sizes))}_{"SL" if sl_data else "WL"}_{size}px_bs{bs}'
         print(f"Iteration {it}: running {run}")
         yield it, run, dls_fn(bs, size)
 
@@ -241,7 +241,21 @@ def basic_train(args, learn, fold, run, dls, metrics_names, save_model=True):
     with learn.distrib_ctx():
         learn.fine_tune(args.epochs, cbs=[cbT])
     if save_model:
-        save_path = os.path.join(args.exp_logdir, f'{common.zero_pad(fold, args.nfolds)}_{run}_model')
+        save_path = os.path.join(args.exp_logdir, f'f{common.zero_pad(fold, args.nfolds)}_{run}_model')
         save_learner(learn, is_fp16=(not args.full_precision), save_path=save_path)
 
+
+def train_model(args, get_splits, sl_images, get_dls, create_dls, create_learner,
+                metrics_names, metrics_fn, correct_wl, wl_images):
+    for fold, tr, val in get_splits(sl_images):
+        for it, run, dls in get_dls(partial(create_dls, tr=tr, val=val, args=args), sl_data=True, max_bs=len(tr)):
+            if it == 0:
+                learn = create_learner(args, dls, metrics_fn)
+            basic_train(args, learn, fold, run, dls, metrics_names)
+
+        if args.use_wl:
+            wl_classif_dls_fn = partial(create_dls, tr=wl_images, val=val, args=args)
+            for it, run, dls in get_dls(wl_classif_dls_fn, sl_data=False, max_bs=len(wl_images)):
+                correct_wl(args)
+                basic_train(args, learn, fold, run, dls, metrics_names)
 

@@ -20,7 +20,7 @@ def get_img_mask(args, img_path):
     return crypto.decrypt_img(mpath, args.user_key) if args.encrypted else mpath
 
 
-def segm_dls(bs, size, tr, val, args):
+def create_dls(bs, size, tr, val, args):
     return train_utils.create_dls_from_lst((fv.ImageBlock, fv.MaskBlock(args.cats)), lambda x: get_img_mask(args, x),
                                            bs, size, tr, val, args)
 
@@ -39,19 +39,31 @@ def get_segm_metrics(args):
 
 
 def create_learner(args, dls, metrics):
-    return fd.rank0_first(lambda: fv.unet_learner(dls, getattr(fv, args.model, None), metrics=metrics))
+    learn = fd.rank0_first(lambda: fv.unet_learner(dls, getattr(fv, args.model, None), metrics=metrics))
+    return train_utils.prepare_learner(args, learn)
+
+
+def get_segm_imgs(args):
+    sl_path = os.path.join(train_utils.get_data_path(args), args.img_dir)
+    sl_images = common.list_files(sl_path, full_path=True, posix_path=True)
+    if args.use_wl:
+        wl_path = os.path.join(train_utils.get_data_path(args, weak_labels=True), args.img_dir)
+        wl_images = common.list_files(wl_path, full_path=True, posix_path=True)
+    return sl_images, wl_images if args.use_wl else None
+
+
+def correct_wl(args):
+    pass
 
 
 def main(args):
     print("Running script with args:", args)
-    images = np.array(common.list_files(os.path.join(args.data, args.img_dir), full_path=True, posix_path=True))
+    metrics_names, metrics_fn = get_segm_metrics(args)
     get_splits, get_dls = train_utils.get_data_fn(args, full_img_sep=CROP_SEP, stratify=False)
-    metrics_names, metrics = get_segm_metrics(args)
-    for fold, tr, val in get_splits(images):
-        for it, run, dls in get_dls(partial(segm_dls, tr=tr, val=val, args=args), max_bs=len(tr)):
-            learn = train_utils.prepare_learner(args, create_learner(args, dls, metrics)) if it == 0 else learn
-            train_utils.basic_train(args, learn, fold, run, dls, metrics_names)
+    sl_images, wl_images = get_segm_imgs(args)
 
+    train_utils.train_model(args, get_splits, sl_images, get_dls, create_dls, create_learner,
+                            metrics_names, metrics_fn, correct_wl, wl_images)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Train Fastai segmentation")
