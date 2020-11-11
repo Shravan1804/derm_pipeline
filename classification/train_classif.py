@@ -15,6 +15,40 @@ from general.PatchExtractor import PatchExtractor
 import classification.classification_utils as classif_utils
 
 
+class ImageClassificationTrainer(train_utils.ImageTrainer):
+    def get_items(self):
+        sl_images = common.list_files_in_dirs(self.get_data_path(), full_path=True, posix_path=True)
+        if self.args.use_wl:
+            wl_path = self.get_data_path(weak_labels=True)
+            wl_images = common.list_files_in_dirs(wl_path, full_path=True, posix_path=True)
+        return sl_images, wl_images if self.args.use_wl else None
+
+    def get_metrics(self):
+        metrics_fn = {}
+        device = f"'cuda:{self.args.gpu}'"
+        for cat_id, cat in zip([*range(len(self.args.cats))] + [None], self.args.cats + ["all"]):
+            for perf_fn in ['acc', 'prec', 'rec']:
+                code = f"def {cat}_{perf_fn}(inp, targ):" \
+                       f"return cls_perf(common.{perf_fn}, inp, targ, {cat_id}, {self.args.cats}).to({device})"
+                exec(code, {"cls_perf": classif_utils.cls_perf, 'common': common}, metrics_fn)
+        return list(metrics_fn.keys()), list(metrics_fn.values())
+
+    def create_dls(self, bs, size, tr, val):
+        return train_utils.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock(vocab=self.args.cats)),
+                                               fv.parent_label, bs, size, tr, val, self.args)
+
+    def create_learner(self, dls):
+        if "efficientnet" in self.args.model:
+            from efficientnet_pytorch import EfficientNet
+            model = fd.rank0_first(lambda: EfficientNet.from_pretrained(self.args.model))
+            model._fc = torch.nn.Linear(model._fc.in_features, dls.c)
+            learn = fv.Learner(dls, model, metrics=self.metrics_fn,
+                               splitter=lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params))
+        else:
+            learn = fd.rank0_first(lambda: fv.cnn_learner(dls, getattr(fv, self.args.model), metrics=self.metrics_fn))
+        return self.prepare_learner(learn)
+
+
 def create_dls(bs, size, tr, val, args):
     return train_utils.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock(vocab=args.cats)), fv.parent_label,
                                            bs, size, tr, val, args)
@@ -56,13 +90,16 @@ def correct_wl(args):
 
 
 def main(args):
-    print("Running script with args:", args)
-    metrics_names, metrics_fn = get_classif_metrics(args)
-    get_splits, get_dls = train_utils.get_data_fn(args, full_img_sep=PatchExtractor.SEP, stratify=True)
-    sl_images, wl_images = get_classif_imgs(args)
+    #print("Running script with args:", args)
+    #metrics_names, metrics_fn = get_classif_metrics(args)
+    #get_splits, get_dls = train_utils.get_data_fn(args, full_img_sep=PatchExtractor.SEP, stratify=True)
+    #sl_images, wl_images = get_classif_imgs(args)
 
-    train_utils.train_model(args, get_splits, sl_images, get_dls, create_dls, create_learner,
-                            metrics_names, metrics_fn, correct_wl, wl_images)
+    #train_utils.train_model(args, get_splits, sl_images, get_dls, create_dls, create_learner,
+    #                        metrics_names, metrics_fn, correct_wl, wl_images)
+
+    classif = ImageClassificationTrainer(args, stratify=True, full_img_sep=PatchExtractor.SEP)
+    classif.train_model()
 
 
 if __name__ == '__main__':

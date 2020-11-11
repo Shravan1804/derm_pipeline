@@ -12,7 +12,7 @@ import fastai.distributed as fd   # needed for fastai multi gpu
 import fastai.callback.tensorboard as fc
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import common, crypto
+from general import common, crypto, img_utils
 
 
 def common_train_args(parser, pdef=dict(), phelp=dict()):
@@ -42,6 +42,7 @@ def common_train_args(parser, pdef=dict(), phelp=dict()):
 
     parser.add_argument('--no-norm', action='store_true', help="Do not normalizes images to imagenet stats")
     parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
+    parser.add_argument('--early-stop', action='store_true', help="Early stopping during training")
 
     parser.add_argument('--gpu', type=int, required=True, help="Id of gpu to be used by script")
     parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
@@ -149,7 +150,7 @@ def progressive_resizing_dls(dls_fn, sl_data, max_bs, bs, input_size, progr_size
     input_sizes = [int(input_size * f) for f in factors] if progr_size else [input_size]
     batch_sizes = [max(1, min(int(bs / f / f), max_bs) // 2 * 2) for f in factors] if progr_size else [bs]
     for it, (bs, size) in enumerate(zip(batch_sizes, input_sizes)):
-        run = f'it{common.zero_pad(it, len(batch_sizes))}_{"SL" if sl_data else "WL"}_{size}px_bs{bs}'
+        run = f'{common.zero_pad(it, len(batch_sizes))}_{"SL" if sl_data else "WL"}_{size}px_bs{bs}'
         print(f"Iteration {it}: running {run}")
         yield it, run, dls_fn(bs, size)
 
@@ -241,7 +242,7 @@ def basic_train(args, learn, fold, run, dls, metrics_names, save_model=True):
     with learn.distrib_ctx():
         learn.fine_tune(args.epochs, cbs=[cbT])
     if save_model:
-        save_path = os.path.join(args.exp_logdir, f'f{common.zero_pad(fold, args.nfolds)}_{run}_model')
+        save_path = os.path.join(args.exp_logdir, f'f{common.zero_pad(fold, args.nfolds)}__{run}_model')
         save_learner(learn, is_fp16=(not args.full_precision), save_path=save_path)
 
 
@@ -258,4 +259,115 @@ def train_model(args, get_splits, sl_images, get_dls, create_dls, create_learner
             for it, run, dls in get_dls(wl_classif_dls_fn, sl_data=False, max_bs=len(wl_images)):
                 correct_wl(args)
                 basic_train(args, learn, fold, run, dls, metrics_names)
+
+
+class FastaiTrainer:
+    def __init__(self, args, stratify):
+        self.args = args
+        self.stratify = stratify
+        self.metrics_names, self.metrics_fn = self.get_metrics()
+
+    def get_metrics(self):
+        raise not NotImplementedError
+
+    def get_items(self):
+        raise not NotImplementedError
+
+    def create_learner(self):
+        raise not NotImplementedError
+
+    def create_dls(self):
+        raise not NotImplementedError
+
+    def correct_wl(self):
+        raise not NotImplementedError
+
+    def train_model(self):
+        raise not NotImplementedError
+
+    def split_data(self, items: np.ndarray, items_cls: np.ndarray):
+        np.random.seed(self.args.seed)
+
+        if self.stratify:
+            cv_splitter, no_cv_splitter = StratifiedKFold, StratifiedShuffleSplit
+        else:
+            cv_splitter, no_cv_splitter = KFold, ShuffleSplit
+
+        if self.args.cross_val:
+            splitter = cv_splitter(n_splits=self.args.nfolds, shuffle=True, random_state=self.args.seed)
+        else:
+            splitter = no_cv_splitter(n_splits=1, test_size=self.args.valid_size, random_state=self.args.seed)
+
+        for fold, (train_idx, valid_idx) in enumerate(splitter.split(items, items_cls)):
+            if self.args.cross_val:
+                print("FOLD:", fold)
+            yield fold, items[train_idx], items_cls[train_idx], items[valid_idx], items_cls[valid_idx]
+
+    def get_data_path(self, weak_labels=False):
+        if self.args.use_wl:
+            return os.path.join(self.args.data, self.args.wl_train if weak_labels else self.args.sl_train)
+        else:
+            return self.args.data
+
+    def basic_train(self, learn, fold, run, dls):
+        learn.dls = dls
+        cbT = setup_tensorboard(learn, self.args.exp_logdir, run, self.metrics_names)
+        with learn.distrib_ctx():
+            learn.fine_tune(self.args.epochs, cbs=[cbT])
+        if self.args.save_model:
+            save_path = os.path.join(self.args.exp_logdir, f'f{common.zero_pad(fold, self.args.nfolds)}__{run}_model')
+            save_learner(learn, is_fp16=(not self.args.full_precision), save_path=save_path)
+
+    def prepare_learner(self, learn):
+        if not self.args.full_precision:
+            learn.to_fp16()
+        return learn
+
+
+class ImageTrainer(FastaiTrainer):
+    def __init__(self, args, stratify, full_img_sep):
+        super().__init__(args, stratify)
+        self.full_img_sep = full_img_sep
+
+    def get_image_cls(self, img_path):
+        return os.path.basename(os.path.dirname(img_path))
+
+    def split_data(self, items: np.ndarray, items_cls=None):
+        full_images_dict = img_utils.get_full_img_dict(items, self.full_img_sep)
+        full_images = np.array(list(full_images_dict.keys()))
+
+        for fold, tr, _, val, _ in super().split_data(full_images, self.get_image_cls(full_images)):
+            train_images = np.array([i for fi in tr for i in full_images_dict[fi]])
+            valid_images = [i for fi in val for i in full_images_dict[fi]]
+            np.random.shuffle(train_images)
+            np.random.shuffle(valid_images)
+            yield fold, train_images, self.get_image_cls(train_images), valid_images, self.get_image_cls(valid_images)
+
+    def progressive_resizing(self, tr, val, sl_data, max_bs):
+        if self.args.progr_size:
+            input_sizes = [int(self.args.input_size * f) for f in self.args.factors]
+            batch_sizes = [max(1, min(int(self.args.bs / f / f), max_bs) // 2 * 2) for f in self.args.factors]
+        else:
+            input_sizes = [self.args.input_size]
+            batch_sizes = [self.args.bs]
+
+        for it, (bs, size) in enumerate(zip(batch_sizes, input_sizes)):
+            run = f'{common.zero_pad(it, len(batch_sizes))}_{"SL" if sl_data else "WL"}_{size}px_bs{bs}'
+            print(f"Iteration {it}: running {run}")
+            yield it, run, self.create_dls(bs, size, tr, val)
+
+    def train_model(self):
+        print("Running script with args:", self.args)
+        sl_images, wl_images = self.get_items()
+        for fold, tr, val in self.split_data(sl_images):
+            for it, run, dls in self.progressive_resizing(tr, val, sl_data=True, max_bs=len(tr)):
+                if it == 0:
+                    learn = self.create_learner(dls)
+                self.basic_train(learn, fold, run, dls)
+
+            if self.args.use_wl:
+                for it, run, dls in self.progressive_resizing(wl_images, val, sl_data=False, max_bs=len(wl_images)):
+                    self.correct_wl()
+                    self.basic_train(learn, fold, run, dls)
+
 
