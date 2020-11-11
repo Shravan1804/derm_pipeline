@@ -35,7 +35,7 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
 
     def create_dls(self, bs, size, tr, val):
         return train_utils.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock(vocab=self.args.cats)),
-                                               fv.parent_label, bs, size, tr, val, self.args)
+                                               fv.parent_label, bs, size, tr.tolist(), val.tolist(), self.args)
 
     def create_learner(self, dls):
         if "efficientnet" in self.args.model:

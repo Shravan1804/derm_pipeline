@@ -314,9 +314,8 @@ class FastaiTrainer:
         cbT = setup_tensorboard(learn, self.args.exp_logdir, run, self.metrics_names)
         with learn.distrib_ctx():
             learn.fine_tune(self.args.epochs, cbs=[cbT])
-        if self.args.save_model:
-            save_path = os.path.join(self.args.exp_logdir, f'f{common.zero_pad(fold, self.args.nfolds)}__{run}_model')
-            save_learner(learn, is_fp16=(not self.args.full_precision), save_path=save_path)
+        save_path = os.path.join(self.args.exp_logdir, f'f{common.zero_pad(fold, self.args.nfolds)}__{run}_model')
+        save_learner(learn, is_fp16=(not self.args.full_precision), save_path=save_path)
 
     def prepare_learner(self, learn):
         if not self.args.full_precision:
@@ -329,8 +328,8 @@ class ImageTrainer(FastaiTrainer):
         super().__init__(args, stratify)
         self.full_img_sep = full_img_sep
 
-    def get_image_cls(self, img_path):
-        return os.path.basename(os.path.dirname(img_path))
+    def get_image_cls(self, img_paths):
+        return np.array([os.path.basename(os.path.dirname(img_path)) for img_path in img_paths])
 
     def split_data(self, items: np.ndarray, items_cls=None):
         full_images_dict = img_utils.get_full_img_dict(items, self.full_img_sep)
@@ -338,15 +337,15 @@ class ImageTrainer(FastaiTrainer):
 
         for fold, tr, _, val, _ in super().split_data(full_images, self.get_image_cls(full_images)):
             train_images = np.array([i for fi in tr for i in full_images_dict[fi]])
-            valid_images = [i for fi in val for i in full_images_dict[fi]]
+            valid_images = np.array([i for fi in val for i in full_images_dict[fi]])
             np.random.shuffle(train_images)
             np.random.shuffle(valid_images)
             yield fold, train_images, self.get_image_cls(train_images), valid_images, self.get_image_cls(valid_images)
 
-    def progressive_resizing(self, tr, val, sl_data, max_bs):
+    def progressive_resizing(self, tr, val, sl_data):
         if self.args.progr_size:
             input_sizes = [int(self.args.input_size * f) for f in self.args.factors]
-            batch_sizes = [max(1, min(int(self.args.bs / f / f), max_bs) // 2 * 2) for f in self.args.factors]
+            batch_sizes = [max(1, min(int(self.args.bs / f / f), tr.size) // 2 * 2) for f in self.args.factors]
         else:
             input_sizes = [self.args.input_size]
             batch_sizes = [self.args.bs]
@@ -359,8 +358,8 @@ class ImageTrainer(FastaiTrainer):
     def train_model(self):
         print("Running script with args:", self.args)
         sl_images, wl_images = self.get_items()
-        for fold, tr, val in self.split_data(sl_images):
-            for it, run, dls in self.progressive_resizing(tr, val, sl_data=True, max_bs=len(tr)):
+        for fold, tr, _, val, _ in self.split_data(sl_images):
+            for it, run, dls in self.progressive_resizing(tr, val, sl_data=True):
                 if it == 0:
                     learn = self.create_learner(dls)
                 self.basic_train(learn, fold, run, dls)
