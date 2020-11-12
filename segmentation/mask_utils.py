@@ -201,7 +201,8 @@ def crop_img_and_mask_to_objs(im, mask, thresh=.01, rand=True, single=True, only
     if only_bboxes:
         return cleaned_cropped_bboxes
     else:
-        return *extract_bboxes_from_img_mask(im, mask, cleaned_cropped_bboxes), cleaned_cropped_bboxes
+        im_crops, mask_crops = extract_bboxes_from_img_mask(im, mask, cleaned_cropped_bboxes)
+        return im_crops, mask_crops, cleaned_cropped_bboxes
 
 
 def show_im_with_masks(im, mask, cats):
