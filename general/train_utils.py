@@ -119,7 +119,6 @@ class CustomTensorBoardCallback(fc.TensorBoardBaseCallback):
                 self.writer.add_scalar(f'{self.run_name}_{log_group}/{n}', v, self.train_iter)
         for n, v in grouped.items():
             self.writer.add_scalars(f'{self.run_name}_Metrics/{n}', v, self.train_iter)
-            reduced[n]["cat_avg"] = np.mean([vv for kk, vv in v.items() if self.all_metrics_key not in kk])
         for n, v in reduced.items():
             self.writer.add_scalars(f'{self.run_name}_Metrics/{self.all_metrics_key}_{n}', v, self.train_iter)
 
@@ -211,9 +210,11 @@ class FastaiTrainer:
             yield fold, items[train_idx], items_cls[train_idx], items[valid_idx], items_cls[valid_idx]
 
     def get_train_cbs(self, run):
-        cbT = self.tensorboard_cb(run)
-        cbE = self.early_stop_cb()
-        return [cbT, cbE]
+        cbs = []
+        cbs.append(self.tensorboard_cb(run))
+        if self.args.early_stop:
+            cbs.append(self.early_stop_cb())
+        return cbs
 
     def basic_train(self, learn, fold, run, dls):
         learn.dls = dls
