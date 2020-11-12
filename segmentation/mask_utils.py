@@ -20,28 +20,101 @@ def get_bbox(cond):
         return None
     hmin, hmax = np.min(pos[0]), np.max(pos[0])
     wmin, wmax = np.min(pos[1]), np.max(pos[1])
-    return wmin, hmin, wmax, hmax
+    return np.array((wmin, hmin, wmax, hmax))
 
 
-def merge_bboxes(centroids, bboxes, min_dist):
-    merged = common.merge(list(zip(centroids, bboxes)),
-                          lambda a, b: np.square(a[0] - b[0]).sum() <= min_dist ** 2,
-                          lambda a, b: ((a[0] + b[0]) // 2, np.array([min(a[1][0], b[1][0]), min(a[1][1], b[1][1]),
-                                                                      max(a[1][2], b[1][2]), max(a[1][3], b[1][3])])))
+def bbox_side_size(bbox):
+    """Returns w, h"""
+    return np.array((bbox[2] - bbox[0], bbox[3] - bbox[1]))
+
+
+def bbox_area(bbox):
+    w, h = bbox_side_size(bbox)
+    return w*h
+
+
+def bbox_centroid(bbox):
+    wmin, hmin, wmax, hmax = bbox
+    w, h = bbox_side_size(bbox)
+    cX = wmin + math.floor(w/2)
+    cY = hmin + math.floor(h/2)
+    return np.array((cX, cY))
+
+
+def ensure_bbox_side_min_size(smin, smax, side_range, min_size):
+    if smax - smin < min_size:
+        diff = min_size - (smax - smin)
+        bbox = (smin, 0, smax, 0)
+        bbox = grow_bbox(bbox, side_range, (0, 0), diff, rand=False)
+        return np.array((bbox[0], bbox[2]))
+    else:
+        return np.array((smin, smax))
+
+
+def ensure_bbox_min_size(im_shape, bbox, min_size):
+    wmin, hmin, wmax, hmax = bbox
+    wmin, wmax = ensure_bbox_side_min_size(wmin, wmax, (0, im_shape[1]), min_size)
+    hmin, hmax = ensure_bbox_side_min_size(hmin, hmax, (0, im_shape[0]), min_size)
+    return np.array((wmin, hmin, wmax, hmax))
+
+
+def bboxes_have_intersect(bbox1, bbox2):
+    # https://gamedev.stackexchange.com/questions/586/what-is-the-fastest-way-to-work-out-2d-bounding-box-intersection
+    # left/right for w (x axis) wmin/wmax, top/bottom for h (y axis) hmin/hmax
+    # return !(r2.left > r1.right || r2.right < r1.left || r2.top > r1.bottom || r2.bottom < r1.top);
+    wmin1, hmin1, wmax1, hmax1 = bbox1
+    wmin2, hmin2, wmax2, hmax2 = bbox2
+    return not (wmin2 > wmax1 or wmax2 < wmin1 or hmin2 > hmax1 or hmax2 < hmin1)
+
+
+def bboxes_intersection(bbox1, bbox2):
+    if not bboxes_have_intersect(bbox1, bbox2):
+        return None
+    wmin1, hmin1, wmax1, hmax1 = bbox1
+    wmin2, hmin2, wmax2, hmax2 = bbox2
+    return np.array((max(wmin1, wmin2), max(hmin1, hmin2), min(wmax1, wmax2), min(hmax1, hmax2)))
+
+
+def bboxes_union(bbox1, bbox2):
+    wmin1, hmin1, wmax1, hmax1 = bbox1
+    wmin2, hmin2, wmax2, hmax2 = bbox2
+    return np.array((min(wmin1, wmin2), min(hmin1, hmin2), max(wmax1, wmax2), max(hmax1, hmax2)))
+
+
+def bboxes_overlap(bbox1, bbox2):
+    intersect = bboxes_intersection(bbox1, bbox2)
+    if intersect is None:
+        return 0
+    area1, area2, intersect_area = bbox_area(bbox1), bbox_area(bbox2), bbox_area(intersect)
+    return intersect_area/(area1 + area2 - intersect_area)
+
+
+def merge_bboxes_based_on_overlap(bboxes, max_overlap):
+    merged = common.merge(lst=bboxes,
+                          cond_fn=lambda a, b: bboxes_overlap(a, b) >= max_overlap,
+                          merge_fn=lambda a, b: bboxes_union(a, b))
     return merged
 
 
-def grow_bbox(start_bbox, im_dim, total_growth, rd=2, rand=True):
+def merge_bboxes_based_on_centroids_dist(centroids, bboxes, min_dist):
+    merged = common.merge(lst=list(zip(centroids, bboxes)),
+                          cond_fn=lambda a, b: np.square(a[0] - b[0]).sum() <= min_dist ** 2,
+                          merge_fn=lambda a, b: ((a[0] + b[0]) // 2, bboxes_union(a[1], b[1])))
+    return merged
+
+
+def grow_bbox(start_bbox, wrange, hrange, total_growth, rd=2, rand=True):
     """
-    Randomly increase bbox on either sides by up to total_growth px in the im_dim
+    (Randomly) increase bbox on either sides by up to total_growth px in the im_dim
     rd is the coords reducing/growing split index, first group is reducing, second is growing
     """
-    assert 0 <= start_bbox[0] <= start_bbox[2] <= im_dim[1], f"Start_bbox ({start_bbox}) does not fit in image {im_dim}"
-    assert 0 <= start_bbox[1] <= start_bbox[3] <= im_dim[0], f"Start_bbox ({start_bbox}) does not fit in image {im_dim}"
+    assert wrange[0] <= start_bbox[0] <= start_bbox[2] <= wrange[1], f"BBOX w ({start_bbox}) does not fit {wrange}"
+    assert hrange[0] <= start_bbox[1] <= start_bbox[3] <= hrange[1], f"BBOX h ({start_bbox}) does not fit {hrange}"
     coords = np.array(start_bbox)
     # start_bbox is wmin, hmin, wmax, hmax
-    low, high = np.zeros_like(coords), np.resize(np.array([im_dim[1], im_dim[0]]), coords.size)
-    can_grow = (coords >= low) & (coords <= high)
+    low = np.resize(np.array([wrange[0], hrange[0]]), coords.size)
+    high = np.resize(np.array([wrange[1], hrange[1]]), coords.size)
+    can_grow = (coords > low) & (coords < high)
 
     changed = True
     while can_grow.any() and changed and total_growth > 0:
@@ -57,9 +130,9 @@ def grow_bbox(start_bbox, im_dim, total_growth, rd=2, rand=True):
         total_growth = rest
 
         coords[can_grow] = new_coords[can_grow]
-        can_grow = (coords >= low) & (coords <= high)
+        can_grow = (coords > low) & (coords < high)
 
-    return coords.tolist()
+    return coords
 
 
 def get_centroids_with_bboxes(mask, kern=(5, 5), dilate_it=10, bg=0):
@@ -72,13 +145,14 @@ def get_centroids_with_bboxes(mask, kern=(5, 5), dilate_it=10, bg=0):
         if M["m00"] == 0:
             print("WARNING, error while computing centroid, skipping blob.")
             continue
-        centroids.append(np.array((int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))))
+        centroids.append(np.array((int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))))    #(cX, cY)
         x, y, w, h = cv2.boundingRect(c)
         bboxes.append(np.array([x, y, x+w, y+h]))
     return centroids, bboxes
 
 
-def fit_crop_bbox_to_thresh(mask, bbox, thresh, rand, bg=0):
+def grow_crop_bbox_to_thresh(mask, bbox, thresh, rand, bg=0):
+    """Increases the bbox size if obj proportion above thresh (adds more background, thus reduces obj proportion)"""
     cropped_mask = img_utils.crop_im(mask, bbox)
     obj_prop, u, uc = get_obj_proportion(cropped_mask, bg=bg)
     if obj_prop > thresh:
@@ -87,34 +161,43 @@ def fit_crop_bbox_to_thresh(mask, bbox, thresh, rand, bg=0):
         N = bbox[3] - bbox[1] + bbox[2] - bbox[0]
         # base margin is the margin to be added on all 4 sides to reach alpha
         base_margin = max(0, math.floor((-N+math.sqrt(N**2+4*alpha))/4))
-        bbox = grow_bbox(bbox, mask.shape, base_margin*4, rand=rand)
+        bbox = grow_bbox(bbox, (0, mask.shape[1]), (0, mask.shape[0]), base_margin*4, rand=rand)
     return bbox
 
 
-def crop_img_and_mask_to_objs(im, mask, thresh=.01, rand=True, single=True, only_bboxes=False, bg=0):
+def crop_img_and_mask_to_objs(im, mask, thresh=.01, rand=True, single=True, only_bboxes=False, bg=0,
+                              min_obj_area=36, min_crop_side_size=128, max_crop_overlap=.6):
     """If rand is true will randomly grow margins to try fitting threshold object proportion
     If single is false will return many masks of single nearby objects"""
     if not (mask > 0).any():
         raise Exception("Provided mask does not contain any objects.")
 
     if single:
-        crop_bbox = fit_crop_bbox_to_thresh(mask, get_bbox(mask > 0), thresh, rand, bg=bg)
+        crop_bbox = grow_crop_bbox_to_thresh(mask, get_bbox(mask > 0), thresh, rand, bg=bg)
         if only_bboxes:
-            return [crop_bbox]
+            return crop_bbox,
         else:
-            return [img_utils.crop_im(im, crop_bbox)], [img_utils.crop_im(mask, crop_bbox)], [crop_bbox]
+            return (img_utils.crop_im(im, crop_bbox), ), (img_utils.crop_im(mask, crop_bbox), ), (crop_bbox, )
 
     centroids, bboxes = get_centroids_with_bboxes(mask)
-    cropped_imgs, cropped_masks, crop_bboxes = [], [], []
+    cleaned_cropped_bboxes = []
     for centroid, bbox in zip(centroids, bboxes):
         min_bbox = get_bbox(img_utils.crop_im(mask, bbox) != bg)
         bbox = bbox if min_bbox is None else np.tile(bbox[:2], 2) + np.array(min_bbox)
-        bbox = fit_crop_bbox_to_thresh(mask, bbox, thresh, rand, bg=bg)
-        if not only_bboxes:
-            cropped_imgs.append(img_utils.crop_im(im, bbox))
-            cropped_masks.append(img_utils.crop_im(mask, bbox))
-        crop_bboxes.append(bbox)
-    return crop_bboxes if only_bboxes else cropped_imgs, cropped_masks, crop_bboxes
+        if bbox_area(bbox) < min_obj_area:
+            continue
+        bbox = grow_crop_bbox_to_thresh(mask, bbox, thresh, rand, bg=bg)
+        cleaned_cropped_bboxes.append(ensure_bbox_min_size(mask.shape, bbox, min_crop_side_size))
+    cleaned_cropped_bboxes = merge_bboxes_based_on_overlap(cleaned_cropped_bboxes, max_crop_overlap)
+
+    if only_bboxes:
+        return cleaned_cropped_bboxes
+
+    cropped_imgs, cropped_masks = [], []
+    for bbox in cleaned_cropped_bboxes:
+        cropped_imgs.append(img_utils.crop_im(im, bbox))
+        cropped_masks.append(img_utils.crop_im(mask, bbox))
+    return cropped_imgs, cropped_masks, cleaned_cropped_bboxes
 
 
 def show_im_with_masks(im, mask, cats):

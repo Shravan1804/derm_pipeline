@@ -42,6 +42,7 @@ def common_train_args(parser, pdef=dict(), phelp=dict()):
     parser.add_argument('--no-norm', action='store_true', help="Do not normalizes images to imagenet stats")
     parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
     parser.add_argument('--early-stop', action='store_true', help="Early stopping during training")
+    parser.add_argument('--correct-wl-labels', action='store_true', help="Correct weak train labels")
 
     parser.add_argument('--gpu', type=int, required=True, help="Id of gpu to be used by script")
     parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")

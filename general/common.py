@@ -230,7 +230,7 @@ def print_prepend(msg):
 
 def time_method(m, args, *d, prepend=None):
     start = time.time()
-    with contextlib.nullcontext if prepend is None else contextlib.redirect_stdout(print_prepend(prepend)):
+    with contextlib.nullcontext() if prepend is None else contextlib.redirect_stdout(print_prepend(prepend)):
         m(args, *d)
     print(f"Work completed in {datetime.timedelta(seconds=time.time() - start)}.")
 

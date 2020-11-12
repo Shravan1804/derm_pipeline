@@ -1,10 +1,13 @@
+import os
+import sys
 import math
 import argparse
 
 from tqdm import tqdm
 from PIL import Image
 
-import common
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
+from general import common
 
 def main(args):
     files = common.list_files_in_dirs(args.data, full_path=True) if args.classif else common.list_files(args.data, full_path=True)
