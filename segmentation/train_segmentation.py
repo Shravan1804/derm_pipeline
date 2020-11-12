@@ -64,6 +64,6 @@ if __name__ == '__main__':
     segm_utils.common_segm_args(parser)
     args = parser.parse_args()
 
-    train_utils.prepare_training(args, image_data=True)
+    train_utils.prepare_training(args, image_data=True, custom="segmentation")
 
     common.time_method(main, args, prepend=f"GPU {args.gpu} proc: ")

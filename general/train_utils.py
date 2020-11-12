@@ -60,7 +60,7 @@ def common_img_args(parser, pdef=dict(), phelp=dict()):
                         help=phelp.get('--size-facts', 'Increase progressive size factors'))
 
 
-def get_exp_logdir(args, image_data):
+def get_exp_logdir(args, image_data, custom=""):
     ws = args.num_machines * args.num_gpus
     d = f'{common.now()}_{args.model}_bs{args.bs}_epo{args.epochs}_seed{args.seed}_world{ws}'
     d += '' if args.no_norm else '_normed'
@@ -70,7 +70,7 @@ def get_exp_logdir(args, image_data):
     if image_data:
         d += f'_input{args.input_size}'
         d += f'_progr-size{"_".join(map(str, args.size_facts))}' if args.progr_size else ""
-    d += f'_{args.exp_name}'
+    d += f'_{custom}_{args.exp_name}'
     return d
 
 
@@ -144,7 +144,7 @@ def split_model(model, splits):
     return [torch.nn.Sequential(*top_children[i:j]) for i, j in zip(idxs[:-1], idxs[1:])]
 
 
-def prepare_training(args, image_data):
+def prepare_training(args, image_data, custom=""):
     common.check_dir_valid(args.data)
     common.set_seeds(args.seed)
 
@@ -156,7 +156,7 @@ def prepare_training(args, image_data):
         args.user_key = crypto.request_key(args.data, args.user_key)
 
     if args.exp_logdir is None:
-        args.exp_logdir = common.maybe_create(args.logdir, get_exp_logdir(args, image_data))
+        args.exp_logdir = common.maybe_create(args.logdir, get_exp_logdir(args, image_data, custom))
     print("Creation of log directory: ", args.exp_logdir)
 
 
@@ -270,8 +270,8 @@ class ImageTrainer(FastaiTrainer):
 
     def progressive_resizing(self, tr, val, sl_data):
         if self.args.progr_size:
-            input_sizes = [int(self.args.input_size * f) for f in self.args.factors]
-            batch_sizes = [max(1, min(int(self.args.bs / f / f), tr.size) // 2 * 2) for f in self.args.factors]
+            input_sizes = [int(self.args.input_size * f) for f in self.args.size_facts]
+            batch_sizes = [max(1, min(int(self.args.bs / f / f), tr.size) // 2 * 2) for f in self.args.size_facts]
         else:
             input_sizes = [self.args.input_size]
             batch_sizes = [self.args.bs]

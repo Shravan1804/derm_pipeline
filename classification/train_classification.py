@@ -62,7 +62,7 @@ if __name__ == '__main__':
     train_utils.common_img_args(parser, pdef={'--input-size': 256})
     args = parser.parse_args()
 
-    train_utils.prepare_training(args, image_data=True)
+    train_utils.prepare_training(args, image_data=True, custom="classification")
 
     if args.cats is None:
         data_path = args.data if not args.use_wl else os.path.join(args.data, args.sl_train)
