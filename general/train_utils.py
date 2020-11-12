@@ -81,80 +81,6 @@ def get_root_logdir(logdir):
         return os.path.join(str(Path.home()), 'logs')
 
 
-def get_data_path(args, weak_labels=False):
-    if args.use_wl:
-        return os.path.join(args.data, args.wl_train if weak_labels else args.sl_train)
-    else:
-        return args.data
-
-
-def get_data_fn(args, full_img_sep, stratify):
-    get_splits = partial(split_data, full_img_sep=full_img_sep, stratify=stratify, seed=args.seed,
-                         cross_val=args.cross_val, nfolds=args.nfolds, valid_size=args.valid_size)
-    get_dls = partial(progressive_resizing_dls, bs=args.bs, input_size=args.input_size,
-                      progr_size=args.progr_size, factors=args.size_facts)
-    return get_splits, get_dls
-
-
-def get_full_img_dict(images, sep):
-    """Returns a dict with keys the full images names and values the lst of corresponding images.
-    sep is the string which separates the full img names"""
-    full_images_dict = {}
-    for fpath in images:
-        cls = os.path.basename(os.path.dirname(fpath))
-        file, ext = os.path.splitext(os.path.basename(fpath))
-        fi = os.path.join(cls, f'{file.split(sep)[0] if sep in file else file}{ext}')
-        if fi in full_images_dict:
-            full_images_dict[fi].append(fpath)
-        else:
-            full_images_dict[fi] = [fpath]
-    return full_images_dict
-
-
-def split_data(images, full_img_sep, stratify, seed=42, cross_val=False, nfolds=5, valid_size=.2):
-    np.random.seed(seed)
-    images = images if type(images) is np.ndarray else np.array(images)
-    full_images_dict = get_full_img_dict(images, full_img_sep)
-    full_images = np.array(list(full_images_dict.keys()))
-    full_images_cls = np.array([os.path.dirname(f) for f in full_images])
-
-    cv_splitter, no_cv_splitter = (StratifiedKFold, StratifiedShuffleSplit) if stratify else (KFold, ShuffleSplit)
-    splitter = cv_splitter(n_splits=nfolds, shuffle=True, random_state=seed) if cross_val else \
-        no_cv_splitter(n_splits=1, test_size=valid_size, random_state=seed)
-
-    for fold, (train_idx, valid_idx) in enumerate(splitter.split(full_images, full_images_cls)):
-        if cross_val:
-            print("FOLD:", fold)
-        train_images = [i for fi in full_images[train_idx] for i in full_images_dict[fi]]
-        valid_images = [i for fi in full_images[valid_idx] for i in full_images_dict[fi]]
-        np.random.shuffle(train_images)
-        np.random.shuffle(valid_images)
-        yield fold, train_images, valid_images
-
-
-def create_dls_from_lst(blocks, get_y, bs, size, tr, val, args):
-    tfms = fv.aug_transforms(size=size)
-    if not args.no_norm:
-        tfms.append(fv.Normalize.from_stats(*fv.imagenet_stats))
-    data = fv.DataBlock(blocks=blocks,
-                        get_items=lambda x: tr + val,
-                        get_x=lambda x: crypto.decrypt_img(x, args.user_key) if args.encrypted else x,
-                        get_y=get_y,
-                        splitter=fv.IndexSplitter(list(range(len(tr), len(tr) + len(val)))),
-                        item_tfms=fv.Resize(args.input_size),
-                        batch_tfms=tfms)
-    return data.dataloaders(args.data, bs=bs)
-
-
-def progressive_resizing_dls(dls_fn, sl_data, max_bs, bs, input_size, progr_size, factors):
-    input_sizes = [int(input_size * f) for f in factors] if progr_size else [input_size]
-    batch_sizes = [max(1, min(int(bs / f / f), max_bs) // 2 * 2) for f in factors] if progr_size else [bs]
-    for it, (bs, size) in enumerate(zip(batch_sizes, input_sizes)):
-        run = f'{common.zero_pad(it, len(batch_sizes))}_{"SL" if sl_data else "WL"}_{size}px_bs{bs}'
-        print(f"Iteration {it}: running {run}")
-        yield it, run, dls_fn(bs, size)
-
-
 class CustomTensorBoardCallback(fc.TensorBoardBaseCallback):
     def __init__(self, log_dir, run_name, grouped_metrics):
         super().__init__()
@@ -228,37 +154,6 @@ def prepare_training(args, image_data):
     if args.exp_logdir is None:
         args.exp_logdir = common.maybe_create(args.logdir, get_exp_logdir(args, image_data))
     print("Creation of log directory: ", args.exp_logdir)
-
-
-def prepare_learner(args, learn):
-    if not args.full_precision:
-        learn.to_fp16()
-    return learn
-
-
-def basic_train(args, learn, fold, run, dls, metrics_names, save_model=True):
-    learn.dls = dls
-    cbT = setup_tensorboard(learn, args.exp_logdir, run, metrics_names)
-    with learn.distrib_ctx():
-        learn.fine_tune(args.epochs, cbs=[cbT])
-    if save_model:
-        save_path = os.path.join(args.exp_logdir, f'f{common.zero_pad(fold, args.nfolds)}__{run}_model')
-        save_learner(learn, is_fp16=(not args.full_precision), save_path=save_path)
-
-
-def train_model(args, get_splits, sl_images, get_dls, create_dls, create_learner,
-                metrics_names, metrics_fn, correct_wl, wl_images):
-    for fold, tr, val in get_splits(sl_images):
-        for it, run, dls in get_dls(partial(create_dls, tr=tr, val=val, args=args), sl_data=True, max_bs=len(tr)):
-            if it == 0:
-                learn = create_learner(args, dls, metrics_fn)
-            basic_train(args, learn, fold, run, dls, metrics_names)
-
-        if args.use_wl:
-            wl_classif_dls_fn = partial(create_dls, tr=wl_images, val=val, args=args)
-            for it, run, dls in get_dls(wl_classif_dls_fn, sl_data=False, max_bs=len(wl_images)):
-                correct_wl(args)
-                basic_train(args, learn, fold, run, dls, metrics_names)
 
 
 class FastaiTrainer:
