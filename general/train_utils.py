@@ -265,6 +265,7 @@ class FastaiTrainer:
     def __init__(self, args, stratify):
         self.args = args
         self.stratify = stratify
+        self.perf_fns = ['acc', 'prec', 'rec']
         self.metrics_names, self.metrics_fn = self.get_metrics()
 
     def get_metrics(self):
@@ -309,11 +310,14 @@ class FastaiTrainer:
         else:
             return self.args.data
 
+    def get_train_cbs(self, learn, run):
+        cbT = setup_tensorboard(learn, self.args.exp_logdir, run, self.metrics_names)
+        return [cbT]
+
     def basic_train(self, learn, fold, run, dls):
         learn.dls = dls
-        cbT = setup_tensorboard(learn, self.args.exp_logdir, run, self.metrics_names)
         with learn.distrib_ctx():
-            learn.fine_tune(self.args.epochs, cbs=[cbT])
+            learn.fine_tune(self.args.epochs, cbs=self.get_train_cbs(learn, run))
         save_path = os.path.join(self.args.exp_logdir, f'f{common.zero_pad(fold, self.args.nfolds)}__{run}_model')
         save_learner(learn, is_fp16=(not self.args.full_precision), save_path=save_path)
 
@@ -330,6 +334,19 @@ class ImageTrainer(FastaiTrainer):
 
     def get_image_cls(self, img_paths):
         return np.array([os.path.basename(os.path.dirname(img_path)) for img_path in img_paths])
+
+    def create_dls_from_lst(self, blocks, tr, val, get_y, bs, size):
+        tfms = fv.aug_transforms(size=size)
+        if not self.args.no_norm:
+            tfms.append(fv.Normalize.from_stats(*fv.imagenet_stats))
+        data = fv.DataBlock(blocks=blocks,
+                            get_items=lambda x: tr + val,
+                            get_x=lambda x: crypto.decrypt_img(x, self.args.user_key) if self.args.encrypted else x,
+                            get_y=get_y,
+                            splitter=fv.IndexSplitter(list(range(len(tr), len(tr) + len(val)))),
+                            item_tfms=fv.Resize(self.args.input_size),
+                            batch_tfms=tfms)
+        return data.dataloaders(self.args.data, bs=bs)
 
     def split_data(self, items: np.ndarray, items_cls=None):
         full_images_dict = img_utils.get_full_img_dict(items, self.full_img_sep)
@@ -353,7 +370,7 @@ class ImageTrainer(FastaiTrainer):
         for it, (bs, size) in enumerate(zip(batch_sizes, input_sizes)):
             run = f'{common.zero_pad(it, len(batch_sizes))}_{"SL" if sl_data else "WL"}_{size}px_bs{bs}'
             print(f"Iteration {it}: running {run}")
-            yield it, run, self.create_dls(bs, size, tr, val)
+            yield it, run, self.create_dls(tr, val, bs, size)
 
     def train_model(self):
         print("Running script with args:", self.args)

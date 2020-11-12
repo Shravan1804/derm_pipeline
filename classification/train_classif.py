@@ -27,15 +27,15 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
         metrics_fn = {}
         device = f"'cuda:{self.args.gpu}'"
         for cat_id, cat in zip([*range(len(self.args.cats))] + [None], self.args.cats + ["all"]):
-            for perf_fn in ['acc', 'prec', 'rec']:
+            for perf_fn in self.perf_fns:
                 code = f"def {cat}_{perf_fn}(inp, targ):" \
                        f"return cls_perf(common.{perf_fn}, inp, targ, {cat_id}, {self.args.cats}).to({device})"
                 exec(code, {"cls_perf": classif_utils.cls_perf, 'common': common}, metrics_fn)
         return list(metrics_fn.keys()), list(metrics_fn.values())
 
-    def create_dls(self, bs, size, tr, val):
-        return train_utils.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock(vocab=self.args.cats)),
-                                               fv.parent_label, bs, size, tr.tolist(), val.tolist(), self.args)
+    def create_dls(self, tr, val, bs, size):
+        return self.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock(vocab=self.args.cats)),
+                                        tr.tolist(), val.tolist(), fv.parent_label, bs, size)
 
     def create_learner(self, dls):
         if "efficientnet" in self.args.model:
