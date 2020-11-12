@@ -14,9 +14,6 @@ import classification.classification_utils as classif_utils
 
 
 class ImageClassificationTrainer(train_utils.ImageTrainer):
-    def __init__(self, args, stratify, full_img_sep):
-        super().__init__(args, stratify, full_img_sep)
-
     def get_items(self):
         sl_images = common.list_files_in_dirs(self.get_data_path(), full_path=True, posix_path=True)
         if self.args.use_wl:

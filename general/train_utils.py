@@ -161,14 +161,13 @@ def prepare_training(args, image_data):
 
 
 class FastaiTrainer:
-
     def __init__(self, args, stratify):
+        self.ALL_CATS = '__all__'
+        self.BASIC_PERF_FNS = ['acc', 'prec', 'rec']
         self.args = args
         self.stratify = stratify
         self.cats_metrics, self.cats_metrics_fn = self.get_metrics()
 
-        self.ALL_CATS = '__all__'
-        self.BASIC_PERF_FNS = ['acc', 'prec', 'rec']
 
     def get_metrics(self):
         raise not NotImplementedError
