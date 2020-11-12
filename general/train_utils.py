@@ -161,13 +161,14 @@ def prepare_training(args, image_data):
 
 
 class FastaiTrainer:
-    ALL_CATS = '__all__'
-    BASIC_PERF_FNS = ['acc', 'prec', 'rec']
 
     def __init__(self, args, stratify):
         self.args = args
         self.stratify = stratify
         self.cats_metrics, self.cats_metrics_fn = self.get_metrics()
+
+        self.ALL_CATS = '__all__'
+        self.BASIC_PERF_FNS = ['acc', 'prec', 'rec']
 
     def get_metrics(self):
         raise not NotImplementedError
@@ -191,7 +192,7 @@ class FastaiTrainer:
         raise not NotImplementedError
 
     def tensorboard_cb(self, run_name):
-        return CustomTensorBoardCallback(self.args.exp_logdir, run_name, self.cats_metrics, ALL_CATS)
+        return CustomTensorBoardCallback(self.args.exp_logdir, run_name, self.cats_metrics, self.ALL_CATS)
 
     def split_data(self, items: np.ndarray, items_cls: np.ndarray):
         np.random.seed(self.args.seed)

@@ -29,9 +29,9 @@ class ImageSegmentationTrainer(train_utils.ImageTrainer):
     def get_metrics(self):
         metrics_fn = {}
         device = f"'cuda:{self.args.gpu}'"
-        for cat_id, cat in zip([*range(len(self.args.cats))] + [None], self.args.cats + [ALL_CATS]):
+        for cat_id, cat in zip([*range(len(self.args.cats))] + [None], self.args.cats + [self.ALL_CATS]):
             for bg in [None, 0] if cat_id != 0 else [None]:
-                for perf_fn in BASIC_PERF_FNS:
+                for perf_fn in self.BASIC_PERF_FNS:
                     fn_name = f'{cat}_{perf_fn}{"" if bg is None else "_no_bg"}'
                     code = f"def {fn_name}(inp, targ): return cls_perf(common.{perf_fn}, inp, targ, {cat_id}, " \
                            f"{self.args.cats}, {bg}).to({device})"
