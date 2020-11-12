@@ -56,7 +56,7 @@ def common_img_args(parser, pdef=dict(), phelp=dict()):
                         help=phelp.get('--input-size', "Model input will be resized to this value"))
     parser.add_argument('--progr-size', action='store_true',
                         help=phelp.get('--progr-size', "Applies progressive resizing"))
-    parser.add_argument('--size-facts', default=pdef.get('--size-facts', [.25, .5, .75,  1]), nargs='+', type=float,
+    parser.add_argument('--size-facts', default=pdef.get('--size-facts', [.5, .75,  1]), nargs='+', type=float,
                         help=phelp.get('--size-facts', 'Increase progressive size factors'))
 
 

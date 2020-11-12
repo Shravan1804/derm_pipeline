@@ -165,6 +165,14 @@ def grow_crop_bbox_to_thresh(mask, bbox, thresh, rand, bg=0):
     return bbox
 
 
+def extract_bboxes_from_img_mask(im, mask, bboxes):
+    cropped_imgs, cropped_masks = [], []
+    for bbox in bboxes:
+        cropped_imgs.append(img_utils.crop_im(im, bbox))
+        cropped_masks.append(img_utils.crop_im(mask, bbox))
+    return cropped_imgs, cropped_masks
+
+
 def crop_img_and_mask_to_objs(im, mask, thresh=.01, rand=True, single=True, only_bboxes=False, bg=0,
                               min_obj_area=36, min_crop_side_size=128, max_crop_overlap=.6):
     """If rand is true will randomly grow margins to try fitting threshold object proportion
@@ -192,12 +200,8 @@ def crop_img_and_mask_to_objs(im, mask, thresh=.01, rand=True, single=True, only
 
     if only_bboxes:
         return cleaned_cropped_bboxes
-
-    cropped_imgs, cropped_masks = [], []
-    for bbox in cleaned_cropped_bboxes:
-        cropped_imgs.append(img_utils.crop_im(im, bbox))
-        cropped_masks.append(img_utils.crop_im(mask, bbox))
-    return cropped_imgs, cropped_masks, cleaned_cropped_bboxes
+    else:
+        return *extract_bboxes_from_img_mask(im, mask, cleaned_cropped_bboxes), cleaned_cropped_bboxes
 
 
 def show_im_with_masks(im, mask, cats):
