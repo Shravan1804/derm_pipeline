@@ -43,7 +43,7 @@ class ImageSegmentationTrainer(train_utils.ImageTrainer):
                                         lambda x: self.get_img_mask(x), bs, size)
 
     def create_learner(self, dls):
-        metrics = [self.cats_metrics_fn, fv.foreground_acc]
+        metrics = self.cats_metrics_fn + [fv.foreground_acc]
         learn = fd.rank0_first(lambda: fv.unet_learner(dls, getattr(fv, self.args.model), metrics=metrics))
         return self.prepare_learner(learn)
 

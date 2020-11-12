@@ -168,7 +168,6 @@ class FastaiTrainer:
         self.stratify = stratify
         self.cats_metrics, self.cats_metrics_fn = self.get_metrics()
 
-
     def get_metrics(self):
         raise not NotImplementedError
 

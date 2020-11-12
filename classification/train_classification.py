@@ -36,7 +36,7 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
                                         tr.tolist(), val.tolist(), fv.parent_label, bs, size)
 
     def create_learner(self, dls):
-        metrics = [self.cats_metrics_fn, fv.accuracy]
+        metrics = self.cats_metrics_fn + [fv.accuracy]
         if "efficientnet" in self.args.model:
             from efficientnet_pytorch import EfficientNet
             model = fd.rank0_first(lambda: EfficientNet.from_pretrained(self.args.model))
