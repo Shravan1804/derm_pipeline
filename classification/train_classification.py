@@ -13,6 +13,11 @@ import classification.classification_utils as classif_utils
 
 
 class ImageClassificationTrainer(train_utils.ImageTrainer):
+    def __init__(self, args, stratify, full_img_sep):
+        super().__init__(args, stratify, full_img_sep)
+        if self.args.cats is None:
+        self.args.cats = common.list_dirs(self.get_data_path(), full_path=False)
+
     def get_items(self):
         sl_images = common.list_files_in_dirs(self.get_data_path(), full_path=True, posix_path=True)
         if self.args.use_wl:
@@ -58,8 +63,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     train_utils.prepare_training(args, image_data=True)
-
-    if args.cats is None:
-        args.cats = common.list_dirs(train_utils.get_data_path(args), full_path=False)
 
     common.time_method(main, args, prepend=f"GPU {args.gpu} proc: ")

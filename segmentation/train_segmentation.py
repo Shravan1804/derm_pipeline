@@ -18,10 +18,10 @@ class ImageSegmentationTrainer(train_utils.ImageTrainer):
         return crypto.decrypt_img(mpath, self.args.user_key) if self.args.encrypted else mpath
 
     def get_items(self):
-        sl_path = os.path.join(train_utils.get_data_path(self.args), self.args.img_dir)
+        sl_path = os.path.join(self.get_data_path(), self.args.img_dir)
         sl_images = common.list_files(sl_path, full_path=True, posix_path=True)
         if self.args.use_wl:
-            wl_path = os.path.join(train_utils.get_data_path(self.args, weak_labels=True), self.args.img_dir)
+            wl_path = os.path.join(self.get_data_path(weak_labels=True), self.args.img_dir)
             wl_images = common.list_files(wl_path, full_path=True, posix_path=True)
         return sl_images, wl_images if self.args.use_wl else None
 
