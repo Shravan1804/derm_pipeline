@@ -4,6 +4,7 @@ import argparse
 
 import fastai.vision.all as fv
 import fastai.distributed as fd
+from fastai.callback.tracker import EarlyStoppingCallback
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common, crypto, train_utils
@@ -28,9 +29,9 @@ class ImageSegmentationTrainer(train_utils.ImageTrainer):
     def get_metrics(self):
         metrics_fn = {}
         device = f"'cuda:{self.args.gpu}'"
-        for cat_id, cat in zip([*range(len(self.args.cats))] + [None], self.args.cats + ["all"]):
+        for cat_id, cat in zip([*range(len(self.args.cats))] + [None], self.args.cats + [ALL_CATS]):
             for bg in [None, 0] if cat_id != 0 else [None]:
-                for perf_fn in self.perf_fns:
+                for perf_fn in BASIC_PERF_FNS:
                     fn_name = f'{cat}_{perf_fn}{"" if bg is None else "_no_bg"}'
                     code = f"def {fn_name}(inp, targ): return cls_perf(common.{perf_fn}, inp, targ, {cat_id}, " \
                            f"{self.args.cats}, {bg}).to({device})"
@@ -42,8 +43,12 @@ class ImageSegmentationTrainer(train_utils.ImageTrainer):
                                         lambda x: self.get_img_mask(x), bs, size)
 
     def create_learner(self, dls):
-        learn = fd.rank0_first(lambda: fv.unet_learner(dls, getattr(fv, self.args.model), metrics=self.metrics_fn))
+        metrics = [self.cats_metrics_fn, fv.foreground_acc]
+        learn = fd.rank0_first(lambda: fv.unet_learner(dls, getattr(fv, self.args.model), metrics=metrics))
         return self.prepare_learner(learn)
+
+    def early_stop_cb(self):
+        return EarlyStoppingCallback(monitor='foreground_acc', min_delta=0.01, patience=3)
 
 
 def main(args):

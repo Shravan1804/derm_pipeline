@@ -1,7 +1,6 @@
 import os
 import sys
 from pathlib import Path
-from functools import partial
 
 import numpy as np
 from sklearn.model_selection import KFold, ShuffleSplit, StratifiedKFold, StratifiedShuffleSplit
@@ -82,11 +81,12 @@ def get_root_logdir(logdir):
 
 
 class CustomTensorBoardCallback(fc.TensorBoardBaseCallback):
-    def __init__(self, log_dir, run_name, grouped_metrics):
+    def __init__(self, log_dir, run_name, grouped_metrics, all_metrics_key):
         super().__init__()
         self.log_dir = log_dir
         self.run_name = run_name
         self.grouped_metrics = grouped_metrics
+        self.all_metrics_key = all_metrics_key
 
     def before_fit(self):
         self.run = not hasattr(self.learn, 'lr_finder') and not hasattr(self, "gather_preds") \
@@ -101,6 +101,7 @@ class CustomTensorBoardCallback(fc.TensorBoardBaseCallback):
 
     def after_epoch(self):
         grouped = {}
+        reduced = {}
         for n, v in zip(self.recorder.metric_names[2:-1], self.recorder.log[2:-1]):
             if n in self.grouped_metrics:
                 perf = n.split('_')[1]
@@ -108,16 +109,19 @@ class CustomTensorBoardCallback(fc.TensorBoardBaseCallback):
                     grouped[perf][n] = v
                 else:
                     grouped[perf] = {n: v}
+                if self.all_metrics_key in n:
+                    if perf in reduced:
+                        reduced[perf][n] = v
+                    else:
+                        reduced[perf] = {n: v}
             else:
                 log_group = 'Loss' if "loss" in n else 'Metrics'
                 self.writer.add_scalar(f'{self.run_name}_{log_group}/{n}', v, self.train_iter)
         for n, v in grouped.items():
             self.writer.add_scalars(f'{self.run_name}_Metrics/{n}', v, self.train_iter)
-
-
-def setup_tensorboard(learn, logdir, run_name, grouped_metrics):
-    learn.remove_cb(CustomTensorBoardCallback)
-    return CustomTensorBoardCallback(logdir, run_name, grouped_metrics)
+            reduced[n]["cat_avg"] = np.mean([vv for kk, vv in v.items() if self.all_metrics_key not in kk])
+        for n, v in reduced.items():
+            self.writer.add_scalars(f'{self.run_name}_Metrics/{self.all_metrics_key}_{n}', v, self.train_iter)
 
 
 def save_learner(learn, is_fp16, save_path):
@@ -157,11 +161,13 @@ def prepare_training(args, image_data):
 
 
 class FastaiTrainer:
+    ALL_CATS = '__all__'
+    BASIC_PERF_FNS = ['acc', 'prec', 'rec']
+
     def __init__(self, args, stratify):
         self.args = args
         self.stratify = stratify
-        self.perf_fns = ['acc', 'prec', 'rec']
-        self.metrics_names, self.metrics_fn = self.get_metrics()
+        self.cats_metrics, self.cats_metrics_fn = self.get_metrics()
 
     def get_metrics(self):
         raise not NotImplementedError
@@ -181,6 +187,12 @@ class FastaiTrainer:
     def train_model(self):
         raise not NotImplementedError
 
+    def early_stop_cb(self):
+        raise not NotImplementedError
+
+    def tensorboard_cb(self, run_name):
+        return CustomTensorBoardCallback(self.args.exp_logdir, run_name, self.cats_metrics, ALL_CATS)
+
     def split_data(self, items: np.ndarray, items_cls: np.ndarray):
         np.random.seed(self.args.seed)
 
@@ -199,20 +211,15 @@ class FastaiTrainer:
                 print("FOLD:", fold)
             yield fold, items[train_idx], items_cls[train_idx], items[valid_idx], items_cls[valid_idx]
 
-    def get_data_path(self, weak_labels=False):
-        if self.args.use_wl:
-            return os.path.join(self.args.data, self.args.wl_train if weak_labels else self.args.sl_train)
-        else:
-            return self.args.data
-
-    def get_train_cbs(self, learn, run):
-        cbT = setup_tensorboard(learn, self.args.exp_logdir, run, self.metrics_names)
-        return [cbT]
+    def get_train_cbs(self, run):
+        cbT = self.tensorboard_cb(run)
+        cbE = self.early_stop_cb()
+        return [cbT, cbE]
 
     def basic_train(self, learn, fold, run, dls):
         learn.dls = dls
         with learn.distrib_ctx():
-            learn.fine_tune(self.args.epochs, cbs=self.get_train_cbs(learn, run))
+            learn.fine_tune(self.args.epochs, cbs=self.get_train_cbs(run))
         save_path = os.path.join(self.args.exp_logdir, f'f{common.zero_pad(fold, self.args.nfolds)}__{run}_model')
         save_learner(learn, is_fp16=(not self.args.full_precision), save_path=save_path)
 
@@ -226,6 +233,12 @@ class ImageTrainer(FastaiTrainer):
     def __init__(self, args, stratify, full_img_sep):
         super().__init__(args, stratify)
         self.full_img_sep = full_img_sep
+
+    def get_data_path(self, weak_labels=False):
+        if self.args.use_wl:
+            return os.path.join(self.args.data, self.args.wl_train if weak_labels else self.args.sl_train)
+        else:
+            return self.args.data
 
     def get_image_cls(self, img_paths):
         return np.array([os.path.basename(os.path.dirname(img_path)) for img_path in img_paths])
