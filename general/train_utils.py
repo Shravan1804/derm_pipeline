@@ -230,18 +230,18 @@ class FastaiTrainer:
             learn.to_fp16()
         return learn
 
-    def basic_train(self, learn, run, dls):
+    def basic_train_eval(self, learn, run, dls):
         learn.dls = dls
         with learn.distrib_ctx():
             learn.fine_tune(self.args.epochs, cbs=self.get_train_cbs(run))
+            self.evaluate_on_test_set(learn, run)
         save_path = os.path.join(self.args.exp_logdir, f'{run}_model')
         save_learner(learn, is_fp16=(not self.args.full_precision), save_path=save_path)
 
     def evaluate_on_test_set(self, learn, run):
         for test_name, test_items in self.get_items(train=False):
             dl = learn.dls.test_dl(test_items, with_labels=True)
-            with learn.distrib_ctx():
-                interp = fv.Interpretation.from_learner(learn, dl=dl)
+            interp = fv.Interpretation.from_learner(learn, dl=dl)
             self.test_set_results[f'{test_name}_{run}'] = self.interpret_preds(interp)
 
 
@@ -306,8 +306,7 @@ class ImageTrainer(FastaiTrainer):
     def progressive_resizing_train(self, tr, val, run_prefix, learn=None):
         for it, run, dls in self.progressive_resizing(tr, val, run_prefix):
             if it == 0 and learn is None: learn = self.create_learner(dls)
-            self.basic_train(learn, run, dls)
-            self.evaluate_on_test_set(learn, run)
+            self.basic_train_eval(learn, run, dls)
         return learn
 
     def train_model(self):
