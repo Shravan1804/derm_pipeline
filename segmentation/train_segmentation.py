@@ -20,8 +20,9 @@ class ImageSegmentationTrainer(train_utils.ImageTrainer):
 
     def get_items(self, train=True):
         if not train:
-            test_dirs = os.path.join(self.get_data_path(train=False), self.args.img_dir)
-            return [(os.path.basename(p), common.list_files(p, full_path=True, posix_path=True)) for p in test_dirs]
+            test_dirs = self.get_data_path(train=False)
+            test_dirs = [(os.path.basename(p), os.path.join(p, self.args.img_dir)) for p in test_dirs]
+            return [(p, common.list_files(fp, full_path=True, posix_path=True)) for p, fp in test_dirs]
         sl_path = os.path.join(self.get_data_path(), self.args.img_dir)
         sl_images = common.list_files(sl_path, full_path=True, posix_path=True)
         if self.args.use_wl:

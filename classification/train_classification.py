@@ -16,9 +16,8 @@ import classification.classification_utils as classif_utils
 class ImageClassificationTrainer(train_utils.ImageTrainer):
     def get_items(self, train=True):
         if not train:
-            test_dirs = self.get_data_path(train=False)
-            return [(os.path.basename(p), common.list_files_in_dirs(p, full_path=True, posix_path=True))
-                    for p in test_dirs]
+            test_dirs = [(os.path.basename(p), p) for p in self.get_data_path(train=False)]
+            return [(p, common.list_files_in_dirs(fp, full_path=True, posix_path=True)) for p, fp in test_dirs]
         sl_images = common.list_files_in_dirs(self.get_data_path(), full_path=True, posix_path=True)
         if self.args.use_wl:
             wl_path = self.get_data_path(weak_labels=True)
