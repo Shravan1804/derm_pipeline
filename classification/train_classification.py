@@ -27,7 +27,7 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
         return list(metrics_fn.keys()), list(metrics_fn.values())
 
     def create_dls(self, tr, val, bs, size):
-        return self.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock(vocab=self.args.cats)),
+        return self.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock),
                                         tr.tolist(), val.tolist(), fv.parent_label, bs, size)
 
     def create_learner(self, dls):
