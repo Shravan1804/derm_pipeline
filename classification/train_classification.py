@@ -1,7 +1,6 @@
 import os
 import sys
 import argparse
-
 import torch
 import fastai.vision.all as fv
 import fastai.distributed as fd
@@ -14,15 +13,8 @@ import classification.classification_utils as classif_utils
 
 
 class ImageClassificationTrainer(train_utils.ImageTrainer):
-    def get_items(self, train=True):
-        if not train:
-            test_dirs = [(os.path.basename(p), p) for p in self.get_data_path(train=False)]
-            return [(p, common.list_files_in_dirs(fp, full_path=True, posix_path=True)) for p, fp in test_dirs]
-        sl_images = common.list_files_in_dirs(self.get_data_path(), full_path=True, posix_path=True)
-        if self.args.use_wl:
-            wl_path = self.get_data_path(weak_labels=True)
-            wl_images = common.list_files_in_dirs(wl_path, full_path=True, posix_path=True)
-        return sl_images, wl_images if self.args.use_wl else None
+    def load_data(self, path):
+        return common.list_files_in_dirs(path, full_path=True, posix_path=True)
 
     def get_metrics(self):
         metrics_fn = {}

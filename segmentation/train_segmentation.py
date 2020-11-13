@@ -13,22 +13,13 @@ from segmentation.crop_to_thresh import SEP as CROP_SEP
 
 
 class ImageSegmentationTrainer(train_utils.ImageTrainer):
+    def load_data(self, path):
+        return common.list_files(os.path.join(path, self.args.img_dir), full_path=True, posix_path=True)
+
     def get_img_mask(self, img_path):
         file, ext = os.path.splitext(img_path)
         mpath = f'{file.replace(self.args.img_dir, self.args.mask_dir)}{self.args.mext}'
         return crypto.decrypt_img(mpath, self.args.user_key) if self.args.encrypted else mpath
-
-    def get_items(self, train=True):
-        if not train:
-            test_dirs = self.get_data_path(train=False)
-            test_dirs = [(os.path.basename(p), os.path.join(p, self.args.img_dir)) for p in test_dirs]
-            return [(p, common.list_files(fp, full_path=True, posix_path=True)) for p, fp in test_dirs]
-        sl_path = os.path.join(self.get_data_path(), self.args.img_dir)
-        sl_images = common.list_files(sl_path, full_path=True, posix_path=True)
-        if self.args.use_wl:
-            wl_path = os.path.join(self.get_data_path(weak_labels=True), self.args.img_dir)
-            wl_images = common.list_files(wl_path, full_path=True, posix_path=True)
-        return sl_images, wl_images if self.args.use_wl else None
 
     def get_metrics(self):
         metrics_fn = {}
