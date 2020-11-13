@@ -14,7 +14,11 @@ import classification.classification_utils as classif_utils
 
 
 class ImageClassificationTrainer(train_utils.ImageTrainer):
-    def get_items(self):
+    def get_items(self, train=True):
+        if not train:
+            test_dirs = self.get_data_path(train=False)
+            return [(os.path.basename(p), common.list_files_in_dirs(p, full_path=True, posix_path=True))
+                    for p in test_dirs]
         sl_images = common.list_files_in_dirs(self.get_data_path(), full_path=True, posix_path=True)
         if self.args.use_wl:
             wl_path = self.get_data_path(weak_labels=True)
@@ -49,6 +53,9 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
 
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='accuracy', min_delta=0.01, patience=3)
+
+    def interpret_preds(self, interp):
+        return interp
 
 
 def main(args):

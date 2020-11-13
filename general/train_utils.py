@@ -17,9 +17,10 @@ from general import common, crypto, img_utils
 def common_train_args(parser, pdef=dict(), phelp=dict()):
     parser.add_argument('--data', type=str, required=True, help="Root dataset dir")
     parser.add_argument('--use-wl', action='store_true', help="Data dir contains wl and sl data")
+    parser.add_argument('--repeat', default=3, type=int, help="N repeat: wl pretrain -> sl train wl -> wl correct")
     parser.add_argument('--wl-train', type=str, default='weak_labels', help="weak labels (wl) dir")
     parser.add_argument('--sl-train', type=str, default='strong_labels_train', help="strong labels (sl) dir")
-    parser.add_argument('--sl-test', type=str, default='strong_labels_test', help="sl test dir")
+    parser.add_argument('--sl-tests', type=str, nargs='+', default=['strong_labels_test'], help="sl test dirs")
     parser.add_argument('--cats', type=str, nargs='+', default=pdef.get('--cats', None),
                         help=phelp.get('--cats', "Categories"))
 
@@ -167,27 +168,31 @@ class FastaiTrainer:
         self.args = args
         self.stratify = stratify
         self.cats_metrics, self.cats_metrics_fn = self.get_metrics()
+        self.test_set_results = {}
 
     def get_metrics(self):
-        raise not NotImplementedError
+        raise NotImplementedError
 
-    def get_items(self):
-        raise not NotImplementedError
+    def get_items(self, train=True):
+        raise NotImplementedError
 
     def create_learner(self):
-        raise not NotImplementedError
+        raise NotImplementedError
 
     def create_dls(self):
-        raise not NotImplementedError
+        raise NotImplementedError
 
     def correct_wl(self):
-        raise not NotImplementedError
+        raise NotImplementedError
 
     def train_model(self):
-        raise not NotImplementedError
+        raise NotImplementedError
 
     def early_stop_cb(self):
-        raise not NotImplementedError
+        raise NotImplementedError
+
+    def interpret_preds(self, interp):
+        raise NotImplementedError
 
     def tensorboard_cb(self, run_name):
         return CustomTensorBoardCallback(self.args.exp_logdir, run_name, self.cats_metrics, self.ALL_CATS)
@@ -217,11 +222,11 @@ class FastaiTrainer:
             cbs.append(self.early_stop_cb())
         return cbs
 
-    def basic_train(self, learn, fold, run, dls):
+    def basic_train(self, learn, run, dls):
         learn.dls = dls
         with learn.distrib_ctx():
             learn.fine_tune(self.args.epochs, cbs=self.get_train_cbs(run))
-        save_path = os.path.join(self.args.exp_logdir, f'f{common.zero_pad(fold, self.args.nfolds)}__{run}_model')
+        save_path = os.path.join(self.args.exp_logdir, f'{run}_model')
         save_learner(learn, is_fp16=(not self.args.full_precision), save_path=save_path)
 
     def prepare_learner(self, learn):
@@ -229,17 +234,23 @@ class FastaiTrainer:
             learn.to_fp16()
         return learn
 
+    def evaluate_on_test_set(self, learn, run):
+        for test_name, test_items in self.get_items(train=False):
+            dl = learn.dls.test_dl(test_items)
+            interp = fv.Interpretation.from_learner(learn, dl=dl)
+            self.test_set_results[f'{test_name}_{run}'] = self.interpret_preds(interp)
+
 
 class ImageTrainer(FastaiTrainer):
     def __init__(self, args, stratify, full_img_sep):
         super().__init__(args, stratify)
         self.full_img_sep = full_img_sep
 
-    def get_data_path(self, weak_labels=False):
-        if self.args.use_wl:
-            return os.path.join(self.args.data, self.args.wl_train if weak_labels else self.args.sl_train)
+    def get_data_path(self, train=True, weak_labels=False):
+        if not train:
+            return [os.path.join(self.args.data, test_dir) for test_dir in self.args.sl_tests]
         else:
-            return self.args.data
+            return os.path.join(self.args.data, self.args.wl_train if weak_labels else self.args.sl_train)
 
     def get_image_cls(self, img_paths):
         return np.array([os.path.basename(os.path.dirname(img_path)) for img_path in img_paths])
@@ -268,7 +279,7 @@ class ImageTrainer(FastaiTrainer):
             np.random.shuffle(valid_images)
             yield fold, train_images, self.get_image_cls(train_images), valid_images, self.get_image_cls(valid_images)
 
-    def progressive_resizing(self, tr, val, sl_data):
+    def progressive_resizing(self, tr, val, run_prefix):
         if self.args.progr_size:
             input_sizes = [int(self.args.input_size * f) for f in self.args.size_facts]
             batch_sizes = [max(1, min(int(self.args.bs / f / f), tr.size) // 2 * 2) for f in self.args.size_facts]
@@ -277,22 +288,29 @@ class ImageTrainer(FastaiTrainer):
             batch_sizes = [self.args.bs]
 
         for it, (bs, size) in enumerate(zip(batch_sizes, input_sizes)):
-            run = f'{common.zero_pad(it, len(batch_sizes))}_{"SL" if sl_data else "WL"}_{size}px_bs{bs}'
+            run = f'{run_prefix}__S{common.zero_pad(it, len(input_sizes))}_{size}px_bs{bs}'
             print(f"Iteration {it}: running {run}")
             yield it, run, self.create_dls(tr, val, bs, size)
+
+    def progressive_resizing_train(self, tr, val, run_prefix, learn=None):
+        for it, run, dls in self.progressive_resizing(tr, val, run_prefix):
+            if it == 0 and learn is None: learn = self.create_learner(dls)
+            self.basic_train(learn, run, dls)
+            self.evaluate_on_test_set(learn, run)
+        return learn
 
     def train_model(self):
         print("Running script with args:", self.args)
         sl_images, wl_images = self.get_items()
         for fold, tr, _, val, _ in self.split_data(sl_images):
-            for it, run, dls in self.progressive_resizing(tr, val, sl_data=True):
-                if it == 0:
-                    learn = self.create_learner(dls)
-                self.basic_train(learn, fold, run, dls)
+            run_prefix = f'F{common.zero_pad(fold, self.args.nfolds)}'
+            if fold == 0 or not self.args.use_wl:
+                learn = self.progressive_resizing_train(tr, val, f'{run_prefix}_sl_only')
+                self.correct_wl(learn)
 
             if self.args.use_wl:
-                for it, run, dls in self.progressive_resizing(wl_images, val, sl_data=False, max_bs=len(wl_images)):
-                    self.correct_wl()
-                    self.basic_train(learn, fold, run, dls)
-
+                for repeat in range(self.args.repeat):
+                    learn = self.progressive_resizing_train(wl_images, val, f'{run_prefix}_wl_only')
+                    learn = self.progressive_resizing_train(tr, val, f'{run_prefix}_wl_sl', learn)
+                    self.correct_wl(learn)
 

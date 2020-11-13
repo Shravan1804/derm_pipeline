@@ -18,7 +18,10 @@ class ImageSegmentationTrainer(train_utils.ImageTrainer):
         mpath = f'{file.replace(self.args.img_dir, self.args.mask_dir)}{self.args.mext}'
         return crypto.decrypt_img(mpath, self.args.user_key) if self.args.encrypted else mpath
 
-    def get_items(self):
+    def get_items(self, train=True):
+        if not train:
+            test_dirs = os.path.join(self.get_data_path(train=False), self.args.img_dir)
+            return [(os.path.basename(p), common.list_files(p, full_path=True, posix_path=True)) for p in test_dirs]
         sl_path = os.path.join(self.get_data_path(), self.args.img_dir)
         sl_images = common.list_files(sl_path, full_path=True, posix_path=True)
         if self.args.use_wl:
@@ -49,6 +52,9 @@ class ImageSegmentationTrainer(train_utils.ImageTrainer):
 
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='foreground_acc', min_delta=0.01, patience=3)
+
+    def interpret_preds(self, interp):
+        return interp
 
 
 def main(args):
