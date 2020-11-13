@@ -18,11 +18,10 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
 
     def get_metrics(self):
         metrics_fn = {}
-        device = f"'cuda:{self.args.gpu}'"
         for cat_id, cat in zip([*range(len(self.args.cats))] + [None], self.args.cats + [self.ALL_CATS]):
             for perf_fn in self.BASIC_PERF_FNS:
                 code = f"def {cat}_{perf_fn}(inp, targ):" \
-                       f"return cls_perf(common.{perf_fn}, inp, targ, {cat_id}, {self.args.cats}).to({device})"
+                       f"return cls_perf(common.{perf_fn}, inp, targ, {cat_id}, {self.args.cats}).to(inp.device)"
                 exec(code, {"cls_perf": classif_utils.cls_perf, 'common': common}, metrics_fn)
         return list(metrics_fn.keys()), list(metrics_fn.values())
 
@@ -46,6 +45,7 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
         return EarlyStoppingCallback(monitor='accuracy', min_delta=0.01, patience=3)
 
     def interpret_preds(self, interp):
+        interp.metrics = {self.cats_metrics: self.cats_metrics_fn(interp.preds, interp.targs)}
         return interp
 
 
