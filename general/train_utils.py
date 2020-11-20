@@ -302,12 +302,15 @@ class ImageTrainer(FastaiTrainer):
         return np.array([os.path.basename(os.path.dirname(img_path)) for img_path in img_paths])
 
     def create_dls_from_lst(self, blocks, tr, val, get_y, bs, size):
+        def train_val_items(x): return tr + val
+        def get_img(x): crypto.decrypt_img(x, self.args.user_key) if self.args.encrypted else x
+
         tfms = fv.aug_transforms(size=size)
         if not self.args.no_norm:
             tfms.append(fv.Normalize.from_stats(*fv.imagenet_stats))
         data = fv.DataBlock(blocks=blocks,
-                            get_items=lambda x: tr + val,
-                            get_x=lambda x: crypto.decrypt_img(x, self.args.user_key) if self.args.encrypted else x,
+                            get_items=train_val_items,
+                            get_x=get_img,
                             get_y=get_y,
                             splitter=fv.IndexSplitter(list(range(len(tr), len(tr) + len(val)))),
                             item_tfms=fv.Resize(self.args.input_size),

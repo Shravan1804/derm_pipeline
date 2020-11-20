@@ -35,7 +35,7 @@ class ImageSegmentationTrainer(train_utils.ImageTrainer):
 
     def create_dls(self, tr, val, bs, size):
         return self.create_dls_from_lst((fv.ImageBlock, fv.MaskBlock(args.cats)), tr.tolist(), val.tolist(),
-                                        lambda x: self.get_img_mask(x), bs, size)
+                                        self.get_img_mask, bs, size)
 
     def create_learner(self, dls):
         metrics = list(self.cats_metrics.values()) + [fv.foreground_acc]
