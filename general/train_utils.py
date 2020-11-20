@@ -31,6 +31,8 @@ def common_train_args(parser, pdef=dict(), phelp=dict()):
     parser.add_argument('--logdir', type=str, default=pdef.get('--logdir', get_root_logdir(None)),
                         help=phelp.get('--logdir', "Root directory where logs will be saved, default to $HOME/logs"))
     parser.add_argument('--exp-logdir', type=str, help="Experiment logdir, will be created in root log dir")
+    parser.add_argument('--test-figsize', type=float, nargs='+', default=pdef.get('--test-figsize', [7, 3.4]),
+                        help=phelp.get('--test-figsize', "figsize of test performance plots"))
 
     parser.add_argument('--encrypted', action='store_true', help="Data is encrypted")
     parser.add_argument('--user-key', type=str, help="Data encryption key")
@@ -185,9 +187,8 @@ def prepare_training(args, image_data, custom=""):
 
 
 class FastaiTrainer:
-    def __init__(self, args, stratify, figsize=(7, 3.4)):
+    def __init__(self, args, stratify):
         self.ALL_CATS = '__all__'
-        self.test_figsize = figsize
         self.args = args
         self.stratify = stratify
         self.cats_metrics = self.get_metrics()
@@ -367,6 +368,6 @@ class ImageTrainer(FastaiTrainer):
         return run_name.replace(f'__F{m.group("fold")}__', '')
 
     def aggregate_test_performance(self, interp_lst):
-        res = {p: [m.metrics_res[f'{c}_{p}'] for m in interp_lst] for p in self.BASIC_PERF_FNS for c in self.args.cats}
+        res = {p: [m.metrics_res[f'{c}_{p}'] for m in interp_lst for c in self.args.cats] for p in self.BASIC_PERF_FNS}
         return {k: tensors_mean_std(v) for k, v in res.items()}
 

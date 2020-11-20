@@ -85,7 +85,6 @@ if __name__ == '__main__':
     train_utils.prepare_training(args, image_data=True, custom="classification")
 
     if args.cats is None:
-        data_path = args.data if not args.use_wl else os.path.join(args.data, args.sl_train)
-        args.cats = common.list_dirs(data_path, full_path=False)
+        args.cats = common.list_dirs(os.path.join(args.data, args.sl_train), full_path=False)
 
     common.time_method(main, args, prepend=f"GPU {args.gpu} proc: ")
