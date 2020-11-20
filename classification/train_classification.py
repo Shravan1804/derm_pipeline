@@ -53,8 +53,8 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
         interp.cm = classif_utils.conf_mat(self.args.cats, interp.decoded, interp.targs)
         return interp
 
-    def aggregate_test_performance(self, interp_lst):
-        agg = super().aggregate_test_performance(interp_lst)
+    def aggregate_test_performance(self, folds_res):
+        agg = super().aggregate_test_performance(folds_res)
         agg["cm"] = train_utils.tensors_mean_std([interp.cm for interp in interp_lst])
         return agg
 

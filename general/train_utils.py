@@ -212,7 +212,7 @@ class FastaiTrainer:
 
     def get_sorting_run_key(self, run_name): raise NotImplementedError
 
-    def aggregate_test_performance(self, interp_lst): raise NotImplementedError
+    def aggregate_test_performance(self, folds_res): raise NotImplementedError
 
     def plot_test_performance(self, test_path, agg): raise NotImplementedError
 
@@ -367,7 +367,7 @@ class ImageTrainer(FastaiTrainer):
         m = re.match(regex, run_name)
         return run_name.replace(f'__F{m.group("fold")}__', '')
 
-    def aggregate_test_performance(self, interp_lst):
-        res = {p: [m.metrics_res[f'{c}_{p}'] for m in interp_lst for c in self.args.cats] for p in self.BASIC_PERF_FNS}
-        return {k: tensors_mean_std(v) for k, v in res.items()}
+    def aggregate_test_performance(self, folds_res):
+        res = {p: [[m.metrics_res[f'{c}_{p}'] for m in folds_res] for c in self.args.cats] for p in self.BASIC_PERF_FNS}
+        return {k: [tensors_mean_std(v) for v in vv] for k, vv in res.items()}
 
