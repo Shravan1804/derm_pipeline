@@ -3,8 +3,10 @@ import sys
 import cv2
 import time
 import datetime
+import itertools
 import contextlib
 from pathlib import Path
+from collections import defaultdict
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -36,6 +38,65 @@ def grouped_barplot(ax, vars_vals, var_labels, group_labels, barWidth=.25):
     ax.set_xticks([r + barWidth for r in range(len(group_labels))])
     ax.set_xticklabels(group_labels)
     ax.legend()
+
+
+def grouped_barplot_with_err(ax, stats, xticklabels, xlabel=None, ylabel=None, title=None, barwidth=.35, show_val=False,
+             title_loc=None, legend_loc="lower center", ekw=None):
+    def clip_err(vals, err, bounds=(0, 1)):
+        """If err not None, will return 2D np array clipped between specified bounds"""
+        return (np.vstack([vals - err, vals + err]).clip(*bounds) - np.vstack([vals, vals])) * np.array([[-1], [1]])
+
+    nbars_per_group, ngroups = len(stats.keys()), len(xticklabels)
+    group_width = nbars_per_group * barwidth * 4/3
+    positions = np.arange(0, ngroups * group_width, group_width)
+    offsets = [(i - nbars_per_group / 2) * barwidth + barwidth / 2 for i in range(nbars_per_group)]
+
+    ekw = {'elinewidth': .8, 'capsize': 2, 'capthick': .5} if ekw is None else ekw
+    for offset, (key, (vals, err)) in zip(offsets, stats.items()):
+        err = np.zeros(vals.shape) if err is None else clip_err(vals, err)
+        ax.bar(positions + offset, vals, width=barwidth, yerr=err, label=key, error_kw=ekw, edgecolor='white')
+        if show_val:
+            for pos, v, verr in zip(positions, vals, err[0]):
+                ax.text(pos + offset - barwidth/2, v + verr/2 + .05, f'{v:.2f}', fontsize=6)
+
+    ax.set_ylabel("/".join(stats.keys()) if ylabel is None else ylabel)
+    ax.set_xlabel(xlabel)
+    ax.set_xticks(positions)
+    ax.set_xticklabels(xticklabels, rotation=45)
+    ax.legend(loc=legend_loc)
+    if title is not None:
+        ax.set_title(title, loc=title_loc)
+    ax.grid(False)
+
+
+def plot_confusion_matrix(ax, cm_std, labels, title=None, title_loc=None, ):
+    cm, std = cm_std
+    ax.imshow(cm, interpolation='nearest', cmap="Blues")
+
+    tick_marks = np.arange(len(labels))
+    ax.set_xticks(tick_marks)
+    ax.set_xticklabels(labels, rotation=45)
+    ax.set_yticks(tick_marks)
+    ax.set_yticklabels(labels, rotation=0)
+
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        coeff = f'{cm[i, j]:.{2}f} \u00B1 {std[i, j]:.{2}f}'
+        ax.text(j, i-.15, f'{cm[i, j]:.{2}f}', horizontalalignment="center", verticalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black", fontsize=8)
+        ax.text(j, i+.15, f'\u00B1 {std[i, j]:.{2}f}', horizontalalignment="center", verticalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black", fontsize=6)
+
+    ax.set_ylim(len(labels) - .5, -.5)
+    ax.set_xlabel('Predicted')
+    ax.set_ylabel('Actual')
+    if title is not None:
+        ax.set_title(title, loc=title_loc)
+    ax.grid(False)
+
+
+def recursive_default_dict():
+    return lambda: defaultdict(recursive_default_dict)
 
 
 def flatten(lst):
@@ -235,8 +296,8 @@ def time_method(m, args, *d, prepend=None):
     print(f"Work completed in {datetime.timedelta(seconds=time.time() - start)}.")
 
 
-def plt_save_fig(path, dpi=300, close=True):
-    plt.savefig(path, dpi=dpi)
+def plt_save_fig(path, close=True, **kwargs):
+    plt.savefig(path, **kwargs)
     if close:
         plt.close()
 
@@ -275,22 +336,3 @@ def plt_show_img(im, title, show=True, save_path=None):
     if show:
         fig.show()
 
-
-def get_cls_TP_TN_FP_FN(cls_truth, cls_preds):
-    TP = (cls_preds & cls_truth).sum().item()
-    TN = (~cls_preds & ~cls_truth).sum().item()
-    FP = (cls_preds & ~cls_truth).sum().item()
-    FN = (~cls_preds & cls_truth).sum().item()
-    return TP, TN, FP, FN
-
-
-def acc(TP, TN, FP, FN, epsilon=1e-8):
-    return (TP + TN) / (TP + TN + FP + FN + epsilon)
-
-
-def prec(TP, TN, FP, FN, epsilon=1e-8):
-    return TP / (TP + FP + epsilon)
-
-
-def rec(TP, TN, FP, FN, epsilon=1e-8):
-    return TP / (TP + FN + epsilon)

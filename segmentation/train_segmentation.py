@@ -1,6 +1,7 @@
 import os
 import sys
 import argparse
+from functools import partial
 
 import fastai.vision.all as fv
 import fastai.distributed as fd
@@ -23,29 +24,28 @@ class ImageSegmentationTrainer(train_utils.ImageTrainer):
 
     def get_metrics(self):
         metrics_fn = {}
-        device = f"'cuda:{self.args.gpu}'"
         for cat_id, cat in zip([*range(len(self.args.cats))] + [None], self.args.cats + [self.ALL_CATS]):
-            for bg in [None, 0] if cat_id != 0 else [None]:
+            for bg in [None, self.args.bg] if cat_id != self.args.bg else [None]:
+                cat_perf = partial(segm_utils.cls_perf, cls_idx=cat_id, cats=self.args.cats, bg=bg)
                 for perf_fn in self.BASIC_PERF_FNS:
                     fn_name = f'{cat}_{perf_fn}{"" if bg is None else "_no_bg"}'
-                    code = f"def {fn_name}(inp, targ): return cls_perf(common.{perf_fn}, inp, targ, {cat_id}, " \
-                           f"{self.args.cats}, {bg}).to({device})"
-                    exec(code, {"cls_perf": segm_utils.cls_perf, 'common': common}, metrics_fn)
-        return list(metrics_fn.keys()), list(metrics_fn.values())
+                    code = f"def {fn_name}(inp, targ): return cat_perf(train_utils.{perf_fn}, inp, targ).to(inp.device)"
+                    exec(code, {"cat_perf": cat_perf, 'train_utils': train_utils}, metrics_fn)
+        return metrics_fn
 
     def create_dls(self, tr, val, bs, size):
         return self.create_dls_from_lst((fv.ImageBlock, fv.MaskBlock(args.cats)), tr.tolist(), val.tolist(),
                                         lambda x: self.get_img_mask(x), bs, size)
 
     def create_learner(self, dls):
-        metrics = self.cats_metrics_fn + [fv.foreground_acc]
+        metrics = list(self.cats_metrics.values()) + [fv.foreground_acc]
         learn = fd.rank0_first(lambda: fv.unet_learner(dls, getattr(fv, self.args.model), metrics=metrics))
         return self.prepare_learner(learn)
 
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='foreground_acc', min_delta=0.01, patience=3)
 
-    def interpret_preds(self, interp):
+    def process_preds(self, interp):
         return interp
 
 

@@ -1,6 +1,10 @@
 import os
 import sys
 import argparse
+from functools import partial
+
+import matplotlib.pyplot as plt
+
 import torch
 import fastai.vision.all as fv
 import fastai.distributed as fd
@@ -18,25 +22,26 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
 
     def get_metrics(self):
         metrics_fn = {}
+        cat_perf = partial(classif_utils.cls_perf, cats=self.args.cats)
         for cat_id, cat in zip([*range(len(self.args.cats))] + [None], self.args.cats + [self.ALL_CATS]):
             for perf_fn in self.BASIC_PERF_FNS:
                 code = f"def {cat}_{perf_fn}(inp, targ):" \
-                       f"return cls_perf(common.{perf_fn}, inp, targ, {cat_id}, {self.args.cats}).to(inp.device)"
-                exec(code, {"cls_perf": classif_utils.cls_perf, 'common': common}, metrics_fn)
-        return list(metrics_fn.keys()), list(metrics_fn.values())
+                       f"return cat_perf(train_utils.{perf_fn}, inp, targ, {cat_id}).to(inp.device)"
+                exec(code, {"cat_perf": cat_perf, 'train_utils': train_utils}, metrics_fn)
+        return metrics_fn
 
     def create_dls(self, tr, val, bs, size):
         return self.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock),
                                         tr.tolist(), val.tolist(), fv.parent_label, bs, size)
 
     def create_learner(self, dls):
-        metrics = self.cats_metrics_fn + [fv.accuracy]
+        metrics = list(self.cats_metrics.values()) + [fv.accuracy]  # for early stop callback
         if "efficientnet" in self.args.model:
             from efficientnet_pytorch import EfficientNet
             model = fd.rank0_first(lambda: EfficientNet.from_pretrained(self.args.model))
             model._fc = torch.nn.Linear(model._fc.in_features, dls.c)
-            learn = fv.Learner(dls, model, metrics=self.cats_metrics_fn,
-                               splitter=lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params))
+            model_splitter = lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params)
+            learn = fd.rank0_first(lambda: fv.Learner(dls, model, metrics=metrics, splitter=model_splitter))
         else:
             learn = fd.rank0_first(lambda: fv.cnn_learner(dls, getattr(fv, self.args.model), metrics=metrics))
         return self.prepare_learner(learn)
@@ -44,9 +49,26 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='accuracy', min_delta=0.01, patience=3)
 
-    def interpret_preds(self, interp):
-        interp.metrics = {self.cats_metrics: self.cats_metrics_fn(interp.preds, interp.targs)}
+    def process_preds(self, interp):
+        interp.cm = classif_utils.conf_mat(self.args.cats, interp.decoded, interp.targs)
         return interp
+
+    def aggregate_test_performance(self, interp_lst):
+        agg = super().aggregate_test_performance(interp_lst)
+        agg["cm"] = train_utils.tensors_mean_std([interp.cm for interp in interp_lst])
+        return agg
+
+    def plot_test_performance(self, test_path, run, agg_run_perf):
+        for show_val in [False, True]:
+            save_path = os.path.join(test_path, f'{run}{"_show_val" if show_val else ""}.jpg')
+            fig, axs = plt.subplots(1, 2, figsize=self.args.test_figsize)
+            bar_perf = {k: (v[0].numpy(), v[1].numpy()) for k, v in agg_run_perf.items() if k != 'cm'}
+            bar_cats = self.args.cats + [self.ALL_CATS]
+            common.grouped_barplot_with_err(axs[0], bar_perf, bar_cats, xlabel='Classes', show_val=show_val)
+            cm_perf = tuple(map(torch.Tensor.numpy, agg_run_perf['cm']))
+            common.plot_confusion_matrix(axs[1], cm_perf, self.args.cats)
+            fig.tight_layout(pad=.2)
+            plt.savefig(save_path, dpi=400)
 
 
 def main(args):

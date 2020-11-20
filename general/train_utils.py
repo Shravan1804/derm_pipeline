@@ -1,6 +1,9 @@
 import os
+import re
 import sys
+import pickle
 from pathlib import Path
+from collections import defaultdict
 
 import numpy as np
 from sklearn.model_selection import KFold, ShuffleSplit, StratifiedKFold, StratifiedShuffleSplit
@@ -17,7 +20,7 @@ from general import common, crypto, img_utils
 def common_train_args(parser, pdef=dict(), phelp=dict()):
     parser.add_argument('--data', type=str, required=True, help="Root dataset dir")
     parser.add_argument('--use-wl', action='store_true', help="Data dir contains wl and sl data")
-    parser.add_argument('--repeat', default=3, type=int, help="N repeat: wl pretrain -> sl train wl -> wl correct")
+    parser.add_argument('--nrepeats', default=3, type=int, help="N repeat: wl pretrain -> sl train wl -> wl correct")
     parser.add_argument('--wl-train', type=str, default='weak_labels', help="weak labels (wl) dir")
     parser.add_argument('--sl-train', type=str, default='strong_labels_train', help="strong labels (sl) dir")
     parser.add_argument('--sl-tests', type=str, nargs='+', default=['strong_labels_test'], help="sl test dirs")
@@ -61,6 +64,33 @@ def common_img_args(parser, pdef=dict(), phelp=dict()):
                         help=phelp.get('--size-facts', 'Increase progressive size factors'))
 
 
+def get_cls_TP_TN_FP_FN(cls_truth, cls_preds):
+    TP = (cls_preds & cls_truth).sum().item()
+    TN = (~cls_preds & ~cls_truth).sum().item()
+    FP = (cls_preds & ~cls_truth).sum().item()
+    FN = (~cls_preds & cls_truth).sum().item()
+    return TP, TN, FP, FN
+
+
+def accuracy(TP, TN, FP, FN, epsilon=1e-8):
+    return (TP + TN) / (TP + TN + FP + FN + epsilon)
+
+
+def precision(TP, TN, FP, FN, epsilon=1e-8):
+    return TP / (TP + FP + epsilon)
+
+
+def recall(TP, TN, FP, FN, epsilon=1e-8):
+    return TP / (TP + FN + epsilon)
+
+
+def tensors_mean_std(tensor_lst):
+    tensors = torch.cat([t.unsqueeze(0) for t in tensor_lst], dim=0)
+    mean = tensors.mean(axis=0)
+    std = tensors.std(axis=0) if len(tensor_lst) > 1 else torch.zeros_like(mean)
+    return mean, std
+
+
 def get_exp_logdir(args, image_data, custom=""):
     ws = args.num_machines * args.num_gpus
     d = f'{common.now()}_{args.model}_bs{args.bs}_epo{args.epochs}_seed{args.seed}_world{ws}'
@@ -102,20 +132,13 @@ class CustomTensorBoardCallback(fc.TensorBoardBaseCallback):
             for k, v in h.items(): self.writer.add_scalar(f'{self.run_name}_Opt_hyper/{k}_{i}', v, self.train_iter)
 
     def after_epoch(self):
-        grouped = {}
-        reduced = {}
+        grouped, reduced = defaultdict(dict), defaultdict(dict)
         for n, v in zip(self.recorder.metric_names[2:-1], self.recorder.log[2:-1]):
             if n in self.grouped_metrics:
                 perf = n.split('_')[1]
-                if perf in grouped:
-                    grouped[perf][n] = v
-                else:
-                    grouped[perf] = {n: v}
+                grouped[perf][n] = v
                 if self.all_metrics_key in n:
-                    if perf in reduced:
-                        reduced[perf][n] = v
-                    else:
-                        reduced[perf] = {n: v}
+                    reduced[perf][n] = v
             else:
                 log_group = 'Loss' if "loss" in n else 'Metrics'
                 self.writer.add_scalar(f'{self.run_name}_{log_group}/{n}', v, self.train_iter)
@@ -162,43 +185,38 @@ def prepare_training(args, image_data, custom=""):
 
 
 class FastaiTrainer:
-    def __init__(self, args, stratify):
+    def __init__(self, args, stratify, figsize=(7, 3.4)):
         self.ALL_CATS = '__all__'
-        self.BASIC_PERF_FNS = ['acc', 'prec', 'rec']
+        self.test_figsize = figsize
         self.args = args
         self.stratify = stratify
-        self.cats_metrics, self.cats_metrics_fn = self.get_metrics()
-        self.test_set_results = {}
+        self.cats_metrics = self.get_metrics()
+        self.test_set_results = {test_name: defaultdict(list) for test_name in self.args.sl_tests}
 
-    def get_metrics(self):
-        raise NotImplementedError
+    def get_metrics(self): raise NotImplementedError
 
-    def load_data(self, path):
-        raise NotImplementedError
+    def load_data(self, path): raise NotImplementedError
 
-    def get_items(self, train=True):
-        raise NotImplementedError
+    def get_items(self, train=True): raise NotImplementedError
 
-    def create_learner(self):
-        raise NotImplementedError
+    def create_learner(self): raise NotImplementedError
 
-    def create_dls(self):
-        raise NotImplementedError
+    def create_dls(self): raise NotImplementedError
 
-    def correct_wl(self):
-        raise NotImplementedError
+    def correct_wl(self): raise NotImplementedError
 
-    def train_model(self):
-        raise NotImplementedError
+    def train_model(self): raise NotImplementedError
 
-    def early_stop_cb(self):
-        raise NotImplementedError
+    def early_stop_cb(self): raise NotImplementedError
 
-    def interpret_preds(self, interp):
-        raise NotImplementedError
+    def get_sorting_run_key(self, run_name): raise NotImplementedError
+
+    def aggregate_test_performance(self, interp_lst): raise NotImplementedError
+
+    def plot_test_performance(self, test_path, agg): raise NotImplementedError
 
     def tensorboard_cb(self, run_name):
-        return CustomTensorBoardCallback(self.args.exp_logdir, run_name, self.cats_metrics, self.ALL_CATS)
+        return CustomTensorBoardCallback(self.args.exp_logdir, run_name, self.cats_metrics.keys(), self.ALL_CATS)
 
     def split_data(self, items: np.ndarray, items_cls: np.ndarray):
         np.random.seed(self.args.seed)
@@ -242,13 +260,30 @@ class FastaiTrainer:
         for test_name, test_items in self.get_items(train=False):
             dl = learn.dls.test_dl(test_items, with_labels=True)
             interp = fv.Interpretation.from_learner(learn, dl=dl)
-            self.test_set_results[f'{test_name}_{run}'] = self.interpret_preds(interp)
+            interp.metrics_res = {mn: m_fn(interp.preds, interp.targs) for mn, m_fn in self.cats_metrics.items()}
+            self.test_set_results[test_name][self.get_sorting_run_key(run)].append(self.process_preds(interp))
+        self.save_test_set_results()
+
+    def process_preds(self, interp): return interp
+
+    def save_test_set_results(self):
+        with open(os.path.join(self.args.exp_logdir, 'test_results.p'), 'wb') as f:
+            pickle.dump(self.test_set_results, f)
+
+    def generate_tests_reports(self):
+        for test_name in self.args.sl_tests:
+            test_path = common.maybe_create(self.args.exp_logdir, test_name)
+            for run, folds_results in self.test_set_results[test_name].items():
+                agg = self.aggregate_test_performance(folds_results)
+                self.plot_test_performance(test_path, run, agg)
+
 
 
 class ImageTrainer(FastaiTrainer):
     def __init__(self, args, stratify, full_img_sep):
-        super().__init__(args, stratify)
         self.full_img_sep = full_img_sep
+        self.BASIC_PERF_FNS = ['accuracy', 'precision', 'recall']
+        super().__init__(args, stratify)
 
     def get_items(self, train=True):
         if not train:
@@ -290,7 +325,7 @@ class ImageTrainer(FastaiTrainer):
             np.random.shuffle(valid_images)
             yield fold, train_images, self.get_image_cls(train_images), valid_images, self.get_image_cls(valid_images)
 
-    def progressive_resizing(self, tr, val, run_prefix):
+    def progressive_resizing(self, tr, val, fold_suffix):
         if self.args.progr_size:
             input_sizes = [int(self.args.input_size * f) for f in self.args.size_facts]
             batch_sizes = [max(1, min(int(self.args.bs / f / f), tr.size) // 2 * 2) for f in self.args.size_facts]
@@ -299,28 +334,39 @@ class ImageTrainer(FastaiTrainer):
             batch_sizes = [self.args.bs]
 
         for it, (bs, size) in enumerate(zip(batch_sizes, input_sizes)):
-            run = f'{run_prefix}__S{common.zero_pad(it, len(input_sizes))}_{size}px_bs{bs}'
+            run = f'__S{size}px_bs{bs}__{fold_suffix}'
             print(f"Iteration {it}: running {run}")
             yield it, run, self.create_dls(tr, val, bs, size)
 
-    def progressive_resizing_train(self, tr, val, run_prefix, learn=None):
-        for it, run, dls in self.progressive_resizing(tr, val, run_prefix):
+    def progressive_resizing_train(self, tr, val, fold_suffix, run_prefix="", learn=None):
+        for it, run, dls in self.progressive_resizing(tr, val, fold_suffix):
             if it == 0 and learn is None: learn = self.create_learner(dls)
-            self.basic_train_eval(learn, run, dls)
+            self.basic_train_eval(learn, f'{run_prefix}{run}', dls)
         return learn
 
     def train_model(self):
         print("Running script with args:", self.args)
         sl_images, wl_images = self.get_items()
         for fold, tr, _, val, _ in self.split_data(sl_images):
-            run_prefix = f'F{common.zero_pad(fold, self.args.nfolds)}'
+            fold_suffix = f'__F{common.zero_pad(fold, self.args.nfolds)}__'
             if fold == 0 or not self.args.use_wl:
-                learn = self.progressive_resizing_train(tr, val, f'{run_prefix}_sl_only')
+                learn = self.progressive_resizing_train(tr, val, f'{fold_suffix}sl_only')
 
             if self.args.use_wl:
                 if fold == 0: self.correct_wl(learn)
-                for repeat in range(self.args.repeat):
-                    learn = self.progressive_resizing_train(wl_images, val, f'{run_prefix}_wl_only')
-                    learn = self.progressive_resizing_train(tr, val, f'{run_prefix}_wl_sl', learn)
+                for repeat in range(self.args.nrepeats):
+                    repeat_prefix = f'__R{common.zero_pad(repeat, self.args.nrepeats)}__'
+                    learn = self.progressive_resizing_train(wl_images, val, f'{fold_suffix}wl_only', repeat_prefix)
+                    learn = self.progressive_resizing_train(tr, val, f'{fold_suffix}_wl_sl', repeat_prefix, learn)
                     self.correct_wl(learn)
+        self.generate_tests_reports()
+
+    def get_sorting_run_key(self, run_name):
+        regex = r"^(?:__R(?P<repeat>\d+)__)?__S(?P<progr_size>\d+)px_bs\d+____F(?P<fold>\d+)__.*$"
+        m = re.match(regex, run_name)
+        return run_name.replace(f'__F{m.group("fold")}__', '')
+
+    def aggregate_test_performance(self, interp_lst):
+        res = {p: [m.metrics_res[f'{c}_{p}'] for m in interp_lst] for p in self.BASIC_PERF_FNS for c in self.args.cats}
+        return {k: tensors_mean_std(v) for k, v in res.items()}
 
