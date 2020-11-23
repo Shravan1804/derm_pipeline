@@ -279,7 +279,6 @@ class FastaiTrainer:
                 self.plot_test_performance(test_path, run, agg)
 
 
-
 class ImageTrainer(FastaiTrainer):
     def __init__(self, args, stratify, full_img_sep):
         self.full_img_sep = full_img_sep
@@ -368,7 +367,9 @@ class ImageTrainer(FastaiTrainer):
         return run_name.replace(f'__F{m.group("fold")}__', '')
 
     def aggregate_test_performance(self, folds_res):
-        """Returns a dict with perf_fn as keys and lst of (mean, std) perfs for each categories"""
+        """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
         res = {p: [[m.metrics_res[f'{c}_{p}'] for m in folds_res] for c in self.args.cats] for p in self.BASIC_PERF_FNS}
-        return {p: [tensors_mean_std(vals) for vals in cat_vals] for p, cat_vals in res.items()}
+        res = {p: [tensors_mean_std(vals) for vals in cat_vals] for p, cat_vals in res.items()}
+        return {p: tuple([np.concatenate(s) for s in zip(*cat_vals)]) for p, cat_vals in res.items()}
+
 

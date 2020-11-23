@@ -62,7 +62,7 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
         for show_val in [False, True]:
             save_path = os.path.join(test_path, f'{run}{"_show_val" if show_val else ""}.jpg')
             fig, axs = plt.subplots(1, 2, figsize=self.args.test_figsize)
-            bar_perf = {p: list(zip(*cat_vals)) for p, cat_vals in agg_run_perf.items() if p != 'cm'}
+            bar_perf = {p: cat_vals for p, cat_vals in agg_run_perf.items() if p != 'cm'}
             bar_cats = self.args.cats + [self.ALL_CATS]
             common.grouped_barplot_with_err(axs[0], bar_perf, bar_cats, xlabel='Classes', show_val=show_val)
             cm_perf = tuple(map(torch.Tensor.numpy, agg_run_perf['cm']))
