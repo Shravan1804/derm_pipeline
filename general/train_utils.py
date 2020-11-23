@@ -337,7 +337,7 @@ class ImageTrainer(FastaiTrainer):
 
     def progressive_resizing_train(self, tr, val, fold_suffix, run_prefix="", learn=None):
         for it, run, dls in self.progressive_resizing(tr, val, fold_suffix):
-            if it == 0 and learn is None: learn = self.create_learner(dls)
+            if it == 0 and learn is None: learn = fd.rank0_first(lambda: self.create_learner(dls))
             self.basic_train_eval(learn, f'{run_prefix}{run}', dls)
         return learn
 
@@ -365,7 +365,8 @@ class ImageTrainer(FastaiTrainer):
 
     def aggregate_test_performance(self, folds_res):
         """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
-        res = {p: [[m.metrics_res[f'{c}_{p}'] for m in folds_res] for c in self.args.cats] for p in self.BASIC_PERF_FNS}
+        cats = self.args.cats + [self.ALL_CATS]
+        res = {p: [[m.metrics_res[f'{c}_{p}'] for m in folds_res] for c in cats] for p in self.BASIC_PERF_FNS}
         res = {p: [tensors_mean_std(vals) for vals in cat_vals] for p, cat_vals in res.items()}
         return {p: tuple([torch.stack(s).numpy() for s in zip(*cat_vals)]) for p, cat_vals in res.items()}
 

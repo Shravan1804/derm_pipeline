@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 
 import torch
 import fastai.vision.all as fv
-import fastai.distributed as fd
 from fastai.callback.tracker import EarlyStoppingCallback
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
@@ -38,12 +37,12 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
         metrics = list(self.cats_metrics.values()) + [fv.accuracy]  # for early stop callback
         if "efficientnet" in self.args.model:
             from efficientnet_pytorch import EfficientNet
-            model = fd.rank0_first(lambda: EfficientNet.from_pretrained(self.args.model))
+            model = EfficientNet.from_pretrained(self.args.model)
             model._fc = torch.nn.Linear(model._fc.in_features, dls.c)
             model_splitter = lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params)
-            learn = fd.rank0_first(lambda: fv.Learner(dls, model, metrics=metrics, splitter=model_splitter))
+            learn = fv.Learner(dls, model, metrics=metrics, splitter=model_splitter)
         else:
-            learn = fd.rank0_first(lambda: fv.cnn_learner(dls, getattr(fv, self.args.model), metrics=metrics))
+            learn = fv.cnn_learner(dls, getattr(fv, self.args.model), metrics=metrics)
         return self.prepare_learner(learn)
 
     def early_stop_cb(self):

@@ -4,7 +4,6 @@ import argparse
 from functools import partial
 
 import fastai.vision.all as fv
-import fastai.distributed as fd
 from fastai.callback.tracker import EarlyStoppingCallback
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
@@ -39,7 +38,7 @@ class ImageSegmentationTrainer(train_utils.ImageTrainer):
 
     def create_learner(self, dls):
         metrics = list(self.cats_metrics.values()) + [fv.foreground_acc]
-        learn = fd.rank0_first(lambda: fv.unet_learner(dls, getattr(fv, self.args.model), metrics=metrics))
+        learn = fv.unet_learner(dls, getattr(fv, self.args.model), metrics=metrics)
         return self.prepare_learner(learn)
 
     def early_stop_cb(self):
