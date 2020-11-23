@@ -55,14 +55,14 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
 
     def aggregate_test_performance(self, folds_res):
         agg = super().aggregate_test_performance(folds_res)
-        agg["cm"] = train_utils.tensors_mean_std([interp.cm for interp in interp_lst])
+        agg["cm"] = train_utils.tensors_mean_std([interp.cm for interp in folds_res])
         return agg
 
     def plot_test_performance(self, test_path, run, agg_run_perf):
         for show_val in [False, True]:
             save_path = os.path.join(test_path, f'{run}{"_show_val" if show_val else ""}.jpg')
             fig, axs = plt.subplots(1, 2, figsize=self.args.test_figsize)
-            bar_perf = {k: (v[0].numpy(), v[1].numpy()) for k, v in agg_run_perf.items() if k != 'cm'}
+            bar_perf = {p: list(zip(*cat_vals)) for p, cat_vals in agg_run_perf.items() if p != 'cm'}
             bar_cats = self.args.cats + [self.ALL_CATS]
             common.grouped_barplot_with_err(axs[0], bar_perf, bar_cats, xlabel='Classes', show_val=show_val)
             cm_perf = tuple(map(torch.Tensor.numpy, agg_run_perf['cm']))
