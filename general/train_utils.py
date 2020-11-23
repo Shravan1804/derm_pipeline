@@ -263,13 +263,8 @@ class FastaiTrainer:
             interp = fv.Interpretation.from_learner(learn, dl=dl)
             interp.metrics_res = {mn: m_fn(interp.preds, interp.targs) for mn, m_fn in self.cats_metrics.items()}
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(self.process_preds(interp))
-        self.save_test_set_results()
 
     def process_preds(self, interp): return interp
-
-    def save_test_set_results(self):
-        with open(os.path.join(self.args.exp_logdir, 'test_results.p'), 'wb') as f:
-            dill.dump(self.test_set_results, f)
 
     def generate_tests_reports(self):
         for test_name in self.args.sl_tests:
@@ -277,6 +272,8 @@ class FastaiTrainer:
             for run, folds_results in self.test_set_results[test_name].items():
                 agg = self.aggregate_test_performance(folds_results)
                 self.plot_test_performance(test_path, run, agg)
+                with open(os.path.join(test_path, f'{run}_test_results.p'), 'wb') as f:
+                    dill.dump(agg, f)
 
 
 class ImageTrainer(FastaiTrainer):
@@ -370,6 +367,6 @@ class ImageTrainer(FastaiTrainer):
         """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
         res = {p: [[m.metrics_res[f'{c}_{p}'] for m in folds_res] for c in self.args.cats] for p in self.BASIC_PERF_FNS}
         res = {p: [tensors_mean_std(vals) for vals in cat_vals] for p, cat_vals in res.items()}
-        return {p: tuple([torch.cat(s).numpy() for s in zip(*cat_vals)]) for p, cat_vals in res.items()}
+        return {p: tuple([torch.stack(s).numpy() for s in zip(*cat_vals)]) for p, cat_vals in res.items()}
 
 

@@ -65,7 +65,7 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
             bar_perf = {p: cat_vals for p, cat_vals in agg_run_perf.items() if p != 'cm'}
             bar_cats = self.args.cats + [self.ALL_CATS]
             common.grouped_barplot_with_err(axs[0], bar_perf, bar_cats, xlabel='Classes', show_val=show_val)
-            common.plot_confusion_matrix(axs[1], cm_perf, self.args.cats)
+            common.plot_confusion_matrix(axs[1], agg_run_perf['cm'], self.args.cats)
             fig.tight_layout(pad=.2)
             plt.savefig(save_path, dpi=400)
 
