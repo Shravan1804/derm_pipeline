@@ -204,7 +204,7 @@ class FastaiTrainer:
 
     def create_dls(self): raise NotImplementedError
 
-    def correct_wl(self): raise NotImplementedError
+    def correct_wl(self, wl_items, preds): raise NotImplementedError
 
     def train_model(self): raise NotImplementedError
 
@@ -256,6 +256,14 @@ class FastaiTrainer:
             self.evaluate_on_test_set(learn, run)
         save_path = os.path.join(self.args.exp_logdir, f'{run}_model')
         save_learner(learn, is_fp16=(not self.args.full_precision), save_path=save_path)
+
+    def evaluate_and_correct_wl(self, learn, wl_items, run):
+        dl = learn.dls.test_dl(wl_items, with_labels=True)
+        _, targs, decoded_preds = learn.get_preds(dl=dl, with_decoded=True)
+        changes = self.correct_wl(wl_items, decoded_preds)
+        with open(os.path.join(self.args.exp_logdir, f'{common.now()}_{run}__wl_changes.txt'), 'w') as changelog:
+            changelog.write('file;old_label;new_label\n')
+            changelog.write(changes)
 
     def evaluate_on_test_set(self, learn, run):
         for test_name, test_items in self.get_items(train=False):
@@ -350,12 +358,12 @@ class ImageTrainer(FastaiTrainer):
                 learn = self.progressive_resizing_train(tr, val, f'{fold_suffix}sl_only')
 
             if self.args.use_wl:
-                if fold == 0: self.correct_wl(learn)
+                if fold == 0: self.evaluate_and_correct_wl(learn, wl_images, f'{fold_suffix}sl_only')
                 for repeat in range(self.args.nrepeats):
                     repeat_prefix = f'__R{common.zero_pad(repeat, self.args.nrepeats)}__'
                     learn = self.progressive_resizing_train(wl_images, val, f'{fold_suffix}wl_only', repeat_prefix)
                     learn = self.progressive_resizing_train(tr, val, f'{fold_suffix}_wl_sl', repeat_prefix, learn)
-                    self.correct_wl(learn)
+                    self.evaluate_and_correct_wl(learn, wl_images, f'{fold_suffix}_wl_sl')
         self.generate_tests_reports()
 
     def get_sorting_run_key(self, run_name):

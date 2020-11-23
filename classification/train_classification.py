@@ -1,8 +1,10 @@
 import os
 import sys
+import shutil
 import argparse
 from functools import partial
 
+import numpy as np
 import matplotlib.pyplot as plt
 
 import torch
@@ -44,6 +46,17 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
         else:
             learn = fv.cnn_learner(dls, getattr(fv, self.args.model), metrics=metrics)
         return self.prepare_learner(learn)
+
+    def correct_wl(self, wl_items, preds):
+        wl_items = np.array(wl_items)
+        current_labels = self.get_image_cls(wl_items)
+        preds = np.array(self.args.cats)[preds.numpy()]
+        corr = current_labels != preds
+        changes = ""
+        for item, item_cls, pred in zip(wl_items[corr], current_labels[corr], preds[corr]):
+            shutil.move(item, item.replace(f'/{item_cls}/', f'/{pred}/'))
+            changes += f'{item};{item_cls};{pred}\n'
+        return changes
 
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='accuracy', min_delta=0.01, patience=3)
