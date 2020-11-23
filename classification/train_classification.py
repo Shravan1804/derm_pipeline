@@ -55,7 +55,7 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
 
     def aggregate_test_performance(self, folds_res):
         agg = super().aggregate_test_performance(folds_res)
-        agg["cm"] = train_utils.tensors_mean_std([interp.cm for interp in folds_res])
+        agg["cm"] = tuple([s.numpy() for s in train_utils.tensors_mean_std([interp.cm for interp in folds_res])])
         return agg
 
     def plot_test_performance(self, test_path, run, agg_run_perf):
@@ -65,7 +65,6 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
             bar_perf = {p: cat_vals for p, cat_vals in agg_run_perf.items() if p != 'cm'}
             bar_cats = self.args.cats + [self.ALL_CATS]
             common.grouped_barplot_with_err(axs[0], bar_perf, bar_cats, xlabel='Classes', show_val=show_val)
-            cm_perf = tuple(map(torch.Tensor.numpy, agg_run_perf['cm']))
             common.plot_confusion_matrix(axs[1], cm_perf, self.args.cats)
             fig.tight_layout(pad=.2)
             plt.savefig(save_path, dpi=400)

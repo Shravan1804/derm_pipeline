@@ -86,11 +86,11 @@ def recall(TP, TN, FP, FN, epsilon=1e-8):
     return TP / (TP + FN + epsilon)
 
 
-def tensors_mean_std(tensor_lst, to_np=True):
+def tensors_mean_std(tensor_lst):
     tensors = torch.cat([t.unsqueeze(0) for t in tensor_lst], dim=0)
     mean = tensors.mean(axis=0)
     std = tensors.std(axis=0) if len(tensor_lst) > 1 else torch.zeros_like(mean)
-    return (mean.numpy(), std.numpy()) if to_np else (mean, std)
+    return mean, std
 
 
 def get_exp_logdir(args, image_data, custom=""):
@@ -370,6 +370,6 @@ class ImageTrainer(FastaiTrainer):
         """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
         res = {p: [[m.metrics_res[f'{c}_{p}'] for m in folds_res] for c in self.args.cats] for p in self.BASIC_PERF_FNS}
         res = {p: [tensors_mean_std(vals) for vals in cat_vals] for p, cat_vals in res.items()}
-        return {p: tuple([np.concatenate(s) for s in zip(*cat_vals)]) for p, cat_vals in res.items()}
+        return {p: tuple([torch.cat(s).numpy() for s in zip(*cat_vals)]) for p, cat_vals in res.items()}
 
 
