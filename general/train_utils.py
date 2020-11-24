@@ -250,6 +250,7 @@ class FastaiTrainer:
         return learn
 
     def basic_train(self, learn, run, dls):
+        print("Training model:", run)
         learn.dls = dls
         with learn.distrib_ctx():
             learn.fine_tune(self.args.epochs, cbs=self.get_train_cbs(run))
@@ -257,6 +258,7 @@ class FastaiTrainer:
         save_learner(learn, is_fp16=(not self.args.full_precision), save_path=save_path)
 
     def evaluate_and_correct_wl(self, learn, wl_items, run):
+        print("Evaluating WL data:", run)
         dl = learn.dls.test_dl(wl_items, with_labels=True)
         with learn.distrib_ctx():
             _, targs, decoded_preds = learn.get_preds(dl=dl, with_decoded=True)
@@ -266,6 +268,7 @@ class FastaiTrainer:
             changelog.write(changes)
 
     def evaluate_on_test_set(self, learn, run):
+        print("Testing model:", run)
         for test_name, test_items in self.get_items(train=False):
             dl = learn.dls.test_dl(test_items, with_labels=True)
             with learn.distrib_ctx():
