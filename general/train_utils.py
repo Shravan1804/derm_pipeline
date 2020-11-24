@@ -175,7 +175,7 @@ def prepare_training(args, image_data, custom=""):
     common.set_seeds(args.seed)
 
     assert torch.cuda.is_available(), "Cannot run without CUDA device"
-    torch.cuda.set_device(args.gpu)
+    fd.setup_distrib(args.gpu)
 
     if args.encrypted:
         args.user_key = os.environ.get('CRYPTO_KEY', "").encode()
@@ -249,17 +249,17 @@ class FastaiTrainer:
             learn.to_fp16()
         return learn
 
-    def basic_train_eval(self, learn, run, dls):
+    def basic_train(self, learn, run, dls):
         learn.dls = dls
         with learn.distrib_ctx():
             learn.fine_tune(self.args.epochs, cbs=self.get_train_cbs(run))
-            self.evaluate_on_test_set(learn, run)
         save_path = os.path.join(self.args.exp_logdir, f'{run}_model')
         save_learner(learn, is_fp16=(not self.args.full_precision), save_path=save_path)
 
     def evaluate_and_correct_wl(self, learn, wl_items, run):
         dl = learn.dls.test_dl(wl_items, with_labels=True)
-        _, targs, decoded_preds = learn.get_preds(dl=dl, with_decoded=True)
+        with learn.distrib_ctx():
+            _, targs, decoded_preds = learn.get_preds(dl=dl, with_decoded=True)
         changes = self.correct_wl(wl_items, decoded_preds)
         with open(os.path.join(self.args.exp_logdir, f'{common.now()}_{run}__wl_changes.txt'), 'w') as changelog:
             changelog.write('file;old_label;new_label\n')
@@ -268,7 +268,8 @@ class FastaiTrainer:
     def evaluate_on_test_set(self, learn, run):
         for test_name, test_items in self.get_items(train=False):
             dl = learn.dls.test_dl(test_items, with_labels=True)
-            interp = fv.Interpretation.from_learner(learn, dl=dl)
+            with learn.distrib_ctx():
+                interp = fv.Interpretation.from_learner(learn, dl=dl)
             interp.metrics_res = {mn: m_fn(interp.preds, interp.targs) for mn, m_fn in self.cats_metrics.items()}
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(self.process_preds(interp))
 
@@ -346,7 +347,8 @@ class ImageTrainer(FastaiTrainer):
     def progressive_resizing_train(self, tr, val, fold_suffix, run_prefix="", learn=None):
         for it, run, dls in self.progressive_resizing(tr, val, fold_suffix):
             if it == 0 and learn is None: learn = fd.rank0_first(lambda: self.create_learner(dls))
-            self.basic_train_eval(learn, f'{run_prefix}{run}', dls)
+            self.basic_train(learn, f'{run_prefix}{run}', dls)
+            self.evaluate_on_test_set(learn, run)
         return learn
 
     def train_model(self):
