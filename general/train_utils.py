@@ -1,10 +1,11 @@
 import os
 import re
 import sys
-import dill
+import argparse
 from pathlib import Path
 from collections import defaultdict
 
+import dill
 import numpy as np
 from sklearn.model_selection import KFold, ShuffleSplit, StratifiedKFold, StratifiedShuffleSplit
 
@@ -15,55 +16,6 @@ import fastai.callback.tensorboard as fc
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common, crypto, img_utils
-
-
-def common_train_args(parser, pdef=dict(), phelp=dict()):
-    parser.add_argument('--data', type=str, required=True, help="Root dataset dir")
-    parser.add_argument('--use-wl', action='store_true', help="Data dir contains wl and sl data")
-    parser.add_argument('--nrepeats', default=3, type=int, help="N repeat: wl pretrain -> sl train wl -> wl correct")
-    parser.add_argument('--wl-train', type=str, default='weak_labels', help="weak labels (wl) dir")
-    parser.add_argument('--sl-train', type=str, default='strong_labels_train', help="strong labels (sl) dir")
-    parser.add_argument('--sl-tests', type=str, nargs='+', default=['strong_labels_test'], help="sl test dirs")
-    parser.add_argument('--cats', type=str, nargs='+', default=pdef.get('--cats', None),
-                        help=phelp.get('--cats', "Categories"))
-
-    parser.add_argument('-name', '--exp-name', required=True, help='Custom string to append to experiment log dir')
-    parser.add_argument('--logdir', type=str, default=pdef.get('--logdir', get_root_logdir(None)),
-                        help=phelp.get('--logdir', "Root directory where logs will be saved, default to $HOME/logs"))
-    parser.add_argument('--exp-logdir', type=str, help="Experiment logdir, will be created in root log dir")
-    parser.add_argument('--test-figsize', type=float, nargs='+', default=pdef.get('--test-figsize', [7, 3.4]),
-                        help=phelp.get('--test-figsize', "figsize of test performance plots"))
-
-    parser.add_argument('--encrypted', action='store_true', help="Data is encrypted")
-    parser.add_argument('--user-key', type=str, help="Data encryption key")
-
-    parser.add_argument('--cross-val', action='store_true', help="Perform 5-fold cross validation on sl train set")
-    parser.add_argument('--nfolds', default=5, type=int, help="Number of folds for cross val")
-    parser.add_argument('--valid-size', default=.2, type=float, help='If no cross val, splits train set with this %')
-
-    parser.add_argument('--model', type=str, default=pdef.get('--model', None), help=phelp.get('--model', "Model name"))
-    parser.add_argument('--bs', default=pdef.get('--bs', 6), type=int, help="Batch size")
-    parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 26), help='Number of total epochs to run')
-
-    parser.add_argument('--no-norm', action='store_true', help="Do not normalizes images to imagenet stats")
-    parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
-    parser.add_argument('--early-stop', action='store_true', help="Early stopping during training")
-    parser.add_argument('--correct-wl-labels', action='store_true', help="Correct weak train labels")
-
-    parser.add_argument('--gpu', type=int, required=True, help="Id of gpu to be used by script")
-    parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
-    parser.add_argument("--num-machines", type=int, default=1, help="number of machines")
-
-    parser.add_argument('--seed', type=int, default=pdef.get('--seed', 42), help="Random seed")
-
-
-def common_img_args(parser, pdef=dict(), phelp=dict()):
-    parser.add_argument('--input-size', default=pdef.get('--input-size', 512), type=int,
-                        help=phelp.get('--input-size', "Model input will be resized to this value"))
-    parser.add_argument('--progr-size', action='store_true',
-                        help=phelp.get('--progr-size', "Applies progressive resizing"))
-    parser.add_argument('--size-facts', default=pdef.get('--size-facts', [.5, .75,  1]), nargs='+', type=float,
-                        help=phelp.get('--size-facts', 'Increase progressive size factors'))
 
 
 def get_cls_TP_TN_FP_FN(cls_truth, cls_preds):
@@ -93,25 +45,24 @@ def tensors_mean_std(tensor_lst):
     return mean, std
 
 
-def get_exp_logdir(args, image_data, custom=""):
-    ws = args.num_machines * args.num_gpus
-    d = f'{common.now()}_{args.model}_bs{args.bs}_epo{args.epochs}_seed{args.seed}_world{ws}'
-    d += '' if args.no_norm else '_normed'
-    d += '_fp32' if args.full_precision else '_fp16'
-    d += f'_CV{args.nfolds}' if args.cross_val else f'_noCV_valid{args.valid_size}'
-    d += '_WL' if args.use_wl else '_SL'
-    if image_data:
-        d += f'_input{args.input_size}'
-        d += f'_progr-size{"_".join(map(str, args.size_facts))}' if args.progr_size else ""
-    d += f'_{custom}_{args.exp_name}'
-    return d
+def save_learner(learn, is_fp16, save_path):
+    learn.remove_cb(CustomTensorBoardCallback)
+    if is_fp16:
+        learn.to_fp32()
+    learn.save(save_path)
+    if is_fp16:
+        learn.to_fp16()
 
 
-def get_root_logdir(logdir):
-    if logdir is not None and os.path.exists(logdir) and os.path.isdir(logdir):
-        return logdir
-    else:
-        return os.path.join(str(Path.home()), 'logs')
+def split_model(model, splits):
+    """Inspired from fastai 1, splits model on requested top level children"""
+    top_children = list(model.children())
+    idxs = [top_children.index(split) for split in splits]
+    assert idxs == sorted(idxs), f"Provided splits ({splits}) are not sorted."
+    assert len(idxs) > 0, f"Provided splits ({splits}) not found in top level children: {top_children}"
+    if idxs[0] != 0: idxs = [0] + idxs
+    if idxs[-1] != len(top_children): idxs.append(len(top_children))
+    return [torch.nn.Sequential(*top_children[i:j]) for i, j in zip(idxs[:-1], idxs[1:])]
 
 
 class CustomTensorBoardCallback(fc.TensorBoardBaseCallback):
@@ -150,43 +101,73 @@ class CustomTensorBoardCallback(fc.TensorBoardBaseCallback):
             self.writer.add_scalars(f'{self.run_name}_Metrics/{self.all_metrics_key}_{n}', v, self.train_iter)
 
 
-def save_learner(learn, is_fp16, save_path):
-    learn.remove_cb(CustomTensorBoardCallback)
-    if is_fp16:
-        learn.to_fp32()
-    learn.save(save_path)
-    if is_fp16:
-        learn.to_fp16()
-
-
-def split_model(model, splits):
-    """Inspired from fastai 1, splits model on requested top level children"""
-    top_children = list(model.children())
-    idxs = [top_children.index(split) for split in splits]
-    assert idxs == sorted(idxs), f"Provided splits ({splits}) are not sorted."
-    assert len(idxs) > 0, f"Provided splits ({splits}) not found in top level children: {top_children}"
-    if idxs[0] != 0: idxs = [0] + idxs
-    if idxs[-1] != len(top_children): idxs.append(len(top_children))
-    return [torch.nn.Sequential(*top_children[i:j]) for i, j in zip(idxs[:-1], idxs[1:])]
-
-
-def prepare_training(args, image_data, custom=""):
-    common.check_dir_valid(args.data)
-    common.set_seeds(args.seed)
-
-    assert torch.cuda.is_available(), "Cannot run without CUDA device"
-    fd.setup_distrib(args.gpu)
-
-    if args.encrypted:
-        args.user_key = os.environ.get('CRYPTO_KEY', "").encode()
-        args.user_key = crypto.request_key(args.data, args.user_key)
-
-    if args.exp_logdir is None:
-        args.exp_logdir = common.maybe_create(args.logdir, get_exp_logdir(args, image_data, custom))
-    print("Creation of log directory: ", args.exp_logdir)
-
-
 class FastaiTrainer:
+    @staticmethod
+    def get_argparser(desc="Fastai trainer arguments", pdef=dict(), phelp=dict()):
+        parser = argparse.ArgumentParser(description=desc)
+        parser.add_argument('--use-wl', action='store_true', help="Data dir contains wl and sl data")
+        parser.add_argument('--nrepeats', default=3, type=int, help="N repeat: wl pretrain -> sl train -> wl correct")
+        parser.add_argument('--wl-train', type=str, help="weak labels (wl) dir")
+        parser.add_argument('--sl-train', type=str, help="strong labels (sl) dir")
+        parser.add_argument('--sl-tests', type=str, nargs='+', help="sl test dirs")
+
+        parser.add_argument('--encrypted', action='store_true', help="Data is encrypted")
+        parser.add_argument('--user-key', type=str, help="Data encryption key")
+
+        parser.add_argument('--cross-val', action='store_true', help="Perform 5-fold cross validation on sl train set")
+        parser.add_argument('--nfolds', default=5, type=int, help="Number of folds for cross val")
+        parser.add_argument('--valid-size', default=.2, type=float, help='If no cv, splits train set with this %')
+
+        parser.add_argument('-name', '--exp-name', required=True, help='Custom string to append to experiment log dir')
+        parser.add_argument('--logdir', type=str, default=pdef.get('--logdir', os.path.join(str(Path.home()), 'logs')),
+                            help=phelp.get('--logdir', "Root dir where logs will be saved, default to $HOME/logs"))
+        parser.add_argument('--exp-logdir', type=str, help="Experiment logdir, will be created in root log dir")
+        parser.add_argument('--test-figsize', type=float, nargs='+', default=pdef.get('--test-figsize', [7, 3.4]),
+                            help=phelp.get('--test-figsize', "figsize of test performance plots"))
+
+        parser.add_argument('--model', type=str, default=pdef.get('--model', None), help="Model name")
+        parser.add_argument('--bs', default=pdef.get('--bs', 6), type=int, help="Batch size")
+        parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 26), help='Number of epochs to run')
+
+        parser.add_argument('--no-norm', action='store_true', help="Do not normalizes data")
+        parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
+        parser.add_argument('--early-stop', action='store_true', help="Early stopping during training")
+
+        parser.add_argument('--gpu', type=int, required=True, help="Id of gpu to be used by script")
+        parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
+        parser.add_argument("--num-machines", type=int, default=1, help="number of machines")
+
+        parser.add_argument('--seed', type=int, default=pdef.get('--seed', 42), help="Random seed")
+
+        return parser
+
+    @staticmethod
+    def get_exp_logdir(args, custom=""):
+        d = f'{common.now()}_{args.model}_bs{args.bs}_epo{args.epochs}_seed{args.seed}' \
+            f'_world{args.num_machines * args.num_gpus}'
+        d += '' if args.no_norm else '_normed'
+        d += '_fp32' if args.full_precision else '_fp16'
+        d += f'_CV{args.nfolds}' if args.cross_val else f'_noCV_valid{args.valid_size}'
+        d += '_WL' if args.use_wl else '_SL'
+        d += f'_{custom}_{args.exp_name}'
+        return d
+
+    @staticmethod
+    def prepare_training(args):
+        common.set_seeds(args.seed)
+
+        assert torch.cuda.is_available(), "Cannot run without CUDA device"
+        fd.setup_distrib(args.gpu)
+
+        if args.encrypted:
+            args.user_key = os.environ.get('CRYPTO_KEY', "").encode()
+            args.user_key = crypto.request_key(args.data, args.user_key)
+
+        if args.exp_logdir is None:
+            args.exp_logdir = os.path.join(args.logdir, FastaiTrainer.get_exp_logdir(args))
+        args.exp_logdir = fd.rank0_first(lambda: common.maybe_create(args.exp_logdir))
+        print("Log directory: ", args.exp_logdir)
+
     def __init__(self, args, stratify):
         self.ALL_CATS = '__all__'
         self.args = args
@@ -198,7 +179,9 @@ class FastaiTrainer:
 
     def load_data(self, path): raise NotImplementedError
 
-    def get_items(self, train=True): raise NotImplementedError
+    def get_test_sets_items(self): raise NotImplementedError
+
+    def get_train_items(self): raise NotImplementedError
 
     def create_learner(self): raise NotImplementedError
 
@@ -262,14 +245,15 @@ class FastaiTrainer:
         dl = learn.dls.test_dl(wl_items, with_labels=True)
         with learn.distrib_ctx():
             _, targs, decoded_preds = learn.get_preds(dl=dl, with_decoded=True)
-        changes = self.correct_wl(wl_items, decoded_preds)
+        wl_items, changes = self.correct_wl(wl_items, decoded_preds)
         with open(os.path.join(self.args.exp_logdir, f'{common.now()}_{run}__wl_changes.txt'), 'w') as changelog:
             changelog.write('file;old_label;new_label\n')
             changelog.write(changes)
+        return wl_items
 
-    def evaluate_on_test_set(self, learn, run):
+    def evaluate_on_test_sets(self, learn, run):
         print("Testing model:", run)
-        for test_name, test_items in self.get_items(train=False):
+        for test_name, test_items in self.get_test_items():
             dl = learn.dls.test_dl(test_items, with_labels=True)
             with learn.distrib_ctx():
                 interp = fv.Interpretation.from_learner(learn, dl=dl)
@@ -289,26 +273,60 @@ class FastaiTrainer:
 
 
 class ImageTrainer(FastaiTrainer):
+    @staticmethod
+    def get_argparser(desc="Fastai image trainer arguments", pdef=dict(), phelp=dict()):
+        # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
+        parser = super(ImageTrainer, ImageTrainer).get_argparser(desc, pdef, phelp)
+        parser.add_argument('--data', type=str, required=True, help="Root dataset dir")
+
+        parser.add_argument('--cats', type=str, nargs='+', default=pdef.get('--cats', None),
+                            help=phelp.get('--cats', "Object categories"))
+
+        parser.add_argument('--input-size', default=pdef.get('--input-size', 512), type=int,
+                            help=phelp.get('--input-size', "Model input will be resized to this value"))
+        parser.add_argument('--progr-size', action='store_true',
+                            help=phelp.get('--progr-size', "Applies progressive resizing"))
+        parser.add_argument('--size-facts', default=pdef.get('--size-facts', [.5, .75, 1]), nargs='+', type=float,
+                            help=phelp.get('--size-facts', 'Increase progressive size factors'))
+        return parser
+
+    @staticmethod
+    def get_exp_logdir(args, custom=""):
+        d = f'_input{args.input_size}'
+        d += f'_progr-size{"_".join(map(str, args.size_facts))}' if args.progr_size else ""
+        return super(ImageTrainer, ImageTrainer).get_exp_logdir(custom=d)
+
+    @staticmethod
+    def prepare_training(args):
+        common.check_dir_valid(args.data)
+        if args.exp_logdir is None:
+            args.exp_logdir = os.path.join(args.logdir, ImageTrainer.get_exp_logdir(args))
+        super(ImageTrainer, ImageTrainer).prepare_training(args)
+
     def __init__(self, args, stratify, full_img_sep):
         self.full_img_sep = full_img_sep
         self.BASIC_PERF_FNS = ['accuracy', 'precision', 'recall']
         super().__init__(args, stratify)
 
-    def get_items(self, train=True):
-        if not train:
-            return [(os.path.basename(p), self.load_data(p)) for p in self.get_data_path(train=False)]
-        sl_images = self.load_data(self.get_data_path())
-        wl_images = self.load_data(self.get_data_path(weak_labels=True)) if self.args.use_wl else None
+    def get_test_sets_items(self):
+        if self.args.sl_tests is None:
+            return np.array([])
+        test_sets_items = []
+        for test_dir in self.args.sl_tests:
+            test_sets_items.append((test_dir, self.load_data(os.path.join(self.args.data, test_dir))))
+        return test_sets_items
+
+    def get_train_items(self):
+        sl_images = self.load_data(os.path.join(self.args.data, self.args.sl_train))
+        if self.args.use_wl:
+            wl_images = self.load_data(os.path.join(self.args.data, self.args.wl_train))
+        else:
+            wl_images = np.array([])
         return sl_images, wl_images
 
-    def get_data_path(self, train=True, weak_labels=False):
-        if not train:
-            return [os.path.join(self.args.data, test_dir) for test_dir in self.args.sl_tests]
-        else:
-            return os.path.join(self.args.data, self.args.wl_train if weak_labels else self.args.sl_train)
-
-    def get_image_cls(self, img_paths):
-        return np.array([os.path.basename(os.path.dirname(img_path)) for img_path in img_paths])
+    def get_images_cls(self, images):
+        if self.stratify: raise NotImplementedError
+        else: return np.ones_like(images)
 
     def create_dls_from_lst(self, blocks, tr, val, get_y, bs, size):
         tfms = fv.aug_transforms(size=size)
@@ -327,12 +345,12 @@ class ImageTrainer(FastaiTrainer):
         full_images_dict = img_utils.get_full_img_dict(items, self.full_img_sep)
         full_images = np.array(list(full_images_dict.keys()))
 
-        for fold, tr, _, val, _ in super().split_data(full_images, self.get_image_cls(full_images)):
-            train_images = np.array([i for fi in tr for i in full_images_dict[fi]])
-            valid_images = np.array([i for fi in val for i in full_images_dict[fi]])
-            np.random.shuffle(train_images)
-            np.random.shuffle(valid_images)
-            yield fold, train_images, self.get_image_cls(train_images), valid_images, self.get_image_cls(valid_images)
+        for fold, tr, _, val, _ in super().split_data(full_images, self.get_images_cls(full_images)):
+            tr_images = np.array([i for fi in tr for i in full_images_dict[fi]])
+            val_images = np.array([i for fi in val for i in full_images_dict[fi]])
+            np.random.shuffle(tr_images)
+            np.random.shuffle(val_images)
+            yield fold, tr_images, self.get_images_cls(tr_images), val_images, self.get_images_cls(val_images)
 
     def progressive_resizing(self, tr, val, fold_suffix):
         if self.args.progr_size:
@@ -351,24 +369,24 @@ class ImageTrainer(FastaiTrainer):
         for it, run, dls in self.progressive_resizing(tr, val, fold_suffix):
             if it == 0 and learn is None: learn = fd.rank0_first(lambda: self.create_learner(dls))
             self.basic_train(learn, f'{run_prefix}{run}', dls)
-            self.evaluate_on_test_set(learn, run)
+            self.evaluate_on_test_sets(learn, run)
         return learn
 
     def train_model(self):
         print("Running script with args:", self.args)
-        sl_images, wl_images = self.get_items()
+        sl_images, wl_images = self.get_train_items()
         for fold, tr, _, val, _ in self.split_data(sl_images):
             fold_suffix = f'__F{common.zero_pad(fold, self.args.nfolds)}__'
             if fold == 0 or not self.args.use_wl:
                 learn = self.progressive_resizing_train(tr, val, f'{fold_suffix}sl_only')
 
             if self.args.use_wl:
-                if fold == 0: self.evaluate_and_correct_wl(learn, wl_images, f'{fold_suffix}sl_only')
+                if fold == 0: wl_images = self.evaluate_and_correct_wl(learn, wl_images, f'{fold_suffix}sl_only')
                 for repeat in range(self.args.nrepeats):
                     repeat_prefix = f'__R{common.zero_pad(repeat, self.args.nrepeats)}__'
                     learn = self.progressive_resizing_train(wl_images, val, f'{fold_suffix}wl_only', repeat_prefix)
                     learn = self.progressive_resizing_train(tr, val, f'{fold_suffix}_wl_sl', repeat_prefix, learn)
-                    self.evaluate_and_correct_wl(learn, wl_images, f'{fold_suffix}_wl_sl')
+                    wl_images = self.evaluate_and_correct_wl(learn, wl_images, f'{fold_suffix}_wl_sl')
         self.generate_tests_reports()
 
     def get_sorting_run_key(self, run_name):

@@ -3,6 +3,8 @@ import sys
 import argparse
 from functools import partial
 
+import numpy as np
+
 import fastai.vision.all as fv
 from fastai.callback.tracker import EarlyStoppingCallback
 
@@ -14,7 +16,7 @@ from segmentation.crop_to_thresh import SEP as CROP_SEP
 
 class ImageSegmentationTrainer(train_utils.ImageTrainer):
     def load_data(self, path):
-        return common.list_files(os.path.join(path, self.args.img_dir), full_path=True, posix_path=True)
+        return np.array(common.list_files(os.path.join(path, self.args.img_dir), full_path=True, posix_path=True))
 
     def get_img_mask(self, img_path):
         file, ext = os.path.splitext(img_path)

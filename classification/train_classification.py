@@ -19,7 +19,10 @@ import classification.classification_utils as classif_utils
 
 class ImageClassificationTrainer(train_utils.ImageTrainer):
     def load_data(self, path):
-        return common.list_files_in_dirs(path, full_path=True, posix_path=True)
+        return np.array(common.list_files_in_dirs(path, full_path=True, posix_path=True))
+
+    def get_images_cls(self, images):
+        return np.array([os.path.basename(os.path.dirname(img_path)) for img_path in images])
 
     def get_metrics(self):
         metrics_fn = {}
@@ -53,10 +56,14 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
         preds = np.array(self.args.cats)[preds.numpy()]
         corr = current_labels != preds
         changes = ""
+        changed_items = []
         for item, item_cls, pred in zip(wl_items[corr], current_labels[corr], preds[corr]):
-            shutil.move(item, item.replace(f'/{item_cls}/', f'/{pred}/'))
+            new_item = str(item).replace(f'/{item_cls}/', f'/{pred}/')
+            shutil.move(item, new_item)
             changes += f'{item};{item_cls};{pred}\n'
-        return changes
+            changed_items.append(new_item)
+        wl_items[corr] = np.array(changed_items)
+        return wl_items, changes
 
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='accuracy', min_delta=0.01, patience=3)
@@ -88,14 +95,14 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Train Fastai classification")
-    train_utils.common_train_args(parser, pdef={'--bs': 6, '--model': 'resnet34'})
-    train_utils.common_img_args(parser, pdef={'--input-size': 256})
+    defaults = {'--bs': 6, '--model': 'resnet34', '--input-size': 256}
+    parser = ImageClassificationTrainer.get_argparser(desc="Fastai image classification", pdef=defaults)
     args = parser.parse_args()
 
-    train_utils.prepare_training(args, image_data=True, custom="classification")
-
+    args.exp_name = "img_classif_"+args.exp_name
     if args.cats is None:
         args.cats = common.list_dirs(os.path.join(args.data, args.sl_train), full_path=False)
+
+    ImageClassificationTrainer.prepare_training(args)
 
     common.time_method(main, args, prepend=f"GPU {args.gpu} proc: ")
