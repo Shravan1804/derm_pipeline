@@ -179,7 +179,8 @@ class FastaiTrainer:
 
     def get_train_cbs(self, run):
         cbs = []
-        cbs.append(self.tensorboard_cb(run))
+        if self.is_master_process():
+            cbs.append(self.tensorboard_cb(run))
         if self.args.early_stop:
             cbs.append(self.early_stop_cb())
         return cbs

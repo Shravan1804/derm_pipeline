@@ -199,14 +199,15 @@ class ImageTBCb(fc.TensorBoardBaseCallback):
         for n, v in zip(self.recorder.metric_names[2:-1], self.recorder.log[2:-1]):
             if n in self.grouped_metrics:
                 perf = n.split('_')[1]
-                grouped[perf][n] = v
                 if self.all_cats in n:
                     reduced[perf][n] = v
+                else:
+                    grouped[perf][n] = v
             else:
                 log_group = 'Loss' if "loss" in n else 'Metrics'
                 self.writer.add_scalar(f'{self.run_name}_{log_group}/{n}', v, self.train_iter)
-        for n, v in grouped.items():
-            self.writer.add_scalars(f'{self.run_name}_Metrics/{n}', v, self.train_iter)
+        for perf, v in grouped.items():
+            self.writer.add_scalars(f'{self.run_name}_Metrics/{perf}', v, self.train_iter)
         for n, v in reduced.items():
             self.writer.add_scalars(f'{self.run_name}_Metrics/{self.all_cats}_{n}', v, self.train_iter)
 
