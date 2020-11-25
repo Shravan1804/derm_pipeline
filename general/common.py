@@ -290,8 +290,14 @@ def print_prepend(msg):
 
 
 def time_method(m, args, *d, prepend=None):
+    #### 3.6 alternative to contextlib.nullcontext()
+    from contextlib import contextmanager
+    @contextmanager
+    def nullcontext(enter_result=None):
+        yield enter_result
+    ####
     start = time.time()
-    with contextlib.nullcontext() if prepend is None else contextlib.redirect_stdout(print_prepend(prepend)):
+    with nullcontext() if prepend is None else contextlib.redirect_stdout(print_prepend(prepend)):
         m(args, *d)
     print(f"Work completed in {datetime.timedelta(seconds=time.time() - start)}.")
 
