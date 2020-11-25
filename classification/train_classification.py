@@ -1,7 +1,5 @@
 import os
 import sys
-import shutil
-import argparse
 from functools import partial
 
 import numpy as np
@@ -19,7 +17,8 @@ import classification.classification_utils as classif_utils
 
 class ImageClassificationTrainer(train_utils.ImageTrainer):
     def load_data(self, path):
-        return np.array(common.list_files_in_dirs(path, full_path=True, posix_path=True))
+        images = common.list_files_in_dirs(path, full_path=True, posix_path=True)
+        return np.array(images), self.get_images_cls(images)
 
     def get_images_cls(self, images):
         return np.array([os.path.basename(os.path.dirname(img_path)) for img_path in images])
@@ -36,7 +35,7 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
 
     def create_dls(self, tr, val, bs, size):
         return self.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock),
-                                        tr.tolist(), val.tolist(), fv.parent_label, bs, size)
+                                        tr.tolist(), val.tolist(), lambda x: x[1], bs, size)
 
     def create_learner(self, dls):
         metrics = list(self.cats_metrics.values()) + [fv.accuracy]  # for early stop callback
@@ -50,20 +49,13 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
             learn = fv.cnn_learner(dls, getattr(fv, self.args.model), metrics=metrics)
         return self.prepare_learner(learn)
 
-    def correct_wl(self, wl_items, preds):
-        wl_items = np.array(wl_items)
-        current_labels = self.get_image_cls(wl_items)
+    def correct_wl(self, wl_items_with_labels, preds):
+        wl_items, labels = wl_items_with_labels
         preds = np.array(self.args.cats)[preds.numpy()]
-        corr = current_labels != preds
-        changes = ""
-        changed_items = []
-        for item, item_cls, pred in zip(wl_items[corr], current_labels[corr], preds[corr]):
-            new_item = str(item).replace(f'/{item_cls}/', f'/{pred}/')
-            shutil.move(item, new_item)
-            changes += f'{item};{item_cls};{pred}\n'
-            changed_items.append(new_item)
-        wl_items[corr] = np.array(changed_items)
-        return wl_items, changes
+        corr = labels != preds
+        changelog = "\n".join([f'{i};{ic};{p}' for i, ic, p in zip(wl_items[corr], labels[corr], preds[corr])])
+        labels[corr] = np.array([p for p in preds[corr]])
+        return (wl_items, labels), changelog
 
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='accuracy', min_delta=0.01, patience=3)
