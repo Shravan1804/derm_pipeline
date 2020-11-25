@@ -54,6 +54,10 @@ def split_model(model, splits):
     return [torch.nn.Sequential(*top_children[i:j]) for i, j in zip(idxs[:-1], idxs[1:])]
 
 
+class CustomItemGetter(fv.ItemGetter):
+    def __init__(self, i, fn): fv.store_attr()
+    def encodes(self, x): return self.fn(x[self.i])
+
 class FastaiTrainer:
     @staticmethod
     def get_argparser(desc="Fastai trainer arguments", pdef=dict(), phelp=dict()):
