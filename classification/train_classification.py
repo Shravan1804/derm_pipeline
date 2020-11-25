@@ -10,12 +10,12 @@ import fastai.vision.all as fv
 from fastai.callback.tracker import EarlyStoppingCallback
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import common, train_utils
+from general import common, train_utils, train_utils_img
 from general.PatchExtractor import PatchExtractor
 import classification.classification_utils as classif_utils
 
 
-class ImageClassificationTrainer(train_utils.ImageTrainer):
+class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def load_data(self, path):
         images = common.list_files_in_dirs(path, full_path=True, posix_path=True)
         return np.array(images), self.get_images_cls(images)
