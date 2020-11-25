@@ -130,6 +130,7 @@ class FastaiTrainer:
         self.stratify = stratify
         self.cats_metrics = self.get_metrics()
         self.test_set_results = {test_name: defaultdict(list) for test_name in self.args.sl_tests}
+        print("Training args:", self.args)
 
     def get_metrics(self): raise NotImplementedError
 
