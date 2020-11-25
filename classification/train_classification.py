@@ -34,8 +34,8 @@ class ImageClassificationTrainer(train_utils.ImageTrainer):
         return metrics_fn
 
     def create_dls(self, tr, val, bs, size):
-        return self.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock),
-                                        tr.tolist(), val.tolist(), lambda x: x[1], bs, size)
+        tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))
+        return self.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock), tr, val, bs, size)
 
     def create_learner(self, dls):
         metrics = list(self.cats_metrics.values()) + [fv.accuracy]  # for early stop callback
