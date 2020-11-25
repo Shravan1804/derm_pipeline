@@ -201,11 +201,11 @@ class FastaiTrainer:
         learn.dls = dls
         with learn.distrib_ctx():
             learn.fine_tune(self.args.epochs, cbs=self.get_train_cbs(run))
-        save_learner(learn, run)
+        self.save_learner(learn, run)
 
     def evaluate_and_correct_wl(self, learn, wl_items, run):
         print("Evaluating WL data:", run)
-        dl = learn.dls.test_dl(wl_items, with_labels=True)
+        dl = learn.dls.test_dl(list(zip(*wl_items)), with_labels=True)
         with learn.distrib_ctx():
             _, targs, decoded_preds = learn.get_preds(dl=dl, with_decoded=True)
         wl_items, changes = self.correct_wl(wl_items, decoded_preds)
@@ -218,7 +218,7 @@ class FastaiTrainer:
     def evaluate_on_test_sets(self, learn, run):
         print("Testing model:", run)
         for test_name, test_items_with_cls in self.get_test_sets_items():
-            dl = learn.dls.test_dl(test_items_with_cls, with_labels=True)
+            dl = learn.dls.test_dl(list(zip(*test_items_with_cls)), with_labels=True)
             with learn.distrib_ctx():
                 interp = fv.Interpretation.from_learner(learn, dl=dl)
             interp.metrics_res = {mn: m_fn(interp.preds, interp.targs) for mn, m_fn in self.cats_metrics.items()}
