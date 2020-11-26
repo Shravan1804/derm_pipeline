@@ -156,8 +156,6 @@ class FastaiTrainer:
 
     def plot_test_performance(self, test_path, agg): raise NotImplementedError
 
-    def is_master_process(self): return self.args.gpu == 0
-
     def tensorboard_cb(self, run_name): raise NotImplementedError
 
     def split_data(self, items: np.ndarray, items_cls: np.ndarray):
@@ -180,7 +178,7 @@ class FastaiTrainer:
 
     def get_train_cbs(self, run):
         cbs = []
-        if self.is_master_process():
+        if not fv.rank_distrib():
             cbs.append(self.tensorboard_cb(run))
         if self.args.early_stop:
             cbs.append(self.early_stop_cb())
@@ -191,19 +189,13 @@ class FastaiTrainer:
             learn.to_fp16()
         return learn
 
-    def save_learner(self, learn, run):
-        if not self.args.full_precision:
-            learn.to_fp32()
-        learn.save(os.path.join(self.args.exp_logdir, f'{run}_model'))
-        if not self.args.full_precision:
-            learn.to_fp16()
-
     def basic_train(self, learn, run, dls):
         print("Training model:", run)
         learn.dls = dls
         with learn.distrib_ctx():
             learn.fine_tune(self.args.epochs, cbs=self.get_train_cbs(run))
-        self.save_learner(learn, run)
+        learn.save(os.path.join(self.args.exp_logdir, f'{run}_model'))
+        fv.distrib_barrier()
 
     def evaluate_and_correct_wl(self, learn, wl_items, run):
         print("Evaluating WL data:", run)
@@ -211,10 +203,11 @@ class FastaiTrainer:
         with learn.distrib_ctx():
             _, targs, decoded_preds = learn.get_preds(dl=dl, with_decoded=True)
         wl_items, changes = self.correct_wl(wl_items, decoded_preds)
-        if self.is_master_process():
+        if not fv.rank_distrib():
             with open(os.path.join(self.args.exp_logdir, f'{common.now()}_{run}__wl_changes.txt'), 'w') as changelog:
                 changelog.write('file;old_label;new_label\n')
                 changelog.write(changes)
+        fv.distrib_barrier()
         return wl_items
 
     def evaluate_on_test_sets(self, learn, run):
@@ -225,15 +218,18 @@ class FastaiTrainer:
                 interp = fv.Interpretation.from_learner(learn, dl=dl)
             interp.metrics_res = {mn: m_fn(interp.preds, interp.targs) for mn, m_fn in self.cats_metrics.items()}
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(self.process_preds(interp))
+            fv.distrib_barrier()
 
     def process_preds(self, interp): return interp
 
     def generate_tests_reports(self):
-        for test_name in self.args.sl_tests:
-            test_path = common.maybe_create(self.args.exp_logdir, test_name)
-            for run, folds_results in self.test_set_results[test_name].items():
-                agg = self.aggregate_test_performance(folds_results)
-                self.plot_test_performance(test_path, run, agg)
-                with open(os.path.join(test_path, f'{run}_test_results.p'), 'wb') as f:
-                    dill.dump(agg, f)
+        if not fv.rank_distrib():
+            for test_name in self.args.sl_tests:
+                test_path = common.maybe_create(self.args.exp_logdir, test_name)
+                for run, folds_results in self.test_set_results[test_name].items():
+                    agg = self.aggregate_test_performance(folds_results)
+                    self.plot_test_performance(test_path, run, agg)
+                    with open(os.path.join(test_path, f'{run}_test_results.p'), 'wb') as f:
+                        dill.dump(agg, f)
+        fv.distrib_barrier()
 

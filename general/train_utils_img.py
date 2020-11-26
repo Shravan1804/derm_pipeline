@@ -157,8 +157,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
                     learn, _ = self.progressive_resizing_train(wl_images, val, f'{fold_suffix}wl_only', repeat_prefix)
                     learn, last_run = self.progressive_resizing_train(tr, val, f'{fold_suffix}_wl_sl', repeat_prefix, learn)
                     wl_images = self.evaluate_and_correct_wl(learn, wl_images, last_run)
-        if self.is_master_process():
-            self.generate_tests_reports()
+        self.generate_tests_reports()
 
     def get_sorting_run_key(self, run_name):
         regex = r"^(?:__R(?P<repeat>\d+)__)?__S(?P<progr_size>\d+)px_bs\d+____F(?P<fold>\d+)__.*$"
