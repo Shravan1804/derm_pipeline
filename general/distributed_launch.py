@@ -36,3 +36,4 @@ def main(
         processes.append(process)
 
     for process in processes: process.wait()
+

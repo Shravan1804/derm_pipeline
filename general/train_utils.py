@@ -190,14 +190,15 @@ class FastaiTrainer:
         return learn
 
     def basic_train(self, learn, run, dls):
+        fv.distrib_barrier()
         print("Training model:", run)
         learn.dls = dls
         with learn.distrib_ctx():
             learn.fine_tune(self.args.epochs, cbs=self.get_train_cbs(run))
         learn.save(os.path.join(self.args.exp_logdir, f'{run}_model'))
-        fv.distrib_barrier()
 
     def evaluate_and_correct_wl(self, learn, wl_items, run):
+        fv.distrib_barrier()
         print("Evaluating WL data:", run)
         dl = learn.dls.test_dl(list(zip(*wl_items)), with_labels=True)
         with learn.distrib_ctx():
@@ -207,29 +208,27 @@ class FastaiTrainer:
             with open(os.path.join(self.args.exp_logdir, f'{common.now()}_{run}__wl_changes.txt'), 'w') as changelog:
                 changelog.write('file;old_label;new_label\n')
                 changelog.write(changes)
-        fv.distrib_barrier()
         return wl_items
 
     def evaluate_on_test_sets(self, learn, run):
         print("Testing model:", run)
         for test_name, test_items_with_cls in self.get_test_sets_items():
+            fv.distrib_barrier()
             dl = learn.dls.test_dl(list(zip(*test_items_with_cls)), with_labels=True)
             with learn.distrib_ctx():
                 interp = fv.Interpretation.from_learner(learn, dl=dl)
             interp.metrics_res = {mn: m_fn(interp.preds, interp.targs) for mn, m_fn in self.cats_metrics.items()}
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(self.process_preds(interp))
-            fv.distrib_barrier()
 
     def process_preds(self, interp): return interp
 
     def generate_tests_reports(self):
-        if not fv.rank_distrib():
-            for test_name in self.args.sl_tests:
-                test_path = common.maybe_create(self.args.exp_logdir, test_name)
-                for run, folds_results in self.test_set_results[test_name].items():
-                    agg = self.aggregate_test_performance(folds_results)
-                    self.plot_test_performance(test_path, run, agg)
-                    with open(os.path.join(test_path, f'{run}_test_results.p'), 'wb') as f:
-                        dill.dump(agg, f)
-        fv.distrib_barrier()
+        if fv.rank_distrib(): return
+        for test_name in self.args.sl_tests:
+            test_path = common.maybe_create(self.args.exp_logdir, test_name)
+            for run, folds_results in self.test_set_results[test_name].items():
+                agg = self.aggregate_test_performance(folds_results)
+                self.plot_test_performance(test_path, run, agg)
+                with open(os.path.join(test_path, f'{run}_test_results.p'), 'wb') as f:
+                    dill.dump(agg, f)
 
