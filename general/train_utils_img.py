@@ -132,7 +132,8 @@ class ImageTrainer(train_utils.FastaiTrainer):
 
         for it, (bs, size) in enumerate(zip(batch_sizes, input_sizes)):
             run = f'__S{size}px_bs{bs}__{fold_suffix}'
-            print(f"Progressive resizing {it + 1}/{len(batch_sizes)}: running {run}")
+            if self.args.progr_size:
+                print(f"Progressive resizing {it + 1}/{len(batch_sizes)}: running {run}")
             yield it, run, self.create_dls(tr, val, bs, size)
 
     def progressive_resizing_train(self, tr, val, fold_suffix, run_prefix="", learn=None):
