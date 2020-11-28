@@ -136,29 +136,12 @@ class ImageTrainer(train_utils.FastaiTrainer):
                 print(f"Progressive resizing {it + 1}/{len(batch_sizes)}: running {run}")
             yield it, run, self.create_dls(tr, val, bs, size)
 
-    def progressive_resizing_train(self, tr, val, fold_suffix, run_prefix="", learn=None):
+    def train_procedure(self, tr, val, fold_suffix, run_prefix="", learn=None):
         for it, run, dls in self.progressive_resizing(tr, val, fold_suffix):
             if it == 0 and learn is None: learn = fd.rank0_first(lambda: self.create_learner(dls))
             self.basic_train(learn, f'{run_prefix}{run}', dls)
             self.evaluate_on_test_sets(learn, run)
         return learn, run
-
-    def train_model(self):
-        sl_images, wl_images = self.get_train_items()
-        for fold, tr, val in self.split_data(*sl_images):
-            fold_suffix = f'__F{common.zero_pad(fold, self.args.nfolds)}__'
-            if fold == 0 or not self.args.use_wl:
-                learn, last_run = self.progressive_resizing_train(tr, val, f'{fold_suffix}sl_only')
-
-            if self.args.use_wl:
-                if fold == 0: wl_images = self.evaluate_and_correct_wl(learn, wl_images, last_run)
-                for repeat in range(self.args.nrepeats):
-                    repeat_prefix = f'__R{common.zero_pad(repeat, self.args.nrepeats)}__'
-                    print(f"WL-SL train procedure {repeat + 1}/{self.args.nrepeats}")
-                    learn, _ = self.progressive_resizing_train(wl_images, val, f'{fold_suffix}wl_only', repeat_prefix)
-                    learn, last_run = self.progressive_resizing_train(tr, val, f'{fold_suffix}_wl_sl', repeat_prefix, learn)
-                    wl_images = self.evaluate_and_correct_wl(learn, wl_images, last_run)
-        self.generate_tests_reports()
 
     def get_sorting_run_key(self, run_name):
         regex = r"^(?:__R(?P<repeat>\d+)__)?__S(?P<progr_size>\d+)px_bs\d+____F(?P<fold>\d+)__.*$"

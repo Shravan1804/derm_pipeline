@@ -144,9 +144,9 @@ class FastaiTrainer:
 
     def create_dls(self): raise NotImplementedError
 
-    def correct_wl(self, wl_items, preds): raise NotImplementedError
+    def train_procedure(self, tr, val, fold_suffix, run_prefix="", learn=None): raise NotImplementedError
 
-    def train_model(self): raise NotImplementedError
+    def correct_wl(self, wl_items, preds): raise NotImplementedError
 
     def early_stop_cb(self): raise NotImplementedError
 
@@ -231,4 +231,21 @@ class FastaiTrainer:
                 self.plot_test_performance(test_path, run, agg)
                 with open(os.path.join(test_path, f'{run}_test_results.p'), 'wb') as f:
                     dill.dump(agg, f)
+
+    def train_model(self):
+        sl_data, wl_data = self.get_train_items()
+        for fold, tr, val in self.split_data(*sl_data):
+            fold_suffix = f'__F{common.zero_pad(fold, self.args.nfolds)}__'
+            if fold == 0 or not self.args.use_wl:
+                learn, last_run = self.train_procedure(tr, val, f'{fold_suffix}sl_only')
+
+            if self.args.use_wl:
+                if fold == 0: wl_data = self.evaluate_and_correct_wl(learn, wl_data, last_run)
+                for repeat in range(self.args.nrepeats):
+                    repeat_prefix = f'__R{common.zero_pad(repeat, self.args.nrepeats)}__'
+                    print(f"WL-SL train procedure {repeat + 1}/{self.args.nrepeats}")
+                    learn, _ = self.train_procedure(wl_data, val, f'{fold_suffix}wl_only', repeat_prefix)
+                    learn, last_run = self.train_procedure(tr, val, f'{fold_suffix}_wl_sl', repeat_prefix, learn)
+                    wl_data = self.evaluate_and_correct_wl(learn, wl_data, last_run)
+        self.generate_tests_reports()
 
