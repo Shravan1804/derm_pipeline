@@ -6,7 +6,12 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import common, img_utils
+from general import common
+
+
+def crop_im(im, bbox):
+    wmin, hmin, wmax, hmax = bbox
+    return im[hmin:hmax, wmin:wmax]
 
 
 def get_obj_proportion(mask, bg=0):
@@ -153,7 +158,7 @@ def get_centroids_with_bboxes(mask, kern=(5, 5), dilate_it=10, bg=0):
 
 def grow_crop_bbox_to_thresh(mask, bbox, thresh, rand, bg=0):
     """Increases the bbox size if obj proportion above thresh (adds more background, thus reduces obj proportion)"""
-    cropped_mask = img_utils.crop_im(mask, bbox)
+    cropped_mask = crop_im(mask, bbox)
     obj_prop, u, uc = get_obj_proportion(cropped_mask, bg=bg)
     if obj_prop > thresh:
         # alpha is the background area to be added to have equality with thresh
@@ -168,8 +173,8 @@ def grow_crop_bbox_to_thresh(mask, bbox, thresh, rand, bg=0):
 def extract_bboxes_from_img_mask(im, mask, bboxes):
     cropped_imgs, cropped_masks = [], []
     for bbox in bboxes:
-        cropped_imgs.append(img_utils.crop_im(im, bbox))
-        cropped_masks.append(img_utils.crop_im(mask, bbox))
+        cropped_imgs.append(crop_im(im, bbox))
+        cropped_masks.append(crop_im(mask, bbox))
     return cropped_imgs, cropped_masks
 
 
@@ -185,12 +190,12 @@ def crop_img_and_mask_to_objs(im, mask, thresh=.01, rand=True, single=True, only
         if only_bboxes:
             return crop_bbox,
         else:
-            return (img_utils.crop_im(im, crop_bbox), ), (img_utils.crop_im(mask, crop_bbox), ), (crop_bbox, )
+            return (crop_im(im, crop_bbox), ), (crop_im(mask, crop_bbox), ), (crop_bbox, )
 
     centroids, bboxes = get_centroids_with_bboxes(mask)
     cleaned_cropped_bboxes = []
     for centroid, bbox in zip(centroids, bboxes):
-        min_bbox = get_bbox(img_utils.crop_im(mask, bbox) != bg)
+        min_bbox = get_bbox(crop_im(mask, bbox) != bg)
         bbox = bbox if min_bbox is None else np.tile(bbox[:2], 2) + np.array(min_bbox)
         if bbox_area(bbox) < min_obj_area:
             continue
