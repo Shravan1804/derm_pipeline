@@ -134,7 +134,7 @@ class FastaiTrainer:
 
     def get_metrics(self): raise NotImplementedError
 
-    def load_data(self, path): raise NotImplementedError
+    def load_items(self, path): raise NotImplementedError
 
     def get_test_sets_items(self): raise NotImplementedError
 
@@ -204,7 +204,7 @@ class FastaiTrainer:
         with learn.distrib_ctx():
             _, targs, decoded_preds = learn.get_preds(dl=dl, with_decoded=True)
         wl_items, changes = self.correct_wl(wl_items, decoded_preds)
-        if not fv.rank_distrib():
+        if not fv.rank_distrib() and changes != "":
             with open(os.path.join(self.args.exp_logdir, f'{common.now()}_{run}__wl_changes.txt'), 'w') as changelog:
                 changelog.write('file;old_label;new_label\n')
                 changelog.write(changes)

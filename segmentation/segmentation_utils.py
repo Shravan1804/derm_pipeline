@@ -17,17 +17,6 @@ def load_img_and_mask(img_path, mask_path):
     return common.load_rgb_img(img_path), cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
 
 
-def common_segm_args(parser, pdef=dict(), phelp=dict()):
-    parser.add_argument('--img-dir', type=str, default=pdef.get('--img-dir', "images"),
-                        help=phelp.get('--img-dir', "Images dir"))
-    parser.add_argument('--mask-dir', type=str, default=pdef.get('--mask-dir', "masks"),
-                        help=phelp.get('--mask-dir', "Masks dir"))
-    parser.add_argument('--mext', type=str, default=pdef.get('--mext', ".png"),
-                        help=phelp.get('--mext', "Masks file extension"))
-    parser.add_argument('--bg', type=int, default=pdef.get('--bg', 0),
-                        help=phelp.get('--bg', "Background mask code"))
-
-
 def cls_perf(perf, inp, targ, cls_idx, cats, bg=None, axis=1):
     """If bg sets then computes perf without background"""
     assert bg != cls_idx or cls_idx is None, f"Cannot compute class {cls_idx} perf as bg = {bg}"

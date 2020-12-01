@@ -1,6 +1,5 @@
 import os
 import sys
-import argparse
 from functools import partial
 
 import numpy as np
@@ -9,19 +8,31 @@ import fastai.vision.all as fv
 from fastai.callback.tracker import EarlyStoppingCallback
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import common, crypto, train_utils
+from general import common, train_utils, train_utils_img
 import segmentation.segmentation_utils as segm_utils
 from segmentation.crop_to_thresh import SEP as CROP_SEP
 
 
-class ImageSegmentationTrainer(train_utils.ImageTrainer):
-    def load_data(self, path):
-        return np.array(common.list_files(os.path.join(path, self.args.img_dir), full_path=True, posix_path=True))
+class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
+    def get_argparser(desc="Fastai segmentation image trainer arguments", pdef=dict(), phelp=dict()):
+        # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
+        parser = super(ImageSegmentationTrainer, ImageSegmentationTrainer).get_argparser(desc, pdef, phelp)
+        parser.add_argument('--img-dir', type=str, default=pdef.get('--img-dir', "images"),
+                            help=phelp.get('--img-dir', "Images dir"))
+        parser.add_argument('--mask-dir', type=str, default=pdef.get('--mask-dir', "masks"),
+                            help=phelp.get('--mask-dir', "Masks dir"))
+        parser.add_argument('--mext', type=str, default=pdef.get('--mext', ".png"),
+                            help=phelp.get('--mext', "Masks file extension"))
+        parser.add_argument('--bg', type=int, default=pdef.get('--bg', 0),
+                            help=phelp.get('--bg', "Background mask code"))
+        return parser
 
-    def get_img_mask(self, img_path):
-        file, ext = os.path.splitext(img_path)
-        mpath = f'{file.replace(self.args.img_dir, self.args.mask_dir)}{self.args.mext}'
-        return crypto.decrypt_img(mpath, self.args.user_key) if self.args.encrypted else mpath
+    def load_items(self, path):
+        images = np.array(common.list_files(os.path.join(path, self.args.img_dir), full_path=True, posix_path=True))
+        return images, np.array([self.get_image_mask_path(img_path) for img_path in images])
+
+    def get_image_mask_path(self, img_path):
+        return segm_utils.get_mask_path(img_path, self.args.img_dir, self.args.mask_dir, self.args.mext)
 
     def get_metrics(self):
         metrics_fn = {}
@@ -35,19 +46,22 @@ class ImageSegmentationTrainer(train_utils.ImageTrainer):
         return metrics_fn
 
     def create_dls(self, tr, val, bs, size):
-        return self.create_dls_from_lst((fv.ImageBlock, fv.MaskBlock(args.cats)), tr.tolist(), val.tolist(),
-                                        self.get_img_mask, bs, size)
+        tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))
+        blocks = (fv.ImageBlock, fv.MaskBlock(args.cats))
+        return self.create_dls_from_lst(blocks, tr, val, bs, size, self.load_image_item)
 
     def create_learner(self, dls):
         metrics = list(self.cats_metrics.values()) + [fv.foreground_acc]
         learn = fv.unet_learner(dls, getattr(fv, self.args.model), metrics=metrics)
         return self.prepare_learner(learn)
 
+    def correct_wl(self, wl_items_with_labels, preds):
+        wl_items, labels = wl_items_with_labels
+        # TODO: encode preds in RLE
+        return (wl_items, labels), ""
+
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='foreground_acc', min_delta=0.01, patience=3)
-
-    def process_preds(self, interp):
-        return interp
 
 
 def main(args):
@@ -56,13 +70,12 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Train Fastai segmentation")
-    train_utils.common_train_args(parser, pdef={'--bs': 6, '--model': 'resnet34',
-                                                '--cats': ["other", "pustules", "spots"]})
-    train_utils.common_img_args(parser)
-    segm_utils.common_segm_args(parser)
+    defaults = {'--bs': 6, '--model': 'resnet34', '--input-size': 256, '--cats': ["other", "pustules", "spots"]}
+    parser = ImageSegmentationTrainer.get_argparser(desc="Fastai image classification", pdef=defaults)
     args = parser.parse_args()
 
-    train_utils.prepare_training(args, image_data=True, custom="segmentation")
+    args.exp_name = "img_segm_" + args.exp_name
+
+    train_utils_img.ImageTrainer.prepare_training(args)
 
     common.time_method(main, args, prepend=f"GPU {args.gpu} proc: ")

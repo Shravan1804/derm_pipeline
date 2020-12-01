@@ -12,11 +12,10 @@ from fastai.callback.tracker import EarlyStoppingCallback
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common, train_utils, train_utils_img
 from general.PatchExtractor import PatchExtractor
-import classification.classification_utils as classif_utils
 
 
 class ImageClassificationTrainer(train_utils_img.ImageTrainer):
-    def load_data(self, path):
+    def load_items(self, path):
         images = common.list_files_in_dirs(path, full_path=True, posix_path=True)
         return np.array(images), self.get_images_cls(images)
 
@@ -60,26 +59,6 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='accuracy', min_delta=0.01, patience=3)
 
-    def process_preds(self, interp):
-        interp.cm = classif_utils.conf_mat(self.args.cats, interp.decoded, interp.targs)
-        return interp
-
-    def aggregate_test_performance(self, folds_res):
-        agg = super().aggregate_test_performance(folds_res)
-        agg["cm"] = tuple([s.numpy() for s in train_utils.tensors_mean_std([interp.cm for interp in folds_res])])
-        return agg
-
-    def plot_test_performance(self, test_path, run, agg_run_perf):
-        for show_val in [False, True]:
-            save_path = os.path.join(test_path, f'{run}{"_show_val" if show_val else ""}.jpg')
-            fig, axs = plt.subplots(1, 2, figsize=self.args.test_figsize)
-            bar_perf = {p: cat_vals for p, cat_vals in agg_run_perf.items() if p != 'cm'}
-            bar_cats = self.args.cats + ["All"]
-            common.grouped_barplot_with_err(axs[0], bar_perf, bar_cats, xlabel='Classes', show_val=show_val)
-            common.plot_confusion_matrix(axs[1], agg_run_perf['cm'], self.args.cats)
-            fig.tight_layout(pad=.2)
-            plt.savefig(save_path, dpi=400)
-
 
 def main(args):
     classif = ImageClassificationTrainer(args, stratify=True, full_img_sep=PatchExtractor.SEP)
@@ -88,13 +67,14 @@ def main(args):
 
 if __name__ == '__main__':
     defaults = {'--bs': 6, '--model': 'resnet34', '--input-size': 256}
-    parser = ImageClassificationTrainer.get_argparser(desc="Fastai image classification", pdef=defaults)
+    parser = train_utils_img.ImageTrainer.get_argparser(desc="Fastai image classification", pdef=defaults)
     args = parser.parse_args()
 
     args.exp_name = "img_classif_"+args.exp_name
     if args.cats is None:
         args.cats = common.list_dirs(os.path.join(args.data, args.sl_train), full_path=False)
 
-    ImageClassificationTrainer.prepare_training(args)
+    train_utils_img.ImageTrainer.prepare_training(args)
 
     common.time_method(main, args, prepend=f"GPU {args.gpu} proc: ")
+

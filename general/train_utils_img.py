@@ -4,6 +4,7 @@ import sys
 from collections import defaultdict
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 import torch
 import fastai.vision.all as fv
@@ -12,6 +13,7 @@ import fastai.callback.tensorboard as fc
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common, crypto, train_utils
+import classification.classification_utils as classif_utils
 
 
 def get_full_img_dict(images, sep):
@@ -80,13 +82,13 @@ class ImageTrainer(train_utils.FastaiTrainer):
             return np.array([])
         test_sets_items = []
         for test_dir in self.args.sl_tests:
-            test_sets_items.append((test_dir, self.load_data(os.path.join(self.args.data, test_dir))))
+            test_sets_items.append((test_dir, self.load_items(os.path.join(self.args.data, test_dir))))
         return test_sets_items
 
     def get_train_items(self):
-        sl_images = self.load_data(os.path.join(self.args.data, self.args.sl_train))
+        sl_images = self.load_items(os.path.join(self.args.data, self.args.sl_train))
         if self.args.use_wl:
-            wl_images = self.load_data(os.path.join(self.args.data, self.args.wl_train))
+            wl_images = self.load_items(os.path.join(self.args.data, self.args.wl_train))
         else:
             wl_images = (np.array([]), np.array([]))
         return sl_images, wl_images
@@ -148,12 +150,29 @@ class ImageTrainer(train_utils.FastaiTrainer):
         m = re.match(regex, run_name)
         return run_name.replace(f'__F{m.group("fold")}__', '')
 
+    def process_preds(self, interp):
+        interp.cm = classif_utils.conf_mat(self.args.cats, interp.decoded, interp.targs)
+        return interp
+
     def aggregate_test_performance(self, folds_res):
         """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
         cats = self.args.cats + [self.ALL_CATS]
-        res = {p: [[m.metrics_res[f'{c}_{p}'] for m in folds_res] for c in cats] for p in self.BASIC_PERF_FNS}
-        res = {p: [train_utils.tensors_mean_std(vals) for vals in cat_vals] for p, cat_vals in res.items()}
-        return {p: tuple([torch.stack(s).numpy() for s in zip(*cat_vals)]) for p, cat_vals in res.items()}
+        agg = {p: [[m.metrics_res[f'{c}_{p}'] for m in folds_res] for c in cats] for p in self.BASIC_PERF_FNS}
+        agg = {p: [train_utils.tensors_mean_std(vals) for vals in cat_vals] for p, cat_vals in agg.items()}
+        agg = {p: tuple([torch.stack(s).numpy() for s in zip(*cat_vals)]) for p, cat_vals in agg.items()}
+        agg["cm"] = tuple([s.numpy() for s in train_utils.tensors_mean_std([interp.cm for interp in folds_res])])
+        return agg
+
+    def plot_test_performance(self, test_path, run, agg_run_perf):
+        for show_val in [False, True]:
+            save_path = os.path.join(test_path, f'{run}{"_show_val" if show_val else ""}.jpg')
+            fig, axs = plt.subplots(1, 2, figsize=self.args.test_figsize)
+            bar_perf = {p: cat_vals for p, cat_vals in agg_run_perf.items() if p != 'cm'}
+            bar_cats = self.args.cats + ["All"]
+            common.grouped_barplot_with_err(axs[0], bar_perf, bar_cats, xlabel='Classes', show_val=show_val)
+            common.plot_confusion_matrix(axs[1], agg_run_perf['cm'], self.args.cats)
+            fig.tight_layout(pad=.2)
+            plt.savefig(save_path, dpi=400)
 
 
 class ImageTBCb(fc.TensorBoardBaseCallback):
