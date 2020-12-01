@@ -8,7 +8,7 @@ from general import train_utils
 
 
 def get_image_cls(img_path):
-    return os.path.basename(os.path.dirname(img_path)) if type(img_path) is str else return img_path.parent.name
+    return os.path.basename(os.path.dirname(img_path)) if type(img_path) is str else img_path.parent.name
 
 
 def cls_perf(perf, inp, targ, cls_idx, cats, axis=-1):

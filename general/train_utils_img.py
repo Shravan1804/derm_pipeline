@@ -82,14 +82,14 @@ class ImageTrainer(train_utils.FastaiTrainer):
         for img, tgt in zip(images, targets):
             file, ext = os.path.splitext(os.path.basename(img))
             fi = f'{file.split(self.full_img_sep)[0] if self.full_img_sep in file else file}{ext}'
-            full_images_dict[(fi, self.get_full_img_cls(file))].append((img, tgt))
+            full_images_dict[(fi, self.get_full_img_cls(img))].append((img, tgt))
         return full_images_dict
 
     def split_data(self, items: np.ndarray, items_cls: np.ndarray):
         fi_dict = self.get_full_img_dict(items, items_cls)
-        for fold, tr, val in super().split_data(zip(*fi_dict.keys())):
-            tr = tuple(np.array(lst) for lst in zip(*[img for fi in tr[0] for img in fi_dict[fi]]))
-            val = tuple(np.array(lst) for lst in zip(*[img for fi in val[0] for img in fi_dict[fi]]))
+        for fold, tr, val in super().split_data(*tuple(zip(*fi_dict.keys()))):
+            tr = tuple(np.array(lst) for lst in zip(*[img for fik in zip(*tr) for img in fi_dict[fik]]))
+            val = tuple(np.array(lst) for lst in zip(*[img for fik in zip(*val) for img in fi_dict[fik]]))
             _ = list(map(np.random.shuffle, [t for tup in (tr, val) for t in tup]))
             yield fold, tr, val
 
