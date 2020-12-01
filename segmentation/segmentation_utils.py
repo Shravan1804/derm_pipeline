@@ -10,7 +10,10 @@ from general import common
 
 
 def get_mask_path(img_path, img_dir, mask_dir, mext):
-    return img_path.replace(img_dir, mask_dir).replace(os.path.splitext(img_path)[1], mext)
+    if type(img_path) is str:
+        return img_path.replace(img_dir, mask_dir).replace(os.path.splitext(img_path)[1], mext)
+    else:
+        return img_path.parent.parent/mask_dir/img_path.stem+mext
 
 
 def load_img_and_mask(img_path, mask_path):
