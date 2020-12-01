@@ -87,7 +87,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
 
     def split_data(self, items: np.ndarray, items_cls: np.ndarray):
         fi_dict = self.get_full_img_dict(items, items_cls)
-        for fold, tr, val in super().split_data(*tuple(zip(*fi_dict.keys()))):
+        for fold, tr, val in super().split_data(*tuple(np.array(lst) for lst in zip(*fi_dict.keys()))):
             tr = tuple(np.array(lst) for lst in zip(*[img for fik in zip(*tr) for img in fi_dict[fik]]))
             val = tuple(np.array(lst) for lst in zip(*[img for fik in zip(*val) for img in fi_dict[fik]]))
             _ = list(map(np.random.shuffle, [t for tup in (tr, val) for t in tup]))
