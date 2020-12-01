@@ -171,7 +171,8 @@ class ImageTBCb(fc.TensorBoardBaseCallback):
 
     def after_batch(self):
         if not self.run: return
-        self.writer.add_scalar(f'{self.run_name}_Loss/train_loss', self.smooth_loss, self.train_iter)
+        # if no self.smooth_loss then -1: when loss is nan, Recorder does not set smooth loss causing exception else
+        self.writer.add_scalar(f'{self.run_name}_Loss/train_loss', getattr(self, "smooth_loss", -1), self.train_iter)
         for i, h in enumerate(self.opt.hypers):
             for k, v in h.items(): self.writer.add_scalar(f'{self.run_name}_Opt_hyper/{k}_{i}', v, self.train_iter)
 
