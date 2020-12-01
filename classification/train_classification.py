@@ -58,6 +58,10 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='accuracy', min_delta=0.01, patience=3)
 
+    def process_preds(self, interp):
+        interp.cm = classif_utils.conf_mat(self.args.cats, interp.decoded, interp.targs)
+        return interp
+
 
 def main(args):
     classif = ImageClassificationTrainer(args, stratify=True, full_img_sep=PatchExtractor.SEP)

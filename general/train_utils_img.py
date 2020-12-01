@@ -13,7 +13,6 @@ import fastai.callback.tensorboard as fc
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common, crypto, train_utils
-import classification.classification_utils as classif_utils
 
 
 class ImageTrainer(train_utils.FastaiTrainer):
@@ -134,10 +133,6 @@ class ImageTrainer(train_utils.FastaiTrainer):
         regex = r"^(?:__R(?P<repeat>\d+)__)?__S(?P<progr_size>\d+)px_bs\d+____F(?P<fold>\d+)__.*$"
         m = re.match(regex, run_name)
         return run_name.replace(f'__F{m.group("fold")}__', '')
-
-    def process_preds(self, interp):
-        interp.cm = classif_utils.conf_mat(self.args.cats, interp.decoded, interp.targs)
-        return interp
 
     def aggregate_test_performance(self, folds_res):
         """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""

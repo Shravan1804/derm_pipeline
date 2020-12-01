@@ -63,6 +63,10 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='foreground_acc', min_delta=0.01, patience=3)
 
+    def process_preds(self, interp):
+        interp.cm = segm_utils.pixel_conf_mat(self.args.cats, interp.decoded, interp.targs)
+        return interp
+
 
 def main(args):
     segm = ImageSegmentationTrainer(args, stratify=False, full_img_sep=CROP_SEP)
