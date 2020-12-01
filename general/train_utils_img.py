@@ -16,27 +16,6 @@ from general import common, crypto, train_utils
 import classification.classification_utils as classif_utils
 
 
-def get_full_img_dict(images, sep):
-    """Returns a dict with keys the full images names and values the lst of corresponding images.
-    sep is the string which separates the full img names
-    Assumes all img parts have same class (located in same dir) which will be attributed to full image"""
-    full_images_dict = {}
-    for fpath in images:
-        cls = os.path.basename(os.path.dirname(fpath))
-        file, ext = os.path.splitext(os.path.basename(fpath))
-        fi = os.path.join(cls, f'{file.split(sep)[0] if sep in file else file}{ext}')
-        if fi in full_images_dict:
-            full_images_dict[fi].append(fpath)
-        else:
-            full_images_dict[fi] = [fpath]
-    return full_images_dict
-
-
-def crop_im(im, bbox):
-    wmin, hmin, wmax, hmax = bbox
-    return im[hmin:hmax+1, wmin:wmax+1]
-
-
 class ImageTrainer(train_utils.FastaiTrainer):
     @staticmethod
     def get_argparser(desc="Fastai image trainer arguments", pdef=dict(), phelp=dict()):
@@ -93,9 +72,26 @@ class ImageTrainer(train_utils.FastaiTrainer):
             wl_images = (np.array([]), np.array([]))
         return sl_images, wl_images
 
-    def get_images_cls(self, images):
+    def get_full_img_cls(self, img_path):
         if self.stratify: raise NotImplementedError
-        else: return np.ones_like(images)
+        else: return 1
+
+    def get_full_img_dict(self, images, targets):
+        """Returns a dict with keys (full images, tgt) and values the lst of corresponding images."""
+        full_images_dict = defaultdict(list)
+        for img, tgt in zip(images, targets):
+            file, ext = os.path.splitext(os.path.basename(img))
+            fi = f'{file.split(self.full_img_sep)[0] if self.full_img_sep in file else file}{ext}'
+            full_images_dict[(fi, self.get_full_img_cls(file))].append((img, tgt))
+        return full_images_dict
+
+    def split_data(self, items: np.ndarray, items_cls: np.ndarray):
+        fi_dict = self.get_full_img_dict(items, items_cls)
+        for fold, tr, val in super().split_data(zip(*fi_dict.keys())):
+            tr = tuple(np.array(lst) for lst in zip(*[img for fi in tr[0] for img in fi_dict[fi]]))
+            val = tuple(np.array(lst) for lst in zip(*[img for fi in val[0] for img in fi_dict[fi]]))
+            _ = list(map(np.random.shuffle, [t for tup in (tr, val) for t in tup]))
+            yield fold, tr, val
 
     def load_image_item(self, path):
         return crypto.decrypt_img(path, self.args.user_key) if self.args.encrypted else path
@@ -112,17 +108,6 @@ class ImageTrainer(train_utils.FastaiTrainer):
                          item_tfms=fv.Resize(self.args.input_size),
                          batch_tfms=tfms)
         return d.dataloaders(self.args.data, bs=bs)
-
-    def split_data(self, items: np.ndarray, items_cls: np.ndarray):
-        full_images_dict = get_full_img_dict(items, self.full_img_sep)
-        full_images = np.array(list(full_images_dict.keys()))
-
-        for fold, tr, val in super().split_data(full_images, self.get_images_cls(full_images)):
-            tr_images = np.array([i for fi in tr[0] for i in full_images_dict[fi]])
-            val_images = np.array([i for fi in val[0] for i in full_images_dict[fi]])
-            np.random.shuffle(tr_images)
-            np.random.shuffle(val_images)
-            yield fold, (tr_images, self.get_images_cls(tr_images)), (val_images, self.get_images_cls(val_images))
 
     def progressive_resizing(self, tr, val, fold_suffix):
         if self.args.progr_size:

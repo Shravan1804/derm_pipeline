@@ -47,7 +47,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
 
     def create_dls(self, tr, val, bs, size):
         tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))
-        blocks = (fv.ImageBlock, fv.MaskBlock(args.cats))
+        blocks = fv.ImageBlock, fv.MaskBlock(args.cats)
         return self.create_dls_from_lst(blocks, tr, val, bs, size, self.load_image_item)
 
     def create_learner(self, dls):

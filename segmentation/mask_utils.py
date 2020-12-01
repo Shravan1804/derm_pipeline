@@ -11,7 +11,7 @@ from general import common
 
 def crop_im(im, bbox):
     wmin, hmin, wmax, hmax = bbox
-    return im[hmin:hmax, wmin:wmax]
+    return im[hmin:hmax+1, wmin:wmax+1]
 
 
 def get_obj_proportion(mask, bg=0):

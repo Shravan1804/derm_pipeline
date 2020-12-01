@@ -7,6 +7,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.pat
 from general import train_utils
 
 
+def get_image_cls(img_path):
+    return os.path.basename(os.path.dirname(img_path)) if type(img_path) is str else return img_path.parent.name
+
+
 def cls_perf(perf, inp, targ, cls_idx, cats, axis=-1):
     if axis is not None:
         inp = inp.argmax(dim=axis)

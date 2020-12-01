@@ -17,10 +17,9 @@ import classification.classification_utils as classif_utils
 class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def load_items(self, path):
         images = common.list_files_in_dirs(path, full_path=True, posix_path=True)
-        return np.array(images), self.get_images_cls(images)
+        return np.array(images), np.array([classif_utils.get_image_cls(img_path) for img_path in images])
 
-    def get_images_cls(self, images):
-        return np.array([os.path.basename(os.path.dirname(img_path)) for img_path in images])
+    def get_full_img_cls(self, img_path): return classif_utils.get_image_cls(img_path)
 
     def get_metrics(self):
         metrics_fn = {}
