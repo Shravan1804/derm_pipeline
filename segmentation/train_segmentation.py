@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 from functools import partial
 
 import numpy as np
@@ -10,6 +11,7 @@ from fastai.callback.tracker import EarlyStoppingCallback
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common, train_utils, train_utils_img
 import segmentation.segmentation_utils as segm_utils
+import segmentation.mask_utils as mask_utils
 from segmentation.crop_to_thresh import SEP as CROP_SEP
 
 
@@ -48,7 +50,8 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def create_dls(self, tr, val, bs, size):
         tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))
         blocks = fv.ImageBlock, fv.MaskBlock(args.cats)
-        return self.create_dls_from_lst(blocks, tr, val, bs, size, self.load_image_item)
+        get_y = self.load_image_item if type(tr[1][0]) in (str, Path) else mask_utils.rles_to_non_binary_mask
+        return self.create_dls_from_lst(blocks, tr, val, bs, size, get_y=get_y)
 
     def create_learner(self, dls):
         metrics = list(self.cats_metrics.values()) + [fv.foreground_acc]
@@ -57,8 +60,8 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
 
     def correct_wl(self, wl_items_with_labels, preds):
         wl_items, labels = wl_items_with_labels
-        # TODO: encode preds in RLE
-        return (wl_items, labels), ""
+        labels = [mask_utils.non_binary_mask_to_rles(self.load_image_item(wi)) for wi in wl_items]
+        return (wl_items, np.array(labels)), ""
 
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='foreground_acc', min_delta=0.01, patience=3)

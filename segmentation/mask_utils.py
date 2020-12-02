@@ -4,9 +4,18 @@ import math
 
 import cv2
 import numpy as np
+from pycocotools import mask as pycoco_mask
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common
+
+
+def non_binary_mask_to_rles(mask):
+    return [(k, pycoco_mask.encode(np.asfortranarray(mask == k, dtype=np.uint8))) for k in np.unique(mask)]
+
+
+def rles_to_non_binary_mask(rles):
+    return sum([k*pycoco_mask.decode(rle) for k, rle in rles])
 
 
 def crop_im(im, bbox):
