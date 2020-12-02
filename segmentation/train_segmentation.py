@@ -36,6 +36,10 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def get_image_mask_path(self, img_path):
         return segm_utils.get_mask_path(img_path, self.args.img_dir, self.args.mask_dir, self.args.mext)
 
+    def load_mask(self, item):
+        is_path = type(item) in (str, PosixPath)
+        return self.load_image_item(item) if is_path else mask_utils.rles_to_non_binary_mask(item)
+
     def get_metrics(self):
         metrics_fn = {}
         for cat_id, cat in zip([*range(len(self.args.cats))] + [None], self.args.cats + [self.ALL_CATS]):
@@ -50,8 +54,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def create_dls(self, tr, val, bs, size):
         tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))
         blocks = fv.ImageBlock, fv.MaskBlock(args.cats)
-        get_y = self.load_image_item if type(tr[1][0]) in (str, PosixPath) else mask_utils.rles_to_non_binary_mask
-        return self.create_dls_from_lst(blocks, tr, val, bs, size, get_y=get_y)
+        return self.create_dls_from_lst(blocks, tr, val, bs, size, get_y=self.load_mask)
 
     def create_learner(self, dls):
         metrics = list(self.cats_metrics.values()) + [fv.foreground_acc]
