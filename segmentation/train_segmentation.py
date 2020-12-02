@@ -1,6 +1,6 @@
 import os
 import sys
-from pathlib import Path
+from pathlib import PosixPath
 from functools import partial
 
 import numpy as np
@@ -50,7 +50,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def create_dls(self, tr, val, bs, size):
         tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))
         blocks = fv.ImageBlock, fv.MaskBlock(args.cats)
-        get_y = self.load_image_item if type(tr[1][0]) in (str, Path) else mask_utils.rles_to_non_binary_mask
+        get_y = self.load_image_item if type(tr[1][0]) in (str, PosixPath) else mask_utils.rles_to_non_binary_mask
         return self.create_dls_from_lst(blocks, tr, val, bs, size, get_y=get_y)
 
     def create_learner(self, dls):
@@ -60,7 +60,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
 
     def correct_wl(self, wl_items_with_labels, preds):
         wl_items, labels = wl_items_with_labels
-        labels = [mask_utils.non_binary_mask_to_rles(self.load_image_item(wi)) for wi in wl_items]
+        labels = [mask_utils.non_binary_mask_to_rles(self.load_image_item(pred.numpy())) for pred in preds]
         return (wl_items, np.array(labels)), ""
 
     def early_stop_cb(self):

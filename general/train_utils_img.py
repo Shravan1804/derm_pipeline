@@ -108,7 +108,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
                          batch_tfms=tfms)
         return d.dataloaders(self.args.data, bs=bs)
 
-    def progressive_resizing(self, tr, val, fold_suffix):
+    def maybe_progressive_resizing(self, tr, val, fold_suffix):
         if self.args.progr_size:
             input_sizes = [int(self.args.input_size * f) for f in self.args.size_facts]
             batch_sizes = [max(1, min(int(self.args.bs / f / f), tr[0].size) // 2 * 2) for f in self.args.size_facts]
@@ -123,7 +123,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
             yield it, run, self.create_dls(tr, val, bs, size)
 
     def train_procedure(self, tr, val, fold_suffix, run_prefix="", learn=None):
-        for it, run, dls in self.progressive_resizing(tr, val, fold_suffix):
+        for it, run, dls in self.maybe_progressive_resizing(tr, val, fold_suffix):
             if it == 0 and learn is None: learn = fd.rank0_first(lambda: self.create_learner(dls))
             self.basic_train(learn, f'{run_prefix}{run}', dls)
             self.evaluate_on_test_sets(learn, run)
