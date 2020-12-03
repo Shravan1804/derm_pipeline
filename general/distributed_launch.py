@@ -27,9 +27,10 @@ def main(
         args.append('--encrypted')
 
     processes = []
+    gpus = [str(gpu) for gpu in gpus]
     for i, gpu in enumerate(gpus):
         current_env["RANK"] = str(i)
-        cmd = [sys.executable, "-u", script, f"--proc-gpu={gpu}", f"--num-gpus={gpus}"] + args
+        cmd = [sys.executable, "-u", script, "--proc-gpu", gpu, "--gpu-ids", *gpus] + args
         process = subprocess.Popen(cmd, env=current_env,
                                    stdout=subprocess.DEVNULL if i != 0 and not debug else None,
                                    stderr=subprocess.DEVNULL if i != 0 and not debug else None)
