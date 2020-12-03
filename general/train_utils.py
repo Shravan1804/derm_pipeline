@@ -61,6 +61,11 @@ class CustomItemGetter(fv.ItemGetter):
 
 class GPUManager:
     @staticmethod
+    def default_gpu_device_ids():
+        assert torch.cuda.is_available(), "Cannot run without CUDA device"
+        return list(range(torch.cuda.device_count()))
+
+    @staticmethod
     def in_distributed_mode():
         return os.environ.get('RANK', None) is not None
 
@@ -116,7 +121,8 @@ class FastaiTrainer:
         parser.add_argument('--early-stop', action='store_true', help="Early stopping during training")
 
         parser.add_argument('--proc-gpu', type=int, default=0, help="Id of gpu to be used by process")
-        parser.add_argument("--gpu-ids", type=int, nargs='+', help="Ids of gpus to be used on each machine")
+        parser.add_argument("--gpu-ids", type=int, nargs='+', default=GPUManager.default_gpu_device_ids(),
+                            help="Ids of gpus to be used on each machine")
         parser.add_argument("--num-machines", type=int, default=1, help="number of machines")
 
         parser.add_argument('--seed', type=int, default=pdef.get('--seed', 42), help="Random seed")
@@ -139,7 +145,6 @@ class FastaiTrainer:
         common.set_seeds(args.seed)
 
         assert torch.cuda.is_available(), "Cannot run without CUDA device"
-        args.gpu_ids = list(range(torch.cuda.device_count())) if args.gpu_ids is None else args.gpu_ids
         args.bs = args.bs * len(args.gpu_ids) if GPUManager.in_parallel_mode() else args.bs
 
         if args.encrypted:
