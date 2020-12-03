@@ -58,6 +58,31 @@ class CustomItemGetter(fv.ItemGetter):
     def __init__(self, i, fn): fv.store_attr()
     def encodes(self, x): return self.fn(x[self.i])
 
+
+class GPUManager:
+    @staticmethod
+    def in_distributed_mode():
+        return os.environ.get('RANK', None) is not None
+
+    @staticmethod
+    def in_parallel_mode():
+        return not GPUManager.in_distributed_mode() and torch.cuda.device_count() > 1
+
+    @staticmethod
+    def running_context(learn, device_ids=None):
+        device_ids = list(range(torch.cuda.device_count())) if device_ids is None else device_ids
+        return learn.distrib_ctx() if GPUManager.in_distributed_mode() else learn.parallel_ctx(device_ids)
+
+    @staticmethod
+    def sync_distributed_process():
+        if GPUManager.in_distributed_mode():
+            fv.distrib_barrier()
+
+    @staticmethod
+    def is_master_process():
+        return os.environ.get('RANK') == 0 if GPUManager.in_distributed_mode() else True
+
+
 class FastaiTrainer:
     @staticmethod
     def get_argparser(desc="Fastai trainer arguments", pdef=dict(), phelp=dict()):
@@ -69,7 +94,7 @@ class FastaiTrainer:
         parser.add_argument('--sl-tests', type=str, nargs='+', help="sl test dirs")
 
         parser.add_argument('--encrypted', action='store_true', help="Data is encrypted")
-        parser.add_argument('--user-key', type=str, help="Data encryption key")
+        parser.add_argument('--ckey', type=str, help="Data encryption key")
 
         parser.add_argument('--cross-val', action='store_true', help="Perform 5-fold cross validation on sl train set")
         parser.add_argument('--nfolds', default=5, type=int, help="Number of folds for cross val")
@@ -83,15 +108,15 @@ class FastaiTrainer:
                             help=phelp.get('--test-figsize', "figsize of test performance plots"))
 
         parser.add_argument('--model', type=str, default=pdef.get('--model', None), help="Model name")
-        parser.add_argument('--bs', default=pdef.get('--bs', 6), type=int, help="Batch size")
+        parser.add_argument('--bs', default=pdef.get('--bs', 6), type=int, help="Batch size per GPU device")
         parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 26), help='Number of epochs to run')
 
         parser.add_argument('--no-norm', action='store_true', help="Do not normalizes data")
         parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
         parser.add_argument('--early-stop', action='store_true', help="Early stopping during training")
 
-        parser.add_argument('--gpu', type=int, required=True, help="Id of gpu to be used by script")
-        parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
+        parser.add_argument('--proc-gpu', type=int, default=0, help="Id of gpu to be used by process")
+        parser.add_argument("--gpu-ids", type=int, nargs='+', help="Ids of gpus to be used on each machine")
         parser.add_argument("--num-machines", type=int, default=1, help="number of machines")
 
         parser.add_argument('--seed', type=int, default=pdef.get('--seed', 42), help="Random seed")
@@ -101,7 +126,7 @@ class FastaiTrainer:
     @staticmethod
     def get_exp_logdir(args, custom=""):
         d = f'{common.now()}_{args.model}_bs{args.bs}_epo{args.epochs}_seed{args.seed}' \
-            f'_world{args.num_machines * args.num_gpus}'
+            f'_world{args.num_machines * len(args.gpu_ids)}'
         d += '' if args.no_norm else '_normed'
         d += '_fp32' if args.full_precision else '_fp16'
         d += f'_CV{args.nfolds}' if args.cross_val else f'_noCV_valid{args.valid_size}'
@@ -114,11 +139,12 @@ class FastaiTrainer:
         common.set_seeds(args.seed)
 
         assert torch.cuda.is_available(), "Cannot run without CUDA device"
-        fd.setup_distrib(args.gpu)
+        args.gpu_ids = list(range(torch.cuda.device_count())) if args.gpu_ids is None else args.gpu_ids
+        args.bs = args.bs * len(args.gpu_ids) if GPUManager.in_parallel_mode() else args.bs
 
         if args.encrypted:
-            args.user_key = os.environ.get('CRYPTO_KEY', "").encode()
-            args.user_key = crypto.request_key(args.data, args.user_key)
+            args.ckey = os.environ.get('CRYPTO_KEY').encode() if GPUManager.in_distributed_mode() else args.ckey
+            args.ckey = crypto.request_key(args.data, args.ckey)
 
         if args.exp_logdir is None:
             args.exp_logdir = os.path.join(args.logdir, FastaiTrainer.get_exp_logdir(args))
@@ -178,7 +204,7 @@ class FastaiTrainer:
 
     def get_train_cbs(self, run):
         cbs = []
-        if not fv.rank_distrib():
+        if GPUManager.is_master_process():  # otherwise creates deadlock
             cbs.append(self.tensorboard_cb(run))
         if self.args.early_stop:
             cbs.append(self.early_stop_cb())
@@ -190,21 +216,21 @@ class FastaiTrainer:
         return learn
 
     def basic_train(self, learn, run, dls):
-        fv.distrib_barrier()
+        GPUManager.sync_distributed_process()
         print("Training model:", run)
         learn.dls = dls
-        with learn.distrib_ctx():
+        with GPUManager.running_context(learn, self.args.gpu_ids):
             learn.fine_tune(self.args.epochs, cbs=self.get_train_cbs(run))
         learn.save(os.path.join(self.args.exp_logdir, f'{run}_model'))
 
     def evaluate_and_correct_wl(self, learn, wl_items, run):
-        fv.distrib_barrier()
+        GPUManager.sync_distributed_process()
         print("Evaluating WL data:", run)
         dl = learn.dls.test_dl(list(zip(*wl_items)), with_labels=True)
-        with learn.distrib_ctx():
+        with GPUManager.running_context(learn, self.args.gpu_ids):
             _, targs, decoded_preds = learn.get_preds(dl=dl, with_decoded=True)
         wl_items, changes = self.correct_wl(wl_items, decoded_preds)
-        if not fv.rank_distrib() and changes != "":
+        if GPUManager.is_master_process() and changes != "":
             with open(os.path.join(self.args.exp_logdir, f'{common.now()}_{run}__wl_changes.txt'), 'w') as changelog:
                 changelog.write('file;old_label;new_label\n')
                 changelog.write(changes)
@@ -213,9 +239,9 @@ class FastaiTrainer:
     def evaluate_on_test_sets(self, learn, run):
         print("Testing model:", run)
         for test_name, test_items_with_cls in self.get_test_sets_items():
-            fv.distrib_barrier()
+            GPUManager.sync_distributed_process()
             dl = learn.dls.test_dl(list(zip(*test_items_with_cls)), with_labels=True)
-            with learn.distrib_ctx():
+            with GPUManager.running_context(learn, self.args.gpu_ids):
                 interp = fv.Interpretation.from_learner(learn, dl=dl)
             interp.metrics_res = {mn: m_fn(interp.preds, interp.targs) for mn, m_fn in self.cats_metrics.items()}
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(self.process_preds(interp))
@@ -223,7 +249,7 @@ class FastaiTrainer:
     def process_preds(self, interp): return interp
 
     def generate_tests_reports(self):
-        if fv.rank_distrib(): return
+        if not GPUManager.is_master_process(): return
         for test_name in self.args.sl_tests:
             test_path = common.maybe_create(self.args.exp_logdir, test_name)
             for run, folds_results in self.test_set_results[test_name].items():

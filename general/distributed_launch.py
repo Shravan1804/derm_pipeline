@@ -29,7 +29,7 @@ def main(
     processes = []
     for i, gpu in enumerate(gpus):
         current_env["RANK"] = str(i)
-        cmd = [sys.executable, "-u", script, f"--gpu={gpu}", f"--num-gpus={len(gpus)}"] + args
+        cmd = [sys.executable, "-u", script, f"--proc-gpu={gpu}", f"--num-gpus={gpus}"] + args
         process = subprocess.Popen(cmd, env=current_env,
                                    stdout=subprocess.DEVNULL if i != 0 and not debug else None,
                                    stderr=subprocess.DEVNULL if i != 0 and not debug else None)

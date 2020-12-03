@@ -93,7 +93,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
             yield fold, tr, val
 
     def load_image_item(self, path):
-        return crypto.decrypt_img(path, self.args.user_key) if self.args.encrypted else path
+        return crypto.decrypt_img(path, self.args.ckey) if self.args.encrypted else path
 
     def create_dls_from_lst(self, blocks, tr, val, bs, size, get_y=None):
         tfms = fv.aug_transforms(size=size)
