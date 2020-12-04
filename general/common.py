@@ -181,8 +181,8 @@ def list_dirs(root, full_path=False, posix_path=False, recursion=False, max_rec_
 
 
 def list_files_in_dirs(root, full_path=False, posix_path=False):
-    lf = [os.path.join(root, d, f) if full_path else f for d in list_dirs(root, full_path)
-            for f in list_files(os.path.join(root, d))]
+    lf = [os.path.join(d, f) for d in list_dirs(root, full_path)
+          for f in list_files(d if full_path else os.path.join(root, d))]
     return [Path(i) for i in lf] if posix_path else lf
 
 
@@ -248,20 +248,6 @@ def load_custom_pretrained_weights(model, weights_path):
         else:
             print(f'{name} weight of the model not in pretrained weights')
     model.load_state_dict(model_state_dict)
-
-
-def fastai_load_model(model_params, radam=True):
-    import fastai.vision as fvision
-    if radam:
-        from radam import RAdam
-    return fvision.load_learner(**model_params)
-
-
-def fastai_load_and_prepare_img(img_path):
-    import fastai.vision as fvision
-    im = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
-    t = fvision.pil2tensor(im, dtype=im.dtype)  # converts to numpy tensor
-    return fvision.Image(t.float() / 255.)  # Convert to float
 
 
 def print_prepend(msg):
