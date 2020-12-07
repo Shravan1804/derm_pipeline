@@ -1,41 +1,47 @@
 import os
-import cv2
+import sys
 import json
 import random
+
 import numpy as np
+from PIL import Image
+from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 from skimage import measure
 from shapely.geometry import Polygon
 from pycocotools import mask as coco_mask
 from pycocotools.coco import COCO
-import matplotlib.pyplot as plt
-from tqdm import tqdm
 
-import common
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
+from general import common
 
-def get_default_dataset(description='coco format_data'):
+
+def get_default_dataset(description='coco format data'):
     return {'info': {'year': 2020, 'description': description},
             'licenses': [{'id': 1, 'name': 'confidential, cannot be shared'}],
             'images': [], 'categories': [], 'annotations': []}
 
 
-def get_categories(classes, categories):
-    return [{'id': i, 'name': classes[i - 1], 'supercategory': classes[i - 1]} for i in sorted(categories)]
+def get_categories(cat_names, cat_ids):
+    """Categories ids (cat_ids param) start from 1"""
+    return [{'id': i, 'name': cat_names[i - 1], 'supercategory': cat_names[i - 1]} for i in sorted(cat_ids)]
 
 
-def get_img_record(idx, img_path, license_id=1):
-    im = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+def get_img_record(idx, img_path, im_shape=None, license_id=1):
+    w, h = Image.open(img_path).size if im_shape is None else (im_shape[1], im_shape[0])
     return {
         'id': idx,
         'file_name': os.path.basename(img_path),
         'license': license_id,
-        'height': im.shape[-2],
-        'width': im.shape[-3]
+        'height': h,
+        'width': w
     }
 
 
 def convert_obj_mask_to_rle(mask):
-    rle = coco_mask.encode(mask)
+    """Converts input to fortran contiguous array if needed"""
+    rle = coco_mask.encode(mask if mask.flags['F_CONTIGUOUS'] else np.asfortranarray(mask))
     rle['counts'] = str(rle['counts'], 'utf-8')
     return rle
 
@@ -76,6 +82,33 @@ def convert_masks_to_poly(masks):
     return [convert_obj_mask_to_poly(mask.numpy()) for mask in masks]
 
 
+def get_obj_anno(img_id, ann_id, cat_id, bbox, area, seg, is_crowd=0, with_score=False):
+    anno = {
+        'image_id': img_id,
+        'bbox': bbox,
+        'category_id': cat_id,
+        'area': area,
+        'iscrowd': is_crowd,
+        'id': ann_id,
+        'segmentation': seg
+    }
+    if with_score:
+        anno['score'] = 1.0
+    return anno
+
+
+def get_annos_from_objs_mask(img_id, start_ann_id, obj_cats, obj_cats_masks, with_score=False):
+    annos = []
+    ann_id = start_ann_id
+    for oc, (nb_objs, oc_mask) in zip(obj_cats, obj_cats_masks):
+        for obj_id in range(1, nb_objs):
+            rle = convert_obj_mask_to_rle((oc_mask == obj_id).astype(np.uint8))
+            annos.append(get_obj_anno(img_id, ann_id, oc, coco_mask.toBbox(rle), coco_mask.area(rle),
+                                      rle, with_score=with_score))
+            ann_id += 1
+    return ann_id, annos
+
+
 def get_img_annotations(img_id, start_ann_id, targets):
     annos = []
     categories = set()
@@ -85,18 +118,12 @@ def get_img_annotations(img_id, start_ann_id, targets):
         if hasattr(k, 'tolist'):
             targets[k] = targets[k].tolist()
     for i in range(len(targets['labels'])):
-        annos.append({
-            'image_id': img_id,
-            'bbox': [float(b) for b in targets["boxes"][i]],
-            'category_id': int(targets['labels'][i]),
-            'area': int(targets['areas'][i]),
-            'iscrowd': int(targets['iscrowd'][i]),
-            'id': ann_id,
-            'segmentation': targets['masks'][i]
-        })
+        annos.append(get_obj_anno(img_id, ann_id, int(targets['labels'][i]), [float(b) for b in targets["boxes"][i]],
+                                  int(targets['areas'][i]), targets['masks'][i]))
         categories.add(int(targets['labels'][i]))
         ann_id += 1
     return ann_id, annos, categories
+
 
 def visualize_dataset(img_dir, anno_json, dest):
     common.check_dir_valid(img_dir)
@@ -126,6 +153,7 @@ def save_sample_coco_data(coco_json_path, sample_size=100, save_path=None):
             sample['annotations'].extend([a for a in coco_json['annotations'] if a['image_id'] == img['id']])
         save_path = coco_json_path.replace('.json', '_sample.json') if save_path is None else save_path
         json.dump(sample, open(save_path, 'w'), sort_keys=True, indent=4, separators=(',', ': '))
+
 
 if __name__ == '__main__':
     path = '/home/shravan/Downloads/temp/'

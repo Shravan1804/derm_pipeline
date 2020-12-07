@@ -2,11 +2,14 @@ import os
 import sys
 
 import cv2
+import numpy as np
+from pycocotools.coco import COCO
 
 import torch
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common, train_utils
+from object_detection import coco_format
 from classification.classification_utils import conf_mat
 
 
@@ -39,4 +42,27 @@ def cls_perf(perf, inp, targ, cls_idx, cats, bg=None, axis=1):
 
 def pixel_conf_mat(cats, preds, targs, normalize=True, epsilon=1e-8):
     return conf_mat(cats, preds.flatten(), targs.flatten(), normalize, epsilon)
+
+
+def segm_dataset_to_coco_format(segm_masks: np.ndarray, cats, with_score=False, bg=0, ret_json=False):
+    dataset = coco_format.get_default_dataset()
+    cats = [(c, i) for i, c in enumerate(cats) if i != bg]
+    dataset['categories'] = coco_format.get_categories(*zip(*cats))
+    ann_id = 0
+    for img_id, non_binary_mask in enumerate(segm_masks):
+        dataset['images'].append(coco_format.get_img_record(img_id, f'{img_id}.jpg', non_binary_mask.shape))
+        obj_cats = np.array([t for t in np.unique(non_binary_mask) if t != bg])
+        if not obj_cats.size: continue
+        cat_masks = non_binary_mask == obj_cats[:, None, None]
+        obj_cats_masks = tuple(cv2.connectedComponents(cmsk.astype(np.uint8)) for cmsk in cat_masks)
+        ann_id, img_annos = coco_format.get_annos_from_objs_mask(img_id, ann_id, obj_cats, obj_cats_masks, with_score)
+        dataset['annotations'].extend(img_annos)
+    if ret_json:
+        return dataset
+    else:
+        coco_ds = COCO()
+        coco_ds.dataset = dataset
+        coco_ds.createIndex()
+        return coco_ds
+
 
