@@ -48,8 +48,9 @@ def segm_dataset_to_coco_format(segm_masks: np.ndarray, cats, with_score=False, 
     dataset = coco_format.get_default_dataset()
     cats = [(c, i) for i, c in enumerate(cats) if i != bg]
     dataset['categories'] = coco_format.get_categories(*zip(*cats))
-    ann_id = 0
+    ann_id = 1  # MUST start at 1 since pycocotools.cocoeval uses detId to track matches and checks with > 0
     for img_id, non_binary_mask in enumerate(segm_masks):
+        img_id += 1  # to be on the safe side (same idea as ann_id)
         dataset['images'].append(coco_format.get_img_record(img_id, f'{img_id}.jpg', non_binary_mask.shape))
         obj_cats = np.array([t for t in np.unique(non_binary_mask) if t != bg])
         if not obj_cats.size: continue

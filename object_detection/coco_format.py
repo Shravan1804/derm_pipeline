@@ -101,7 +101,7 @@ def get_annos_from_objs_mask(img_id, start_ann_id, obj_cats, obj_cats_masks, wit
     annos = []
     ann_id = start_ann_id
     for oc, (nb_objs, oc_mask) in zip(obj_cats, obj_cats_masks):
-        for obj_id in range(1, nb_objs):
+        for obj_id in range(1, nb_objs):    # first object 0 is the background, last obj id is nb_objs-1
             rle = convert_obj_mask_to_rle((oc_mask == obj_id).astype(np.uint8))
             annos.append(get_obj_anno(img_id, ann_id, oc, coco_mask.toBbox(rle), coco_mask.area(rle),
                                       rle, with_score=with_score))
@@ -110,6 +110,8 @@ def get_annos_from_objs_mask(img_id, start_ann_id, obj_cats, obj_cats_masks, wit
 
 
 def get_img_annotations(img_id, start_ann_id, targets):
+    assert start_ann_id > 0, "ann_id MUST start at 1 since pycocotools.cocoeval uses detId to track matches" \
+                             "and checks with > 0"
     annos = []
     categories = set()
     ann_id = start_ann_id

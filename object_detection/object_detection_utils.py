@@ -26,10 +26,11 @@ class CustomCocoEval(COCOeval):
         self.params.areaRng = self.computeAreaRng()
         self.params.maxDets = self.computeMaxDets()
 
-    def eval_acc_summarize(self):
+    def eval_acc_and_maybe_summarize(self, summarize=True):
         self.evaluate()
         self.accumulate()
-        self.summarize()
+        if summarize:
+            self.summarize()
 
     def summarize(self):
         if not self.eval:
@@ -38,7 +39,7 @@ class CustomCocoEval(COCOeval):
         p = self.params
 
         def _iou_res(iouThr, s):
-            return s if iouThr is not None else s[iouThr == p.iouThrs]
+            return s if iouThr is None else s[iouThr == p.iouThrs]
 
         def _summarize(iouThr=None, areaRng=p.areaRngLbl[0], maxDets=p.maxDets[0], cat=self.cats[0]):
             aind = [i for i, aRng in enumerate(p.areaRngLbl) if aRng == areaRng]
@@ -58,14 +59,14 @@ class CustomCocoEval(COCOeval):
         stats = []
         for cat in self.cats:
             print("CATEGORY:", cat)
-            for area in p.areaRngLbl:
+            for area, _ in zip(p.areaRngLbl, p.areaRng):
                 print("\tOBJECT SIZE:", area)
                 for det in p.maxDets:
                     print("\t\tMAX DET COUNT:", det)
                     for iou in self.ious_summary + [None]:
                         iouStr = f'{p.iouThrs[0]:0.2f}:{p.iouThrs[-1]:0.2f}' if iou is None else f'{iou:0.2f}'
                         ap, ar = _summarize(iou, area, det, cat)
-                        print(f"\t\t\tIOU={iouStr}: AP={ap:0.3f}, AR={ar:0.3f}")
+                        print(f"\t\t\tIoU={iouStr:<10}: AP={ap:6.3f}, AR={ar:6.3f}")
                         stats.append((ap, ar))
         self.stats = np.array(stats)
 
