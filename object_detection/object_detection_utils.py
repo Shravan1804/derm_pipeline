@@ -18,9 +18,9 @@ class CustomCocoEval(COCOeval):
         min_dets = np.max(dets)
         return [min_dets, *tuple(int(f*min_dets) for f in facts)]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, all_cats="all", **kwargs):
         super().__init__(*args, **kwargs)
-        self.cats = ["all"] + [self.cocoGt.cats[cid]['name'] for cid in self.params.catIds]
+        self.cats = [all_cats] + [self.cocoGt.cats[cid]['name'] for cid in self.params.catIds]
         self.ious_summary = [.15, .25, .5, .75]
         self.params.iouThrs = np.linspace(.15, 0.95, np.int(np.round((0.95 - .15) / .05)) + 1, endpoint=True)
         self.params.areaRng = self.computeAreaRng()
@@ -56,17 +56,21 @@ class CustomCocoEval(COCOeval):
 
             return mean_sap, mean_sar
 
-        stats = []
-        for cat in self.cats:
+        self.stats = np.zeros((2, len(self.cats), len(p.areaRng), len(p.maxDets), len(self.ious_summary)), np.float)
+        for ci, cat in enumerate(self.cats):
             print("CATEGORY:", cat)
-            for area, _ in zip(p.areaRngLbl, p.areaRng):
+            for ai, (area, _) in enumerate(zip(p.areaRngLbl, p.areaRng)):
                 print("\tOBJECT SIZE:", area)
-                for det in p.maxDets:
+                for di, det in enumerate(p.maxDets):
                     print("\t\tMAX DET COUNT:", det)
-                    for iou in self.ious_summary + [None]:
+                    for ii, iou in enumerate(self.ious_summary + [None]):
                         iouStr = f'{p.iouThrs[0]:0.2f}:{p.iouThrs[-1]:0.2f}' if iou is None else f'{iou:0.2f}'
                         ap, ar = _summarize(iou, area, det, cat)
                         print(f"\t\t\tIoU={iouStr:<10}: AP={ap:6.3f}, AR={ar:6.3f}")
-                        stats.append((ap, ar))
-        self.stats = np.array(stats)
+                        self.stats[:, ci, ai, di, ii] = ap, ar
+
+    def graph_values(self):
+        if not self.stats:
+            raise Exception("Please run summary first")
+        return self.stats[:, :, 0, -1, :]   # AP/AR for all cats, ious and for area=all and maxDet
 
