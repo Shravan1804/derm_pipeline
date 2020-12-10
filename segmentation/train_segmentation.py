@@ -44,9 +44,26 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn):
         for bg in [None, self.args.bg] if cat_id != self.args.bg else [None]:
             cat_perf = partial(segm_utils.cls_perf, cls_idx=cat_id, cats=self.args.cats, bg=bg)
-            signature = f'{perf_fn}_{cat}{"" if bg is None else "_no_bg"}(inp, targ)'
+            signature = f'{self.get_metrics_cats_name(perf_fn, cat)}{"" if bg is None else "_no_bg"}(inp, targ)'
             code = f"def {signature}: return cat_perf(train_utils.{perf_fn}, inp, targ).to(inp.device)"
             exec(code, {"cat_perf": cat_perf, 'train_utils': train_utils}, metrics_fn)
+
+    def aggregate_test_performance(self, folds_res):
+        """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
+        agg = super().aggregate_test_performance(folds_res)
+        for perf_fn in self.BASIC_PERF_FNS:
+            mns = [self.get_metrics_cats_name(perf_fn, cat) + "_no_bg" for cat in self.get_cats_with_all()]
+            agg[perf_fn + "_no_bg"] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
+        return agg
+
+    def process_test_preds(self, interp):
+        setattr(interp, f'{self.AGG}cm', segm_utils.pixel_conf_mat(self.args.cats, interp.decoded, interp.targs))
+
+        to_coco = partial(segm_utils.segm_dataset_to_coco_format, cats=self.args.cats, bg=self.args.bg)
+        cocoEval = CustomCocoEval(to_coco(interp.targs), to_coco(interp.decoded, scores=True), all_cats=self.ALL_CATS)
+        cocoEval.eval_acc_and_maybe_summarize()
+        interp.coco = torch.Tensor(cocoEval.graph_values())
+        return interp
 
     def create_dls(self, tr, val, bs, size):
         tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))
@@ -66,19 +83,6 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
 
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='foreground_acc', min_delta=0.01, patience=3)
-
-    def process_preds(self, interp):
-        interp.cm = segm_utils.pixel_conf_mat(self.args.cats, interp.decoded, interp.targs)
-
-        to_coco = partial(segm_utils.segm_dataset_to_coco_format, cats=self.args.cats, bg=self.args.bg)
-        cocoEval = CustomCocoEval(to_coco(interp.targs), to_coco(interp.decoded, scores=True), all_cats=self.ALL_CATS)
-        cocoEval.eval_acc_and_maybe_summarize()
-        interp.coco = torch.Tensor(cocoEval.graph_values())
-        return interp
-
-    def aggregate_test_performance(self, folds_res):
-        super().aggregate_test_performance(folds_res)
-
 
 
 def main(args):

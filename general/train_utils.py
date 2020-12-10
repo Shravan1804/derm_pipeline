@@ -157,6 +157,7 @@ class FastaiTrainer:
         print("Log directory: ", args.exp_logdir)
 
     def __init__(self, args, stratify):
+        self.AGG = "__AGG__"
         self.args = args
         self.stratify = stratify
         self.cust_metrics = self.prepare_custom_metrics()
@@ -182,8 +183,6 @@ class FastaiTrainer:
     def early_stop_cb(self): raise NotImplementedError
 
     def get_sorting_run_key(self, run_name): raise NotImplementedError
-
-    def aggregate_test_performance(self, folds_res): raise NotImplementedError
 
     def plot_test_performance(self, test_path, agg): raise NotImplementedError
 
@@ -248,10 +247,20 @@ class FastaiTrainer:
             dl = learn.dls.test_dl(list(zip(*test_items_with_cls)), with_labels=True)
             with GPUManager.running_context(learn, self.args.gpu_ids):
                 interp = fv.Interpretation.from_learner(learn, dl=dl)
-            interp.metrics_res = {mn: m_fn(interp.preds, interp.targs) for mn, m_fn in self.cust_metrics.items()}
-            self.test_set_results[test_name][self.get_sorting_run_key(run)].append(self.process_preds(interp))
+            self.test_set_results[test_name][self.get_sorting_run_key(run)].append(self.process_test_preds(interp))
 
-    def process_preds(self, interp): return interp
+    def process_test_preds(self, interp):
+        """Adds custom metrics results to interp object. Should return interp."""
+        for mn, mfn in self.cust_metrics.items():
+            setattr(interp, f'{self.AGG}{mn}', mfn(interp.preds, interp.targs))
+        return interp
+
+    def aggregate_test_performance(self, folds_res):
+        agg = {}
+        for attr in [attr for attr in dir(folds_res[0]) if attr.startswith(self.AGG)]:
+            mean_std = tensors_mean_std([getattr(fr, attr) for fr in folds_res])
+            agg[attr.replace(self.AGG, '')] = tuple(s.numpy() for s in mean_std)
+        return agg
 
     def generate_tests_reports(self):
         if not GPUManager.is_master_process(): return

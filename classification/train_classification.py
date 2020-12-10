@@ -23,9 +23,13 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
 
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn):
         cat_perf = partial(classif_utils.cls_perf, cats=self.args.cats)
-        signature = f'{perf_fn}_{cat}(inp, targ)'
+        signature = f'{self.get_metrics_cats_name(perf_fn, cat)}(inp, targ)'
         code = f"def {signature}: return cat_perf(train_utils.{perf_fn}, inp, targ, {cat_id}).to(inp.device)"
         exec(code, {"cat_perf": cat_perf, 'train_utils': train_utils}, metrics_fn)
+
+    def process_test_preds(self, interp):
+        setattr(interp, f'{self.AGG}cm', classif_utils.conf_mat(self.args.cats, interp.decoded, interp.targs))
+        return interp
 
     def create_dls(self, tr, val, bs, size):
         tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))
@@ -53,10 +57,6 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
 
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='accuracy', min_delta=0.01, patience=3)
-
-    def process_preds(self, interp):
-        interp.cm = classif_utils.conf_mat(self.args.cats, interp.decoded, interp.targs)
-        return interp
 
 
 def main(args):

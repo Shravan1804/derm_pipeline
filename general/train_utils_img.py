@@ -52,14 +52,27 @@ class ImageTrainer(train_utils.FastaiTrainer):
         self.BASIC_PERF_FNS = ['accuracy', 'precision', 'recall']
         super().__init__(args, stratify)
 
+    def get_cats_with_all(self):
+        return [*self.args.cats, self.ALL_CATS]
+
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn): raise NotImplementedError
+
+    def get_metrics_cats_name(self, perf_fn, cat): return f'{perf_fn}_{cat}'
 
     def prepare_cats_metrics(self):
         metrics_fn = {}
         for perf_fn in self.BASIC_PERF_FNS:
-            for cat_id, cat in zip([*range(len(self.args.cats)), None], [*self.args.cats, self.ALL_CATS]):
+            for cat_id, cat in zip([*range(len(self.args.cats)), None], self.get_cats_with_all()):
                 self.create_cats_metrics(perf_fn, cat_id, cat, metrics_fn)
         return metrics_fn
+
+    def aggregate_test_performance(self, folds_res):
+        """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
+        agg = super().aggregate_test_performance(folds_res)
+        for perf_fn in self.BASIC_PERF_FNS:
+            mns = [self.get_metrics_cats_name(perf_fn, cat) for cat in self.get_cats_with_all()]
+            agg[perf_fn] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
+        return agg
 
     def tensorboard_cb(self, run_name):
         return ImageTBCb(self.args.exp_logdir, run_name, self.cust_metrics.keys(), self.ALL_CATS)
@@ -143,21 +156,12 @@ class ImageTrainer(train_utils.FastaiTrainer):
         m = re.match(regex, run_name)
         return run_name.replace(f'__F{m.group("fold")}__', '')
 
-    def aggregate_test_performance(self, folds_res):
-        """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
-        cats = self.args.cats + [self.ALL_CATS]
-        agg = {p: [[m.metrics_res[f'{c}_{p}'] for m in folds_res] for c in cats] for p in self.BASIC_PERF_FNS}
-        agg = {p: [train_utils.tensors_mean_std(vals) for vals in cat_vals] for p, cat_vals in agg.items()}
-        agg = {p: tuple([torch.stack(s).numpy() for s in zip(*cat_vals)]) for p, cat_vals in agg.items()}
-        agg["cm"] = tuple([s.numpy() for s in train_utils.tensors_mean_std([interp.cm for interp in folds_res])])
-        return agg
-
     def plot_test_performance(self, test_path, run, agg_run_perf):
         for show_val in [False, True]:
             save_path = os.path.join(test_path, f'{run}{"_show_val" if show_val else ""}.jpg')
             fig, axs = plt.subplots(1, 2, figsize=self.args.test_figsize)
             bar_perf = {p: cat_vals for p, cat_vals in agg_run_perf.items() if p != 'cm'}
-            bar_cats = self.args.cats + ["All"]
+            bar_cats = self.get_cats_with_all()
             common.grouped_barplot_with_err(axs[0], bar_perf, bar_cats, xlabel='Classes', show_val=show_val)
             common.plot_confusion_matrix(axs[1], agg_run_perf['cm'], self.args.cats)
             fig.tight_layout(pad=.2)
