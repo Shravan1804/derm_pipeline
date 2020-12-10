@@ -5,6 +5,7 @@ from functools import partial
 
 import numpy as np
 
+import torch
 import fastai.vision.all as fv
 from fastai.callback.tracker import EarlyStoppingCallback
 
@@ -13,7 +14,7 @@ from general import common, train_utils, train_utils_img
 import segmentation.segmentation_utils as segm_utils
 import segmentation.mask_utils as mask_utils
 from segmentation.crop_to_thresh import SEP as CROP_SEP
-
+from object_detection.object_detection_utils import CustomCocoEval
 
 class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def get_argparser(desc="Fastai segmentation image trainer arguments", pdef=dict(), phelp=dict()):
@@ -40,16 +41,12 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         is_path = type(item) in (str, PosixPath)
         return self.load_image_item(item) if is_path else mask_utils.rles_to_non_binary_mask(item)
 
-    def get_metrics(self):
-        metrics_fn = {}
-        for cat_id, cat in zip([*range(len(self.args.cats))] + [None], self.args.cats + [self.ALL_CATS]):
-            for bg in [None, self.args.bg] if cat_id != self.args.bg else [None]:
-                cat_perf = partial(segm_utils.cls_perf, cls_idx=cat_id, cats=self.args.cats, bg=bg)
-                for perf_fn in self.BASIC_PERF_FNS:
-                    fn_name = f'{cat}_{perf_fn}{"" if bg is None else "_no_bg"}'
-                    code = f"def {fn_name}(inp, targ): return cat_perf(train_utils.{perf_fn}, inp, targ).to(inp.device)"
-                    exec(code, {"cat_perf": cat_perf, 'train_utils': train_utils}, metrics_fn)
-        return metrics_fn
+    def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn):
+        for bg in [None, self.args.bg] if cat_id != self.args.bg else [None]:
+            cat_perf = partial(segm_utils.cls_perf, cls_idx=cat_id, cats=self.args.cats, bg=bg)
+            signature = f'{perf_fn}_{cat}{"" if bg is None else "_no_bg"}(inp, targ)'
+            code = f"def {signature}: return cat_perf(train_utils.{perf_fn}, inp, targ).to(inp.device)"
+            exec(code, {"cat_perf": cat_perf, 'train_utils': train_utils}, metrics_fn)
 
     def create_dls(self, tr, val, bs, size):
         tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))
@@ -57,7 +54,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         return self.create_dls_from_lst(blocks, tr, val, bs, size, get_y=self.load_mask)
 
     def create_learner(self, dls):
-        metrics = list(self.cats_metrics.values()) + [fv.foreground_acc]
+        metrics = list(self.cust_metrics.values()) + [fv.foreground_acc]
         learn = fv.unet_learner(dls, getattr(fv, self.args.model), metrics=metrics)
         return self.prepare_learner(learn)
 
@@ -72,7 +69,16 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
 
     def process_preds(self, interp):
         interp.cm = segm_utils.pixel_conf_mat(self.args.cats, interp.decoded, interp.targs)
+
+        to_coco = partial(segm_utils.segm_dataset_to_coco_format, cats=self.args.cats, bg=self.args.bg)
+        cocoEval = CustomCocoEval(to_coco(interp.targs), to_coco(interp.decoded, scores=True), all_cats=self.ALL_CATS)
+        cocoEval.eval_acc_and_maybe_summarize()
+        interp.coco = torch.Tensor(cocoEval.graph_values())
         return interp
+
+    def aggregate_test_performance(self, folds_res):
+        super().aggregate_test_performance(folds_res)
+
 
 
 def main(args):

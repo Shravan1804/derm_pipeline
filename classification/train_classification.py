@@ -21,22 +21,18 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
 
     def get_full_img_cls(self, img_path): return classif_utils.get_image_cls(img_path)
 
-    def get_metrics(self):
-        metrics_fn = {}
+    def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn):
         cat_perf = partial(classif_utils.cls_perf, cats=self.args.cats)
-        for cat_id, cat in zip([*range(len(self.args.cats))] + [None], self.args.cats + [self.ALL_CATS]):
-            for perf_fn in self.BASIC_PERF_FNS:
-                code = f"def {cat}_{perf_fn}(inp, targ):" \
-                       f"return cat_perf(train_utils.{perf_fn}, inp, targ, {cat_id}).to(inp.device)"
-                exec(code, {"cat_perf": cat_perf, 'train_utils': train_utils}, metrics_fn)
-        return metrics_fn
+        signature = f'{perf_fn}_{cat}(inp, targ)'
+        code = f"def {signature}: return cat_perf(train_utils.{perf_fn}, inp, targ, {cat_id}).to(inp.device)"
+        exec(code, {"cat_perf": cat_perf, 'train_utils': train_utils}, metrics_fn)
 
     def create_dls(self, tr, val, bs, size):
         tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))
         return self.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock), tr, val, bs, size)
 
     def create_learner(self, dls):
-        metrics = list(self.cats_metrics.values()) + [fv.accuracy]  # for early stop callback
+        metrics = list(self.cust_metrics.values()) + [fv.accuracy]  # for early stop callback
         if "efficientnet" in self.args.model:
             from efficientnet_pytorch import EfficientNet
             model = EfficientNet.from_pretrained(self.args.model)

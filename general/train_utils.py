@@ -159,11 +159,11 @@ class FastaiTrainer:
     def __init__(self, args, stratify):
         self.args = args
         self.stratify = stratify
-        self.cats_metrics = self.get_metrics()
+        self.cust_metrics = self.prepare_custom_metrics()
         self.test_set_results = {test_name: defaultdict(list) for test_name in self.args.sl_tests}
         print("Training args:", self.args)
 
-    def get_metrics(self): raise NotImplementedError
+    def prepare_custom_metrics(self): raise NotImplementedError
 
     def load_items(self, path): raise NotImplementedError
 
@@ -248,7 +248,7 @@ class FastaiTrainer:
             dl = learn.dls.test_dl(list(zip(*test_items_with_cls)), with_labels=True)
             with GPUManager.running_context(learn, self.args.gpu_ids):
                 interp = fv.Interpretation.from_learner(learn, dl=dl)
-            interp.metrics_res = {mn: m_fn(interp.preds, interp.targs) for mn, m_fn in self.cats_metrics.items()}
+            interp.metrics_res = {mn: m_fn(interp.preds, interp.targs) for mn, m_fn in self.cust_metrics.items()}
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(self.process_preds(interp))
 
     def process_preds(self, interp): return interp

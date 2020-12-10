@@ -52,8 +52,17 @@ class ImageTrainer(train_utils.FastaiTrainer):
         self.BASIC_PERF_FNS = ['accuracy', 'precision', 'recall']
         super().__init__(args, stratify)
 
+    def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn): raise NotImplementedError
+
+    def prepare_cats_metrics(self):
+        metrics_fn = {}
+        for perf_fn in self.BASIC_PERF_FNS:
+            for cat_id, cat in zip([*range(len(self.args.cats)), None], [*self.args.cats, self.ALL_CATS]):
+                self.create_cats_metrics(perf_fn, cat_id, cat, metrics_fn)
+        return metrics_fn
+
     def tensorboard_cb(self, run_name):
-        return ImageTBCb(self.args.exp_logdir, run_name, self.cats_metrics.keys(), self.ALL_CATS)
+        return ImageTBCb(self.args.exp_logdir, run_name, self.cust_metrics.keys(), self.ALL_CATS)
 
     def get_test_sets_items(self):
         if self.args.sl_tests is None:
