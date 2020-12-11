@@ -23,41 +23,45 @@ def get_cmap(n, name='Dark2'):
     return plt.cm.get_cmap(name, n)
 
 
-def grouped_barplot(ax, vars_vals, var_labels, group_labels, barWidth=.25):
-    """vars_vals: lst of variables values (lst, one item per group)"""
-    assert len(vars_vals) == len(var_labels)
-    assert np.array([len(v) == len(group_labels) for v in vars_vals]).all()
-    ax.axis('on')
-    cmap = get_cmap(len(vars_vals))
-    pos = np.arange(len(group_labels))
-    for var_vals, var_label, c in zip(vars_vals, var_labels, [cmap(i) for i in range(len(vars_vals))]):
-        ax.bar(pos, var_vals, color=c, width=barWidth, edgecolor='white', label=var_label)
-        pos = [x + barWidth for x in pos]
-    ax.set_xlabel('Metrics', fontweight='bold')
-    ax.set_ylabel('Percentage', fontweight='bold')
-    ax.set_xticks([r + barWidth for r in range(len(group_labels))])
-    ax.set_xticklabels(group_labels)
-    ax.legend()
+def clip_err(vals, err, bounds=(0, 1)):
+    """If err not None, will return 2D err array (low_err and up_err) clipped between specified bounds"""
+    if err is None: return np.zeros((2, *vals.shape), dtype=vals.dtype)
+    return (np.vstack([vals - err, vals + err]).clip(*bounds) - np.vstack([vals, vals])) * np.array([[-1], [1]])
+
+
+def get_error_display_params():
+    return {'elinewidth': .8, 'capsize': 2, 'capthick': .5}
+
+
+def show_graph_values(ax, values, pos_x, pos_y=None, yerr=None, kwargs={"fontsize": 6}):
+    print(yerr)
+    pos_y = values if pos_y is None else pos_y
+    yerr = np.zeros(values.shape) if yerr is None else yerr
+    for x, y, v, ye in zip(pos_x, pos_y, values, yerr):
+        ax.text(x, y + ye, f'{v:.2f}', **kwargs)
+
+
+def plot_lines_with_err(ax, xs, ys, errs, labels, show_val=False, err_bounds=(0, 1), legend_loc="lower center"):
+    for x, y, err, label in zip(xs, ys, errs, labels):
+        err = clip_err(y, err, err_bounds)
+        ax.errorbar(x, y, yerr=err, label=label, **get_error_display_params())
+        if show_val: show_graph_values(ax, y, x, yerr=err[1])
+    ax.legend(loc=legend_loc)
 
 
 def grouped_barplot_with_err(ax, stats, xticklabels, xlabel=None, ylabel=None, title=None, barwidth=.35, show_val=False,
-             title_loc=None, legend_loc="lower center", ekw=None):
-    def clip_err(vals, err, bounds=(0, 1)):
-        """If err not None, will return 2D np array clipped between specified bounds"""
-        return (np.vstack([vals - err, vals + err]).clip(*bounds) - np.vstack([vals, vals])) * np.array([[-1], [1]])
-
+                             title_loc=None, legend_loc="lower center", err_bounds=(0, 1)):
     nbars_per_group, ngroups = len(stats.keys()), len(xticklabels)
     group_width = nbars_per_group * barwidth * 4/3
     positions = np.arange(0, ngroups * group_width, group_width)
     offsets = [(i - nbars_per_group / 2) * barwidth + barwidth / 2 for i in range(nbars_per_group)]
 
-    ekw = {'elinewidth': .8, 'capsize': 2, 'capthick': .5} if ekw is None else ekw
-    for offset, (key, (vals, err)) in zip(offsets, stats.items()):
-        err = np.zeros(vals.shape) if err is None else clip_err(vals, err)
-        ax.bar(positions + offset, vals, width=barwidth, yerr=err, label=key, error_kw=ekw, edgecolor='white')
-        if show_val:
-            for pos, v, verr in zip(positions, vals, err[0]):
-                ax.text(pos + offset - barwidth/2, v + verr/2 + .05, f'{v:.2f}', fontsize=6)
+    ekw = get_error_display_params()
+    cmap = get_cmap(nbars_per_group)
+    for offset, (key, (vals, err)), c in zip(offsets, stats.items(), [cmap(i) for i in range(nbars_per_group)]):
+        err = clip_err(vals, err, err_bounds)
+        ax.bar(positions + offset, vals, color=c, width=barwidth, yerr=err, label=key, error_kw=ekw, edgecolor='white')
+        if show_val: show_graph_values(ax, vals, positions + offset - barwidth/2, yerr=err[1])
 
     ax.set_ylabel("/".join(stats.keys()) if ylabel is None else ylabel)
     ax.set_xlabel(xlabel)
