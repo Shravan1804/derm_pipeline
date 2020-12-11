@@ -22,7 +22,7 @@ def cls_perf(perf, inp, targ, cls_idx, cats, axis=-1):
         return torch.tensor(perf(*train_utils.get_cls_TP_TN_FP_FN(targ == cls_idx, inp == cls_idx)))
 
 
-def conf_mat(cats, preds, targs, normalize=True, epsilon=1e-8):
+def conf_mat(targs, preds, cats, normalize=True, epsilon=1e-8):
     # https://github.com/fastai/fastai/blob/master/fastai/interpret.py
     x = torch.arange(0, len(cats))
     cm = ((preds == x[:, None]) & (targs == x[:, None, None])).long().sum(2)

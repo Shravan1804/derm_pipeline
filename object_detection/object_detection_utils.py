@@ -26,13 +26,12 @@ class CustomCocoEval(COCOeval):
         self.params.areaRng = self.computeAreaRng()
         self.params.maxDets = self.computeMaxDets()
 
-    def eval_acc_and_maybe_summarize(self, summarize=True):
+    def eval_acc_and_summarize(self, verbose=True):
         self.evaluate()
         self.accumulate()
-        if summarize:
-            self.summarize()
+        self.summarize(verbose)
 
-    def summarize(self):
+    def summarize(self, verbose):
         if not self.eval:
             raise Exception('Please run accumulate() first')
 
@@ -57,20 +56,22 @@ class CustomCocoEval(COCOeval):
             return mean_sap, mean_sar
 
         self.stats = np.zeros((2, len(self.cats), len(p.areaRng), len(p.maxDets), len(self.ious_summary)), np.float)
+        res_str = ""
         for ci, cat in enumerate(self.cats):
-            print("CATEGORY:", cat)
+            res_str += f"CATEGORY: {cat}\n"
             for ai, (area, _) in enumerate(zip(p.areaRngLbl, p.areaRng)):
-                print("\tOBJECT SIZE:", area)
+                res_str += f"\tOBJECT SIZE: {area}\n"
                 for di, det in enumerate(p.maxDets):
-                    print("\t\tMAX DET COUNT:", det)
-                    for ii, iou in enumerate(self.ious_summary + [None]):
+                    res_str += f"\t\tMAX DET COUNT: {det}\n"
+                    for ii, iou in enumerate([*self.ious_summary, None]):
                         iouStr = f'{p.iouThrs[0]:0.2f}:{p.iouThrs[-1]:0.2f}' if iou is None else f'{iou:0.2f}'
                         ap, ar = _summarize(iou, area, det, cat)
-                        print(f"\t\t\tIoU={iouStr:<10}: AP={ap:6.3f}, AR={ar:6.3f}")
+                        res_str += f"\t\t\tIoU={iouStr:<10}: AP={ap:6.3f}, AR={ar:6.3f}\n"
                         self.stats[:, ci, ai, di, ii] = ap, ar
+        if verbose: print(res_str)
 
     def graph_values(self):
         if not self.stats:
             raise Exception("Please run summary first")
-        return self.stats[:, :, 0, -1, :]   # AP/AR for all cats, ious and for area=all and maxDet
+        return self.stats
 

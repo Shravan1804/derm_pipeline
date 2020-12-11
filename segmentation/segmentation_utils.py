@@ -40,8 +40,8 @@ def cls_perf(perf, inp, targ, cls_idx, cats, bg=None, axis=1):
         return torch.tensor(perf(*train_utils.get_cls_TP_TN_FP_FN(targ == cls_idx, inp == cls_idx)))
 
 
-def pixel_conf_mat(cats, preds, targs, normalize=True, epsilon=1e-8):
-    return conf_mat(cats, preds.flatten(), targs.flatten(), normalize, epsilon)
+def pixel_conf_mat(targs, preds, cats, normalize=True, epsilon=1e-8):
+    return conf_mat(targs.flatten(), preds.flatten(), cats, normalize, epsilon)
 
 
 def segm_dataset_to_coco_format(segm_masks, cats, scores=False, bg=0, ret_json=False):

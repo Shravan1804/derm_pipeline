@@ -52,14 +52,16 @@ class ImageTrainer(train_utils.FastaiTrainer):
         self.BASIC_PERF_FNS = ['accuracy', 'precision', 'recall']
         super().__init__(args, stratify)
 
-    def get_cats_with_all(self):
-        return [*self.args.cats, self.ALL_CATS]
+    def compute_conf_mat(self, targs, preds): raise NotImplementedError
 
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn): raise NotImplementedError
 
-    def get_metrics_cats_name(self, perf_fn, cat): return f'{perf_fn}_{cat}'
+    def get_cats_with_all(self):
+        return [*self.args.cats, self.ALL_CATS]
 
-    def prepare_cats_metrics(self):
+    def get_cat_metric_name(self, perf_fn, cat): return f'{perf_fn}_{cat}'
+
+    def prepare_custom_metrics(self):
         metrics_fn = {}
         for perf_fn in self.BASIC_PERF_FNS:
             for cat_id, cat in zip([*range(len(self.args.cats)), None], self.get_cats_with_all()):
@@ -70,9 +72,24 @@ class ImageTrainer(train_utils.FastaiTrainer):
         """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
         agg = super().aggregate_test_performance(folds_res)
         for perf_fn in self.BASIC_PERF_FNS:
-            mns = [self.get_metrics_cats_name(perf_fn, cat) for cat in self.get_cats_with_all()]
+            mns = [self.get_cat_metric_name(perf_fn, cat) for cat in self.get_cats_with_all()]
             agg[perf_fn] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
         return agg
+
+    def process_test_preds(self, interp):
+        setattr(interp, f'{self.AGG}cm', self.compute_conf_mat(interp.targs, interp.decoded))
+        return interp
+
+    def plot_test_performance(self, test_path, run, agg_perf):
+        for show_val in [False, True]:
+            save_path = os.path.join(test_path, f'{run}{"_show_val" if show_val else ""}.jpg')
+            fig, axs = plt.subplots(1, 2, figsize=self.args.test_figsize)
+            bar_perf = {p: cats_v for p, cats_v in agg_perf.items() if any([bp in p for bp in self.BASIC_PERF_FNS])}
+            bar_cats = self.get_cats_with_all()
+            common.grouped_barplot_with_err(axs[0], bar_perf, bar_cats, xlabel='Classes', show_val=show_val)
+            common.plot_confusion_matrix(axs[1], agg_perf['cm'], self.args.cats)
+            fig.tight_layout(pad=.2)
+            plt.savefig(save_path, dpi=400)
 
     def tensorboard_cb(self, run_name):
         return ImageTBCb(self.args.exp_logdir, run_name, self.cust_metrics.keys(), self.ALL_CATS)
@@ -155,17 +172,6 @@ class ImageTrainer(train_utils.FastaiTrainer):
         regex = r"^(?:__R(?P<repeat>\d+)__)?__S(?P<progr_size>\d+)px_bs\d+____F(?P<fold>\d+)__.*$"
         m = re.match(regex, run_name)
         return run_name.replace(f'__F{m.group("fold")}__', '')
-
-    def plot_test_performance(self, test_path, run, agg_run_perf):
-        for show_val in [False, True]:
-            save_path = os.path.join(test_path, f'{run}{"_show_val" if show_val else ""}.jpg')
-            fig, axs = plt.subplots(1, 2, figsize=self.args.test_figsize)
-            bar_perf = {p: cat_vals for p, cat_vals in agg_run_perf.items() if p != 'cm'}
-            bar_cats = self.get_cats_with_all()
-            common.grouped_barplot_with_err(axs[0], bar_perf, bar_cats, xlabel='Classes', show_val=show_val)
-            common.plot_confusion_matrix(axs[1], agg_run_perf['cm'], self.args.cats)
-            fig.tight_layout(pad=.2)
-            plt.savefig(save_path, dpi=400)
 
 
 class ImageTBCb(fc.TensorBoardBaseCallback):

@@ -4,6 +4,7 @@ from pathlib import PosixPath
 from functools import partial
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 import torch
 import fastai.vision.all as fv
@@ -44,7 +45,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn):
         for bg in [None, self.args.bg] if cat_id != self.args.bg else [None]:
             cat_perf = partial(segm_utils.cls_perf, cls_idx=cat_id, cats=self.args.cats, bg=bg)
-            signature = f'{self.get_metrics_cats_name(perf_fn, cat)}{"" if bg is None else "_no_bg"}(inp, targ)'
+            signature = f'{self.get_cat_metric_name(perf_fn, cat)}{"" if bg is None else "_no_bg"}(inp, targ)'
             code = f"def {signature}: return cat_perf(train_utils.{perf_fn}, inp, targ).to(inp.device)"
             exec(code, {"cat_perf": cat_perf, 'train_utils': train_utils}, metrics_fn)
 
@@ -52,18 +53,27 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
         agg = super().aggregate_test_performance(folds_res)
         for perf_fn in self.BASIC_PERF_FNS:
-            mns = [self.get_metrics_cats_name(perf_fn, cat) + "_no_bg" for cat in self.get_cats_with_all()]
+            mns = [self.get_cat_metric_name(perf_fn, cat) + "_no_bg" for cat in self.get_cats_with_all()]
             agg[perf_fn + "_no_bg"] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
         return agg
 
-    def process_test_preds(self, interp):
-        setattr(interp, f'{self.AGG}cm', segm_utils.pixel_conf_mat(self.args.cats, interp.decoded, interp.targs))
+    def compute_conf_mat(self, targs, preds): return segm_utils.pixel_conf_mat(targs, preds, self.args.cats)
 
+    def process_test_preds(self, interp):
+        interp = super().process_test_preds(interp)
         to_coco = partial(segm_utils.segm_dataset_to_coco_format, cats=self.args.cats, bg=self.args.bg)
         cocoEval = CustomCocoEval(to_coco(interp.targs), to_coco(interp.decoded, scores=True), all_cats=self.ALL_CATS)
-        cocoEval.eval_acc_and_maybe_summarize()
-        interp.coco = torch.Tensor(cocoEval.graph_values())
+        cocoEval.eval_acc_and_summarize(verbose=False)
+        setattr(interp, f'{self.AGG}coco', torch.Tensor(cocoEval.graph_values()))
         return interp
+
+    def plot_test_performance(self, test_path, run, agg_perf):
+        super().plot_test_performance(test_path, run, agg_perf)
+        save_path = os.path.join(test_path, f'{run}_coco.jpg')
+        fig, axs = plt.subplots(1, 2, figsize=self.args.test_figsize)
+        #TODO: plot coco
+        fig.tight_layout(pad=.2)
+        plt.savefig(save_path, dpi=400)
 
     def create_dls(self, tr, val, bs, size):
         tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))

@@ -23,13 +23,11 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
 
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn):
         cat_perf = partial(classif_utils.cls_perf, cats=self.args.cats)
-        signature = f'{self.get_metrics_cats_name(perf_fn, cat)}(inp, targ)'
+        signature = f'{self.get_cat_metric_name(perf_fn, cat)}(inp, targ)'
         code = f"def {signature}: return cat_perf(train_utils.{perf_fn}, inp, targ, {cat_id}).to(inp.device)"
         exec(code, {"cat_perf": cat_perf, 'train_utils': train_utils}, metrics_fn)
 
-    def process_test_preds(self, interp):
-        setattr(interp, f'{self.AGG}cm', classif_utils.conf_mat(self.args.cats, interp.decoded, interp.targs))
-        return interp
+    def compute_conf_mat(self, targs, preds): return classif_utils.conf_mat(targs, preds, self.args.cats)
 
     def create_dls(self, tr, val, bs, size):
         tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))
