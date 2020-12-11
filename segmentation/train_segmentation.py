@@ -4,7 +4,6 @@ from pathlib import PosixPath
 from functools import partial
 
 import numpy as np
-import matplotlib.pyplot as plt
 
 import torch
 import fastai.vision.all as fv
@@ -16,6 +15,7 @@ import segmentation.segmentation_utils as segm_utils
 import segmentation.mask_utils as mask_utils
 from segmentation.crop_to_thresh import SEP as CROP_SEP
 from object_detection.object_detection_utils import CustomCocoEval
+
 
 class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def get_argparser(desc="Fastai segmentation image trainer arguments", pdef=dict(), phelp=dict()):
@@ -64,16 +64,14 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         to_coco = partial(segm_utils.segm_dataset_to_coco_format, cats=self.args.cats, bg=self.args.bg)
         cocoEval = CustomCocoEval(to_coco(interp.targs), to_coco(interp.decoded, scores=True), all_cats=self.ALL_CATS)
         cocoEval.eval_acc_and_summarize(verbose=False)
-        setattr(interp, f'{self.AGG}coco', torch.Tensor(cocoEval.graph_values()))
+        self.coco_param_labels, stats = cocoEval.getPrecisionRecall()  # cocoeval labels is the same for all tests
+        setattr(interp, f'{self.AGG}cocoeval', torch.Tensor(stats))
         return interp
 
     def plot_test_performance(self, test_path, run, agg_perf):
         super().plot_test_performance(test_path, run, agg_perf)
         save_path = os.path.join(test_path, f'{run}_coco.jpg')
-        fig, axs = plt.subplots(1, 2, figsize=self.args.test_figsize)
-        #TODO: plot coco
-        fig.tight_layout(pad=.2)
-        plt.savefig(save_path, dpi=400)
+        CustomCocoEval.plot_coco_eval(self.coco_param_labels, agg_perf['cocoeval'], self.args.test_figsize, save_path)
 
     def create_dls(self, tr, val, bs, size):
         tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))
