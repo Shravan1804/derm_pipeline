@@ -1,10 +1,10 @@
 import os
 import sys
+import pickle
 import argparse
 from pathlib import Path
 from collections import defaultdict
 
-import dill
 import numpy as np
 from sklearn.model_selection import KFold, ShuffleSplit, StratifiedKFold, StratifiedShuffleSplit
 
@@ -270,7 +270,7 @@ class FastaiTrainer:
                 agg = self.aggregate_test_performance(folds_results)
                 self.plot_test_performance(test_path, run, agg)
                 with open(os.path.join(test_path, f'{run}_test_results.p'), 'wb') as f:
-                    dill.dump(agg, f)
+                    pickle.dump(agg, f)
 
     def train_model(self):
         sl_data, wl_data = self.get_train_items()
