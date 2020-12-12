@@ -33,7 +33,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         return parser
 
     def __init__(self, args):
-        self.NO_BG = 'no_bg'    # used to differentiate metrics ignoring background
+        self.NO_BG = '_no_bg'    # used to differentiate metrics ignoring background
         super().__init__(args, stratify=False, full_img_sep=CROP_SEP)
 
     def load_items(self, path):
@@ -48,8 +48,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         return self.load_image_item(item) if is_path else mask_utils.rles_to_non_binary_mask(item)
 
     def get_cat_metric_name(self, perf_fn, cat, bg=None):
-        metric_with_bg = super().get_cat_metric_name(perf_fn, cat)
-        return metric_with_bg if bg is None else f'{metric_with_bg}_{self.NO_BG}'
+        return f'{super().get_cat_metric_name(perf_fn, cat)}{"" if bg is None else self.NO_BG}'
 
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn):
         for bg in [None, self.args.bg]:
@@ -63,7 +62,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         agg = super().aggregate_test_performance(folds_res)
         for perf_fn in self.BASIC_PERF_FNS:
             mns = [self.get_cat_metric_name(perf_fn, cat, self.args.bg) for cat in self.get_cats_with_all()]
-            agg[f'{perf_fn}_{self.NO_BG}'] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
+            agg[f'{perf_fn}{self.NO_BG}'] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
         return agg
 
     def compute_conf_mat(self, targs, preds): return segm_utils.pixel_conf_mat(targs, preds, self.args.cats)
@@ -79,9 +78,9 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
 
     def plot_test_performance(self, test_path, run, agg_perf):
         super().plot_test_performance(test_path, run, agg_perf)
-        save_path, figsize = os.path.join(test_path, f'{run}_coco.jpg'), self.args.test_figsize
-        figsize = figsize[0], 3 * figsize[1]
+        figsize = self.args.test_figsize
         for show_val in [False, True]:
+            save_path = os.path.join(test_path, f'{run}_coco{"_show_val" if show_val else ""}.jpg')
             CustomCocoEval.plot_coco_eval(self.coco_param_labels, agg_perf['cocoeval'], figsize, save_path, show_val)
 
     def create_dls(self, tr, val, bs, size):

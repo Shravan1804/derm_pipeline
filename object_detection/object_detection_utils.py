@@ -99,18 +99,19 @@ class CustomCocoEval(COCOeval):
         idx_slice_titles = []
         for idxs in idx_slices:
             for si, lab, param in zip(idxs[2:], eval_stats_labels[2:], ("cats", "areaRng", "maxDets")):
-                if si != slice(None): idx_slice_titles.append(" ".join(f"{lab[si]} {param}"))
+                if si == slice(None): idx_slice_titles.append(" ".join(f"{lab[si]} {param}"))
 
-        fig, axs = plt.subplots(3, 2, figsize=figsize)
-        for laxs, labels, idxs, idxs_title in zip(axs, eval_stats_labels[2:], idx_slices, idx_slice_titles):
+        for labels, idxs, idxs_title in zip(eval_stats_labels[2:], idx_slices, idx_slice_titles):
+            fig, axs = plt.subplots(1, 2, figsize=figsize)
             xiou = ious[None].repeat(labels.size, axis=0)
-            for ax, vname, values, err in zip(laxs, pre_rec_labels, pre_rec[idxs], pre_rec_err[idxs]):
+            for ax, vname, values, err in zip(axs, pre_rec_labels, pre_rec[idxs], pre_rec_err[idxs]):
                 values, err = np.moveaxis(values, 0, -1), np.moveaxis(err, 0, -1)   # ious dim is before the others
-                common.plot_lines_with_err(ax, xiou, values, err, labels, show_val)
+                common.plot_lines_with_err(ax, xiou, values, err, labels, show_val, legend_loc="upper right")
                 ax.set_title(f'{vname} with {idxs_title}')
                 ax.set_xlabel("IoU thresholds")
                 ax.set_ylabel("Percentage")
-        fig.tight_layout(pad=.2)
-        if save_path is not None:
-            plt.savefig(save_path, dpi=400)
+            fig.tight_layout(pad=.2)
+            if save_path is not None:
+                ext = os.path.splitext(save_path)[1]
+                plt.savefig(save_path.replace(ext, f'_{vname.replace(" ", "_")}{ext}'), dpi=400)
 
