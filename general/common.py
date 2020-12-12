@@ -34,7 +34,6 @@ def get_error_display_params():
 
 
 def show_graph_values(ax, values, pos_x, pos_y=None, yerr=None, kwargs={"fontsize": 6}):
-    print(yerr)
     pos_y = values if pos_y is None else pos_y
     yerr = np.zeros(values.shape) if yerr is None else yerr
     for x, y, v, ye in zip(pos_x, pos_y, values, yerr):

@@ -70,8 +70,9 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
 
     def plot_test_performance(self, test_path, run, agg_perf):
         super().plot_test_performance(test_path, run, agg_perf)
-        save_path = os.path.join(test_path, f'{run}_coco.jpg')
-        CustomCocoEval.plot_coco_eval(self.coco_param_labels, agg_perf['cocoeval'], self.args.test_figsize, save_path)
+        save_path, figsize = os.path.join(test_path, f'{run}_coco.jpg'), self.args.test_figsize
+        for show_val in [False, True]:
+            CustomCocoEval.plot_coco_eval(self.coco_param_labels, agg_perf['cocoeval'], figsize, save_path, show_val)
 
     def create_dls(self, tr, val, bs, size):
         tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))
@@ -107,4 +108,5 @@ if __name__ == '__main__':
 
     train_utils_img.ImageTrainer.prepare_training(args)
 
-    common.time_method(main, args, prepend=f"GPU {args.proc_gpu} proc: ")
+    prepend = f"GPU {args.proc_gpu} proc: " if train_utils.GPUManager.in_distributed_mode() else None
+    common.time_method(main, args, prepend=prepend)
