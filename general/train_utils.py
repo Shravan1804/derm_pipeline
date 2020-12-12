@@ -157,7 +157,6 @@ class FastaiTrainer:
         print("Log directory: ", args.exp_logdir)
 
     def __init__(self, args, stratify):
-        self.AGG = "__AGG__"
         self.args = args
         self.stratify = stratify
         self.cust_metrics = self.prepare_custom_metrics()
@@ -251,16 +250,12 @@ class FastaiTrainer:
 
     def process_test_preds(self, interp):
         """Adds custom metrics results to interp object. Should return interp."""
-        for mn, mfn in self.cust_metrics.items():
-            setattr(interp, f'{self.AGG}{mn}', mfn(interp.preds, interp.targs))
+        interp.metrics = {mn: mfn(interp.preds, interp.targs) for mn, mfn in self.cust_metrics.items()}
         return interp
 
     def aggregate_test_performance(self, folds_res):
-        agg = {}
-        for attr in [attr for attr in dir(folds_res[0]) if attr.startswith(self.AGG)]:
-            mean_std = tensors_mean_std([getattr(fr, attr) for fr in folds_res])
-            agg[attr.replace(self.AGG, '')] = tuple(s.numpy() for s in mean_std)
-        return agg
+        merged = [(mn, [fr.metrics[mn] for fr in folds_res]) for mn in folds_res[0].metrics.keys()]
+        return {mn: tuple(s.numpy() for s in tensors_mean_std(mres)) for mn, mres in merged}
 
     def generate_tests_reports(self):
         if not GPUManager.is_master_process(): return

@@ -65,7 +65,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         cocoEval = CustomCocoEval(to_coco(interp.targs), to_coco(interp.decoded, scores=True), all_cats=self.ALL_CATS)
         cocoEval.eval_acc_and_summarize(verbose=False)
         self.coco_param_labels, stats = cocoEval.getPrecisionRecall()  # cocoeval labels is the same for all tests
-        setattr(interp, f'{self.AGG}cocoeval', torch.Tensor(stats))
+        interp.metrics['cocoeval'] = torch.Tensor(stats)
         return interp
 
     def plot_test_performance(self, test_path, run, agg_perf):

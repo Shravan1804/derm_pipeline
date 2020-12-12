@@ -68,17 +68,19 @@ class ImageTrainer(train_utils.FastaiTrainer):
                 self.create_cats_metrics(perf_fn, cat_id, cat, metrics_fn)
         return metrics_fn
 
+    def process_test_preds(self, interp):
+        interp = super().process_test_preds(interp)
+        interp.metrics['cm'] = self.compute_conf_mat(interp.targs, interp.decoded)
+        return interp
+
     def aggregate_test_performance(self, folds_res):
         """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
         agg = super().aggregate_test_performance(folds_res)
+        # for each perf_fn, combine results of each cats
         for perf_fn in self.BASIC_PERF_FNS:
             mns = [self.get_cat_metric_name(perf_fn, cat) for cat in self.get_cats_with_all()]
             agg[perf_fn] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
         return agg
-
-    def process_test_preds(self, interp):
-        setattr(interp, f'{self.AGG}cm', self.compute_conf_mat(interp.targs, interp.decoded))
-        return interp
 
     def plot_test_performance(self, test_path, run, agg_perf):
         for show_val in [False, True]:
