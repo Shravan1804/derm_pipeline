@@ -101,11 +101,12 @@ class CustomCocoEval(COCOeval):
             for si, lab, param in zip(idxs[2:], eval_stats_labels[2:], ("cats", "areaRng", "maxDets")):
                 if si != slice(None): idx_slice_titles.append(" ".join(f"{lab[si]} {param}"))
 
-        fig, axs = plt.subplots(3, 2, figsize)
+        fig, axs = plt.subplots(3, 2, figsize=figsize)
         for laxs in axs:
             for labels, idxs, idxs_title in zip(eval_stats_labels[2:], idx_slices, idx_slice_titles):
                 xiou = ious[None].repeat(labels.size, axis=0)
                 for ax, vname, values, err in zip(laxs, pre_rec_labels, pre_rec[idxs], pre_rec_err[idxs]):
+                    values, err = np.moveaxis(values, 0, -1), np.moveaxis(err, 0, -1)
                     common.plot_lines_with_err(ax, xiou, values, err, labels, show_val)
                     ax.set_title(f'{vname} with {idxs_title}')
                     ax.set_xlabel("IoU thresholds")
