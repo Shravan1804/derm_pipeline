@@ -47,7 +47,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
         super(ImageTrainer, ImageTrainer).prepare_training(args)
 
     def __init__(self, args, stratify, full_img_sep):
-        self.ALL_CATS = '__all__'
+        self.ALL_CATS = 'All'
         self.full_img_sep = full_img_sep
         self.BASIC_PERF_FNS = ['accuracy', 'precision', 'recall']
         super().__init__(args, stratify)

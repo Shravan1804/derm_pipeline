@@ -97,7 +97,7 @@ class CustomCocoEval(COCOeval):
         # idx_slices are ([:, :, :, 0, -1], [:, :, 0, :, -1], [:, :, 0, 0, :])
         idx_slices = ((*base, slice(None), 0, -1), (*base, 0, slice(None), -1), (*base, 0, 0, slice(None)))
         idx_slices_codes = "cats", "areaRng", "maxDets"
-        idx_slice_titles = "all obj sizes and maxDets", "all obj cats and maxDets", "all obj cats and sizes"
+        idx_slice_titles = "all sizes and maxDets", "all cats and maxDets", "all cats and sizes"
 
         for labels, idxs, code, title in zip(eval_stats_labels[2:], idx_slices, idx_slices_codes, idx_slice_titles):
             fig, axs = plt.subplots(1, 2, figsize=figsize)
@@ -105,7 +105,7 @@ class CustomCocoEval(COCOeval):
             for ax, vname, values, err in zip(axs, pre_rec_labels, pre_rec[idxs], pre_rec_err[idxs]):
                 values, err = np.moveaxis(values, 0, -1), np.moveaxis(err, 0, -1)   # ious dim is before the others
                 common.plot_lines_with_err(ax, xiou, values, err, labels, show_val, legend_loc="upper right")
-                ax.set_title(f'{vname} with {title}')
+                ax.set_title(f'{vname} for {title}')
                 ax.set_xlabel("IoU thresholds")
                 ax.set_ylabel("Percentage")
             fig.tight_layout(pad=.2)
