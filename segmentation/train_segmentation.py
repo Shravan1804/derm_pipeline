@@ -80,6 +80,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def plot_test_performance(self, test_path, run, agg_perf):
         super().plot_test_performance(test_path, run, agg_perf)
         save_path, figsize = os.path.join(test_path, f'{run}_coco.jpg'), self.args.test_figsize
+        figsize = figsize[0], 3 * figsize[1]
         for show_val in [False, True]:
             CustomCocoEval.plot_coco_eval(self.coco_param_labels, agg_perf['cocoeval'], figsize, save_path, show_val)
 
