@@ -26,9 +26,8 @@ def load_img_and_mask(img_path, mask_path):
 
 def cls_perf(perf, inp, targ, cls_idx, cats, bg=None, axis=1):
     """If bg sets then computes perf without background"""
-    assert bg != cls_idx or cls_idx is None, f"Cannot compute class {cls_idx} perf as bg = {bg}"
-    if axis is not None:
-        inp = inp.argmax(dim=axis)
+    if cls_idx == bg and cls_idx is not None: return torch.zeros(1)
+    if axis is not None: inp = inp.argmax(dim=axis)
     if bg is not None:
         mask = targ != bg
         inp, targ = inp[mask], targ[mask]

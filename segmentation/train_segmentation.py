@@ -18,6 +18,7 @@ from object_detection.object_detection_utils import CustomCocoEval
 
 
 class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
+    @staticmethod
     def get_argparser(desc="Fastai segmentation image trainer arguments", pdef=dict(), phelp=dict()):
         # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
         parser = super(ImageSegmentationTrainer, ImageSegmentationTrainer).get_argparser(desc, pdef, phelp)
@@ -31,6 +32,10 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
                             help=phelp.get('--bg', "Background mask code, also index of bg cat"))
         return parser
 
+    def __init__(self, args):
+        self.NO_BG = 'no_bg'    # used to differentiate metrics ignoring background
+        super().__init__(args, stratify=False, full_img_sep=CROP_SEP)
+
     def load_items(self, path):
         images = np.array(common.list_files(os.path.join(path, self.args.img_dir), full_path=True, posix_path=True))
         return images, np.array([self.get_image_mask_path(img_path) for img_path in images])
@@ -42,23 +47,23 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         is_path = type(item) in (str, PosixPath)
         return self.load_image_item(item) if is_path else mask_utils.rles_to_non_binary_mask(item)
 
+    def get_cat_metric_name(self, perf_fn, cat, bg=None):
+        metric_with_bg = super().get_cat_metric_name(perf_fn, cat)
+        return metric_with_bg if bg is None else f'{metric_with_bg}_{self.NO_BG}'
+
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn):
-        for bg in [None, self.args.bg] if cat_id != self.args.bg else [None]:
+        for bg in [None, self.args.bg]:
             cat_perf = partial(segm_utils.cls_perf, cls_idx=cat_id, cats=self.args.cats, bg=bg)
-            signature = f'{self.get_cat_metric_name(perf_fn, cat)}{"" if bg is None else "_no_bg"}(inp, targ)'
+            signature = f'{self.get_cat_metric_name(perf_fn, cat, bg)}(inp, targ)'
             code = f"def {signature}: return cat_perf(train_utils.{perf_fn}, inp, targ).to(inp.device)"
             exec(code, {"cat_perf": cat_perf, 'train_utils': train_utils}, metrics_fn)
-
-    def get_cats_with_all(self, no_bg=False):
-        cats_with_all = super().get_cats_with_all()
-        return [c for c in cats_with_all if c != self.args.cats[self.args.bg]] if no_bg else cats_with_all
 
     def aggregate_test_performance(self, folds_res):
         """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
         agg = super().aggregate_test_performance(folds_res)
         for perf_fn in self.BASIC_PERF_FNS:
-            mns = [self.get_cat_metric_name(perf_fn, cat) + "_no_bg" for cat in self.get_cats_with_all(no_bg=True)]
-            agg[perf_fn + "_no_bg"] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
+            mns = [self.get_cat_metric_name(perf_fn, cat, self.args.bg) for cat in self.get_cats_with_all()]
+            agg[f'{perf_fn}_{self.NO_BG}'] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
         return agg
 
     def compute_conf_mat(self, targs, preds): return segm_utils.pixel_conf_mat(targs, preds, self.args.cats)
@@ -99,7 +104,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
 
 
 def main(args):
-    segm = ImageSegmentationTrainer(args, stratify=False, full_img_sep=CROP_SEP)
+    segm = ImageSegmentationTrainer(args)
     segm.train_model()
 
 

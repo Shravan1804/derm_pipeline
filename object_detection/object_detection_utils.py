@@ -40,7 +40,7 @@ class CustomCocoEval(COCOeval):
         pre, rec = self.eval['precision'].mean(axis=1), self.eval['recall']
         pre_w_all_cats = np.concatenate((pre.mean(axis=1, keepdims=True), pre), axis=1)
         rec_w_all_cats = np.concatenate((rec.mean(axis=1, keepdims=True), rec), axis=1)
-        return np.array(labels), np.stack((pre_w_all_cats, rec_w_all_cats))
+        return np.array(labels, dtype=np.object), np.stack((pre_w_all_cats, rec_w_all_cats))
 
     def eval_acc_and_summarize(self, verbose=True):
         self.evaluate()

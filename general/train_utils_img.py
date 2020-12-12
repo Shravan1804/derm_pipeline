@@ -64,7 +64,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
     def prepare_custom_metrics(self):
         metrics_fn = {}
         for perf_fn in self.BASIC_PERF_FNS:
-            for cat_id, cat in zip([*range(len(self.args.cats)), None], self.get_cats_with_all()):
+            for cat_id, cat in zip([None, *range(len(self.args.cats))], self.get_cats_with_all()):
                 self.create_cats_metrics(perf_fn, cat_id, cat, metrics_fn)
         return metrics_fn
 
@@ -74,10 +74,10 @@ class ImageTrainer(train_utils.FastaiTrainer):
         return interp
 
     def aggregate_test_performance(self, folds_res):
-        """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
         agg = super().aggregate_test_performance(folds_res)
         # for each perf_fn, combine results of each cats
         for perf_fn in self.BASIC_PERF_FNS:
+            # order metrics results on self.get_cats_with_all()
             mns = [self.get_cat_metric_name(perf_fn, cat) for cat in self.get_cats_with_all()]
             agg[perf_fn] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
         return agg
@@ -86,7 +86,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
         for show_val in [False, True]:
             save_path = os.path.join(test_path, f'{run}{"_show_val" if show_val else ""}.jpg')
             fig, axs = plt.subplots(1, 2, figsize=self.args.test_figsize)
-            bar_perf = {p: cats_v for p, cats_v in agg_perf.items() if any([bp in p for bp in self.BASIC_PERF_FNS])}
+            bar_perf = {mn: cat_mres for p in self.BASIC_PERF_FNS for mn, cat_mres in agg_perf.items() if p in mn}
             bar_cats = self.get_cats_with_all()
             common.grouped_barplot_with_err(axs[0], bar_perf, bar_cats, xlabel='Classes', show_val=show_val)
             common.plot_confusion_matrix(axs[1], agg_perf['cm'], self.args.cats)

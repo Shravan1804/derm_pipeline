@@ -48,9 +48,10 @@ def plot_lines_with_err(ax, xs, ys, errs, labels, show_val=False, err_bounds=(0,
     ax.legend(loc=legend_loc)
 
 
-def grouped_barplot_with_err(ax, stats, xticklabels, xlabel=None, ylabel=None, title=None, barwidth=.35, show_val=False,
+def grouped_barplot_with_err(ax, stats, groupLabels, xlabel=None, ylabel=None, title=None, barwidth=.35, show_val=False,
                              title_loc=None, legend_loc="lower center", err_bounds=(0, 1)):
-    nbars_per_group, ngroups = len(stats.keys()), len(xticklabels)
+    """Stats is a dict with keys the bar name (e.g. accuracy) and values the values for each group (e.g. categories)"""
+    nbars_per_group, ngroups = len(stats.keys()), len(groupLabels)
     group_width = nbars_per_group * barwidth * 4/3
     positions = np.arange(0, ngroups * group_width, group_width)
     offsets = [(i - nbars_per_group / 2) * barwidth + barwidth / 2 for i in range(nbars_per_group)]
@@ -65,7 +66,7 @@ def grouped_barplot_with_err(ax, stats, xticklabels, xlabel=None, ylabel=None, t
     ax.set_ylabel("/".join(stats.keys()) if ylabel is None else ylabel)
     ax.set_xlabel(xlabel)
     ax.set_xticks(positions)
-    ax.set_xticklabels(xticklabels, rotation=45)
+    ax.set_xticklabels(groupLabels, rotation=45)
     ax.legend(loc=legend_loc)
     if title is not None:
         ax.set_title(title, loc=title_loc)
