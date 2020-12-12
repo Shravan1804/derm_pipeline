@@ -45,7 +45,7 @@ def pixel_conf_mat(targs, preds, cats, normalize=True, epsilon=1e-8):
 
 
 def segm_dataset_to_coco_format(segm_masks, cats, scores=False, bg=0, ret_json=False):
-    segm_masks = segm_masks.numpy() if type(segm_masks) is torch.Tensor else segm_masks
+    segm_masks = segm_masks if type(segm_masks) is np.ndarray else segm_masks.numpy()
     dataset = coco_format.get_default_dataset()
     cats = [(c, i) for i, c in enumerate(cats) if i != bg]
     dataset['categories'] = coco_format.get_categories(*zip(*cats))
@@ -55,8 +55,8 @@ def segm_dataset_to_coco_format(segm_masks, cats, scores=False, bg=0, ret_json=F
         dataset['images'].append(coco_format.get_img_record(img_id, f'{img_id}.jpg', non_binary_mask.shape))
         obj_cats = np.array([t for t in np.unique(non_binary_mask) if t != bg])
         if not obj_cats.size: continue
-        cat_masks = non_binary_mask == obj_cats[:, None, None]
-        obj_cats_masks = tuple(cv2.connectedComponents(cmsk.astype(np.uint8)) for cmsk in cat_masks)
+        cat_masks = (non_binary_mask == obj_cats[:, None, None]).astype(np.uint8)
+        obj_cats_masks = tuple(cv2.connectedComponents(cmsk) for cmsk in cat_masks)
         ann_id, img_annos = coco_format.get_annos_from_objs_mask(img_id, ann_id, obj_cats, obj_cats_masks, scores)
         dataset['annotations'].extend(img_annos)
     if ret_json:

@@ -28,7 +28,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         parser.add_argument('--mext', type=str, default=pdef.get('--mext', ".png"),
                             help=phelp.get('--mext', "Masks file extension"))
         parser.add_argument('--bg', type=int, default=pdef.get('--bg', 0),
-                            help=phelp.get('--bg', "Background mask code"))
+                            help=phelp.get('--bg', "Background mask code, also index of bg cat"))
         return parser
 
     def load_items(self, path):
@@ -49,11 +49,15 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
             code = f"def {signature}: return cat_perf(train_utils.{perf_fn}, inp, targ).to(inp.device)"
             exec(code, {"cat_perf": cat_perf, 'train_utils': train_utils}, metrics_fn)
 
+    def get_cats_with_all(self, no_bg=False):
+        cats_with_all = super().get_cats_with_all()
+        return [c for c in cats_with_all if c != self.args.cats[self.args.bg]] if no_bg else cats_with_all
+
     def aggregate_test_performance(self, folds_res):
         """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
         agg = super().aggregate_test_performance(folds_res)
         for perf_fn in self.BASIC_PERF_FNS:
-            mns = [self.get_cat_metric_name(perf_fn, cat) + "_no_bg" for cat in self.get_cats_with_all()]
+            mns = [self.get_cat_metric_name(perf_fn, cat) + "_no_bg" for cat in self.get_cats_with_all(no_bg=True)]
             agg[perf_fn + "_no_bg"] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
         return agg
 

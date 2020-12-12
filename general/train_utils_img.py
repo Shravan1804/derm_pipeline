@@ -57,7 +57,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn): raise NotImplementedError
 
     def get_cats_with_all(self):
-        return [*self.args.cats, self.ALL_CATS]
+        return [self.ALL_CATS, *self.args.cats]
 
     def get_cat_metric_name(self, perf_fn, cat): return f'{perf_fn}_{cat}'
 
