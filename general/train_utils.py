@@ -54,6 +54,20 @@ def split_model(model, splits):
     return [torch.nn.Sequential(*top_children[i:j]) for i, j in zip(idxs[:-1], idxs[1:])]
 
 
+# fastai2 get_preds fails in distributed mode
+def custom_get_preds(learn, test_dl):
+    """Returns, targs, preds, decoded_preds"""
+    targs, outs = [], []
+    learn.model.eval()
+    with torch.no_grad():
+        for batch_x, batch_y in test_dl:
+            outs.append(learn.model(batch_x).cpu())
+            targs.append(batch_y.cpu())
+    learn.model.train()
+    outs = torch.cat(outs)
+    return outs, torch.cat(targs), getattr(learn.loss_func, 'decodes', fv.noop)(outs)
+
+
 class CustomItemGetter(fv.ItemGetter):
     def __init__(self, i, fn): fv.store_attr()
     def encodes(self, x): return self.fn(x[self.i])
@@ -231,7 +245,7 @@ class FastaiTrainer:
         print("Evaluating WL data:", run)
         dl = learn.dls.test_dl(list(zip(*wl_items)), with_labels=True)
         with GPUManager.running_context(learn, self.args.gpu_ids):
-            _, targs, decoded_preds = learn.get_preds(dl=dl, with_decoded=True)
+            _, targs, decoded_preds = custom_get_preds(learn, dl)
         wl_items, changes = self.correct_wl(wl_items, decoded_preds)
         if GPUManager.is_master_process() and changes != "":
             with open(os.path.join(self.args.exp_logdir, f'{common.now()}_{run}__wl_changes.txt'), 'w') as changelog:
@@ -245,7 +259,8 @@ class FastaiTrainer:
             GPUManager.sync_distributed_process()
             dl = learn.dls.test_dl(list(zip(*test_items_with_cls)), with_labels=True)
             with GPUManager.running_context(learn, self.args.gpu_ids):
-                interp = fv.Interpretation.from_learner(learn, dl=dl)
+                preds, targs, decoded = custom_get_preds(learn, dl)
+                interp = fv.Interpretation(dl, None, preds, targs, decoded, None)  # set inputs and losses to None
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(self.process_test_preds(interp))
 
     def process_test_preds(self, interp):
