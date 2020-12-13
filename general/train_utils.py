@@ -287,15 +287,15 @@ class FastaiTrainer:
         for fold, tr, val in self.split_data(*sl_data):
             fold_suffix = f'__F{common.zero_pad(fold, self.args.nfolds)}__'
             if fold == 0 or not self.args.use_wl:
-                learn, last_run = self.train_procedure(tr, val, f'{fold_suffix}sl_only')
+                learn, prev_run = self.train_procedure(tr, val, f'{fold_suffix}sl_only')
 
             if self.args.use_wl:
-                if fold == 0: wl_data = self.evaluate_and_correct_wl(learn, wl_data, last_run)
+                if fold == 0: wl_data = self.evaluate_and_correct_wl(learn, wl_data, prev_run)
                 for repeat in range(self.args.nrepeats):
                     repeat_prefix = f'__R{common.zero_pad(repeat, self.args.nrepeats)}__'
                     print(f"WL-SL train procedure {repeat + 1}/{self.args.nrepeats}")
                     learn, _ = self.train_procedure(wl_data, val, f'{fold_suffix}wl_only', repeat_prefix)
-                    learn, last_run = self.train_procedure(tr, val, f'{fold_suffix}_wl_sl', repeat_prefix, learn)
-                    wl_data = self.evaluate_and_correct_wl(learn, wl_data, last_run)
+                    learn, prev_run = self.train_procedure(tr, val, f'{fold_suffix}_wl_sl', repeat_prefix, learn)
+                    wl_data = self.evaluate_and_correct_wl(learn, wl_data, prev_run)
         self.generate_tests_reports()
 
