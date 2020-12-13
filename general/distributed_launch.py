@@ -8,7 +8,6 @@ from fastcore.script import *
 def main(
     gpus:Param("The GPUs to use for distributed training", str)='all',
     encrypted:Param("Is the data encrypted", store_true)=False,
-    debug:Param("All subprocess stdout will be ", store_true)=False,
     script:Param("Script to run", str, opt=False)='',
     args:Param("Args to pass to script", nargs='...', opt=False)=''
 ):
@@ -31,9 +30,7 @@ def main(
     for i, gpu in enumerate(gpus):
         current_env["RANK"] = str(i)
         cmd = [sys.executable, "-u", script, "--proc-gpu", gpu, "--gpu-ids", *gpus] + args
-        process = subprocess.Popen(cmd, env=current_env,
-                                   stdout=subprocess.DEVNULL if i != 0 and not debug else None,
-                                   stderr=subprocess.DEVNULL if i != 0 and not debug else None)
+        process = subprocess.Popen(cmd, env=current_env)
         processes.append(process)
 
     for process in processes: process.wait()
