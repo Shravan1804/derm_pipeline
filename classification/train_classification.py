@@ -73,6 +73,5 @@ if __name__ == '__main__':
 
     train_utils_img.ImageTrainer.prepare_training(args)
 
-    prepend = f"GPU {args.proc_gpu} proc: " if train_utils.GPUManager.in_distributed_mode() else None
-    common.time_method(main, args, prepend=prepend)
+    common.time_method(main, args)
 
