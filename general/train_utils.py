@@ -99,7 +99,7 @@ class GPUManager:
 
     @staticmethod
     def is_master_process():
-        return os.environ.get('RANK') == 0 if GPUManager.in_distributed_mode() else True
+        return os.environ.get('RANK') == "0" if GPUManager.in_distributed_mode() else True
 
 
 class FastaiTrainer:
