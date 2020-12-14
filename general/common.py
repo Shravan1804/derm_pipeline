@@ -238,22 +238,6 @@ def add_multi_proc_args(parser):
     parser.add_argument('--bs', type=int, help="Batch size per worker")
 
 
-def load_custom_pretrained_weights(model, weights_path):
-    import torch
-    new_state_dict = torch.load(weights_path, map_location=torch.device('cpu'))['model']
-    model_state_dict = model.state_dict()
-    for name, param in model_state_dict.items():
-        if name in new_state_dict:
-            input_param = new_state_dict[name]
-            if input_param.shape == param.shape:
-                param.copy_(input_param)
-            else:
-                print('Shape mismatch at:', name, 'skipping')
-        else:
-            print(f'{name} weight of the model not in pretrained weights')
-    model.load_state_dict(model_state_dict)
-
-
 def print_prepend(msg):
     # https://stackoverflow.com/questions/58866481/how-could-i-override-pythons-print-function-to-prepend-some-arbitrary-text-to-e
     class PrintPrepender:

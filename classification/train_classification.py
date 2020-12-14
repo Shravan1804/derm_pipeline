@@ -60,6 +60,7 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
 def main(args):
     classif = ImageClassificationTrainer(args, stratify=True, full_img_sep=PatchExtractor.SEP)
     classif.train_model()
+    if args.inference: pass
 
 
 if __name__ == '__main__':

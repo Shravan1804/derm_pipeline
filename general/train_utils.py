@@ -3,6 +3,7 @@ import sys
 import pickle
 import argparse
 from pathlib import Path
+from types import SimpleNamespace
 from collections import defaultdict
 
 import numpy as np
@@ -68,6 +69,21 @@ def custom_get_preds(learn, test_dl):
     return outs, torch.cat(targs), getattr(learn.loss_func, 'decodes', fv.noop)(outs)
 
 
+def load_custom_pretrained_weights(model, weights_path):
+    new_state_dict = torch.load(weights_path, map_location=torch.device('cpu'))['model']
+    model_state_dict = model.state_dict()
+    for name, param in model_state_dict.items():
+        if name in new_state_dict:
+            input_param = new_state_dict[name]
+            if input_param.shape == param.shape:
+                param.copy_(input_param)
+            else:
+                print('Shape mismatch at:', name, 'skipping')
+        else:
+            print(f'{name} weight of the model not in pretrained weights')
+    model.load_state_dict(model_state_dict)
+
+
 class CustomItemGetter(fv.ItemGetter):
     def __init__(self, i, fn): fv.store_attr()
     def encodes(self, x): return self.fn(x[self.i])
@@ -115,6 +131,7 @@ class FastaiTrainer:
         parser.add_argument('--encrypted', action='store_true', help="Data is encrypted")
         parser.add_argument('--ckey', type=str, help="Data encryption key")
 
+        parser.add_argument('--inference', action='store_true', help="No train, only inference")
         parser.add_argument('--cross-val', action='store_true', help="Perform 5-fold cross validation on sl train set")
         parser.add_argument('--nfolds', default=5, type=int, help="Number of folds for cross val")
         parser.add_argument('--valid-size', default=.2, type=float, help='If no cv, splits train set with this %')
@@ -157,6 +174,10 @@ class FastaiTrainer:
     @staticmethod
     def prepare_training(args):
         common.set_seeds(args.seed)
+        common.check_dir_valid(args.data)
+
+        if args.inference:
+            common.check_dir_valid(args.exp_logdir)
 
         assert torch.cuda.is_available(), "Cannot run without CUDA device"
         args.bs = args.bs * len(args.gpu_ids) if GPUManager.in_parallel_mode() else args.bs
@@ -171,6 +192,7 @@ class FastaiTrainer:
         print("Log directory: ", args.exp_logdir)
 
     def __init__(self, args, stratify):
+        self.MODEL_SUFFIX = '_model'
         self.args = args
         self.stratify = stratify
         self.cust_metrics = self.prepare_custom_metrics()
@@ -187,6 +209,8 @@ class FastaiTrainer:
 
     def create_learner(self): raise NotImplementedError
 
+    def load_learner_from_run_info(self, run_info, mpath, tr, val): raise NotImplementedError
+
     def create_dls(self): raise NotImplementedError
 
     def train_procedure(self, tr, val, fold_suffix, run_prefix="", learn=None): raise NotImplementedError
@@ -195,11 +219,13 @@ class FastaiTrainer:
 
     def early_stop_cb(self): raise NotImplementedError
 
-    def get_sorting_run_key(self, run_name): raise NotImplementedError
+    def get_run_params(self, run_info): raise NotImplementedError
+
+    def get_sorting_run_key(self, run_info): raise NotImplementedError
 
     def plot_test_performance(self, test_path, agg): raise NotImplementedError
 
-    def tensorboard_cb(self, run_name): raise NotImplementedError
+    def tensorboard_cb(self, run_info): raise NotImplementedError
 
     def split_data(self, items: np.ndarray, items_cls: np.ndarray):
         np.random.seed(self.args.seed)
@@ -238,7 +264,7 @@ class FastaiTrainer:
         learn.dls = dls
         with GPUManager.running_context(learn, self.args.gpu_ids):
             learn.fine_tune(self.args.epochs, cbs=self.get_train_cbs(run))
-        learn.save(os.path.join(self.args.exp_logdir, f'{run}_model'))
+        learn.save(os.path.join(self.args.exp_logdir, f'{run}{self.MODEL_SUFFIX}'))
 
     def evaluate_and_correct_wl(self, learn, wl_items, run):
         GPUManager.sync_distributed_process()
@@ -259,8 +285,8 @@ class FastaiTrainer:
             GPUManager.sync_distributed_process()
             dl = learn.dls.test_dl(list(zip(*test_items_with_cls)), with_labels=True)
             with GPUManager.running_context(learn, self.args.gpu_ids):
-                preds, targs, decoded = custom_get_preds(learn, dl)
-                interp = fv.Interpretation(dl, None, preds, targs, decoded, None)  # set inputs and losses to None
+                interp = SimpleNamespace()
+                interp.preds, interp.targs, interp.decoded = custom_get_preds(learn, dl)
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(self.process_test_preds(interp))
 
     def process_test_preds(self, interp):
@@ -282,7 +308,22 @@ class FastaiTrainer:
                 with open(os.path.join(test_path, f'{run}_test_results.p'), 'wb') as f:
                     pickle.dump(agg, f)
 
+    def inference(self):
+        if not self.args.inference:
+            print("Inference mode not set, skipping inference.")
+            return
+        models = [m for m in common.list_files(self.args.exp_logdir, full_path=True) if m.endswith(".pth")]
+        _, tr, val = next(self.split_data(*self.get_train_items()[0]))
+        for mpath in models:
+            run_info = os.path.splitext(os.path.basename(mpath))[0].strip(self.MODEL_SUFFIX)
+            learn = self.load_learner_from_run_info(run_info, mpath, tr, val)
+            self.evaluate_on_test_sets(learn, run_info)
+        self.generate_tests_reports()
+
     def train_model(self):
+        if self.args.inference:
+            print("Inference only mode set, skipping train.")
+            return
         sl_data, wl_data = self.get_train_items()
         for fold, tr, val in self.split_data(*sl_data):
             fold_suffix = f'__F{common.zero_pad(fold, self.args.nfolds)}__'

@@ -1,12 +1,12 @@
 import re
 import os
 import sys
+from types import SimpleNamespace
 from collections import defaultdict
 
 import numpy as np
 import matplotlib.pyplot as plt
 
-import torch
 import fastai.vision.all as fv
 import fastai.distributed as fd   # needed for fastai multi gpu
 import fastai.callback.tensorboard as fc
@@ -41,8 +41,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
 
     @staticmethod
     def prepare_training(args):
-        common.check_dir_valid(args.data)
-        if args.exp_logdir is None:
+        if args.exp_logdir is None and not args.inference:
             args.exp_logdir = os.path.join(args.logdir, ImageTrainer.get_exp_logdir(args))
         super(ImageTrainer, ImageTrainer).prepare_training(args)
 
@@ -93,8 +92,8 @@ class ImageTrainer(train_utils.FastaiTrainer):
             fig.tight_layout(pad=.2)
             plt.savefig(save_path, dpi=400)
 
-    def tensorboard_cb(self, run_name):
-        return ImageTBCb(self.args.exp_logdir, run_name, self.cust_metrics.keys(), self.ALL_CATS)
+    def tensorboard_cb(self, run_info):
+        return ImageTBCb(self.args.exp_logdir, run_info, self.cust_metrics.keys(), self.ALL_CATS)
 
     def get_test_sets_items(self):
         if self.args.sl_tests is None:
@@ -170,17 +169,26 @@ class ImageTrainer(train_utils.FastaiTrainer):
             self.evaluate_on_test_sets(learn, run)
         return learn, run
 
-    def get_sorting_run_key(self, run_name):
-        regex = r"^(?:__R(?P<repeat>\d+)__)?__S(?P<progr_size>\d+)px_bs\d+____F(?P<fold>\d+)__.*$"
-        m = re.match(regex, run_name)
-        return run_name.replace(f'__F{m.group("fold")}__', '')
+    def get_run_params(self, run_info):
+        regex = r"^(?:__R(?P<repeat>\d+)__)?__S(?P<progr_size>\d+)px_bs(?P<bs>\d+)____F(?P<fold>\d+)__.*$"
+        return SimpleNamespace(**re.match(regex, run_info).groupdict())
+
+    def get_sorting_run_key(self, run_info):
+        return run_info.replace(f'__F{self.get_run_param(run_info).fold}__', '')
+
+    def load_learner_from_run_info(self, run_info, mpath, tr, val):
+        run_params = self.get_run_params(run_info)
+        dls = self.create_dls(tr, val, run_params.bs, run_params.progr_size)
+        learn = fd.rank0_first(lambda: self.create_learner(dls))
+        train_utils.load_custom_pretrained_weights(learn.model, mpath)
+        return learn
 
 
 class ImageTBCb(fc.TensorBoardBaseCallback):
-    def __init__(self, log_dir, run_name, grouped_metrics, all_cats):
+    def __init__(self, log_dir, run_info, grouped_metrics, all_cats):
         super().__init__()
         self.log_dir = log_dir
-        self.run_name = run_name
+        self.run_info = run_info
         self.grouped_metrics = grouped_metrics
         self.all_cats = all_cats
 
@@ -193,9 +201,9 @@ class ImageTBCb(fc.TensorBoardBaseCallback):
     def after_batch(self):
         if not self.run: return
         # if no self.smooth_loss then -1: when loss is nan, Recorder does not set smooth loss causing exception else
-        self.writer.add_scalar(f'{self.run_name}_Loss/train_loss', getattr(self, "smooth_loss", -1), self.train_iter)
+        self.writer.add_scalar(f'{self.run_info}_Loss/train_loss', getattr(self, "smooth_loss", -1), self.train_iter)
         for i, h in enumerate(self.opt.hypers):
-            for k, v in h.items(): self.writer.add_scalar(f'{self.run_name}_Opt_hyper/{k}_{i}', v, self.train_iter)
+            for k, v in h.items(): self.writer.add_scalar(f'{self.run_info}_Opt_hyper/{k}_{i}', v, self.train_iter)
 
     def after_epoch(self):
         if not self.run: return
@@ -209,9 +217,9 @@ class ImageTBCb(fc.TensorBoardBaseCallback):
                     grouped[perf][n] = v
             else:
                 log_group = 'Loss' if "loss" in n else 'Metrics'
-                self.writer.add_scalar(f'{self.run_name}_{log_group}/{n}', v, self.train_iter)
+                self.writer.add_scalar(f'{self.run_info}_{log_group}/{n}', v, self.train_iter)
         for perf, v in grouped.items():
-            self.writer.add_scalars(f'{self.run_name}_Metrics/{perf}', v, self.train_iter)
+            self.writer.add_scalars(f'{self.run_info}_Metrics/{perf}', v, self.train_iter)
         for n, v in reduced.items():
-            self.writer.add_scalars(f'{self.run_name}_Metrics/{self.all_cats}_{n}', v, self.train_iter)
+            self.writer.add_scalars(f'{self.run_info}_Metrics/{self.all_cats}_{n}', v, self.train_iter)
 
