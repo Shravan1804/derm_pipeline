@@ -276,7 +276,6 @@ class FastaiTrainer:
         wl_items, changes = self.correct_wl(wl_items, decoded_preds)
         if GPUManager.is_master_process() and changes != "":
             with open(os.path.join(self.args.exp_logdir, f'{common.now()}_{run}__wl_changes.txt'), 'w') as changelog:
-                changelog.write('file;old_label;new_label\n')
                 changelog.write(changes)
         return wl_items
 
