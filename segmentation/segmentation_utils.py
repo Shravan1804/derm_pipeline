@@ -13,6 +13,18 @@ from object_detection import coco_format
 from classification.classification_utils import conf_mat
 
 
+def common_segm_args(parser, pdef=dict(), phelp=dict()):
+    parser.add_argument('--img-dir', type=str, default=pdef.get('--img-dir', "images"),
+                        help=phelp.get('--img-dir', "Images dir"))
+    parser.add_argument('--mask-dir', type=str, default=pdef.get('--mask-dir', "masks"),
+                        help=phelp.get('--mask-dir', "Masks dir"))
+    parser.add_argument('--mext', type=str, default=pdef.get('--mext', ".png"),
+                        help=phelp.get('--mext', "Masks file extension"))
+    parser.add_argument('--bg', type=int, default=pdef.get('--bg', 0),
+                        help=phelp.get('--bg', "Background mask code, also index of bg cat"))
+    return parser
+
+
 def get_mask_path(img_path, img_dir, mask_dir, mext):
     if type(img_path) is str:
         return img_path.replace(img_dir, mask_dir).replace(os.path.splitext(img_path)[1], mext)

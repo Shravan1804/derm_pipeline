@@ -22,15 +22,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def get_argparser(desc="Fastai segmentation image trainer arguments", pdef=dict(), phelp=dict()):
         # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
         parser = super(ImageSegmentationTrainer, ImageSegmentationTrainer).get_argparser(desc, pdef, phelp)
-        parser.add_argument('--img-dir', type=str, default=pdef.get('--img-dir', "images"),
-                            help=phelp.get('--img-dir', "Images dir"))
-        parser.add_argument('--mask-dir', type=str, default=pdef.get('--mask-dir', "masks"),
-                            help=phelp.get('--mask-dir', "Masks dir"))
-        parser.add_argument('--mext', type=str, default=pdef.get('--mext', ".png"),
-                            help=phelp.get('--mext', "Masks file extension"))
-        parser.add_argument('--bg', type=int, default=pdef.get('--bg', 0),
-                            help=phelp.get('--bg', "Background mask code, also index of bg cat"))
-        return parser
+        return segm_utils.common_segm_args(parser, pdef, phelp)
 
     def __init__(self, args):
         self.NO_BG = '_no_bg'    # used to differentiate metrics ignoring background
