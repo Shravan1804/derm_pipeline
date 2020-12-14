@@ -39,8 +39,8 @@ def multiprocess_cropping(args, proc_id, images):
     print(f"Process {proc_id}: task completed")
 
 
-def main(args):
-    all_images = common.list_files(os.path.join(args.data, args.img_dir), full_path=True)
+def main(args, all_dirs):
+    all_images = [f for d in all_dirs for f in common.list_files(os.path.join(d, args.img_dir), full_path=True)]
     workers, batch_size, batched_images = concurrency.batch_lst(all_images)
     jobs = []
     for proc_id, images in zip(range(workers), batched_images):
@@ -60,6 +60,7 @@ if __name__ == '__main__':
     parser.add_argument('--threshs', nargs='+', default=[.01], type=float, help="Object proportion thresholds")
     parser.add_argument('--rand-margins', action='store_true', help="Grow crops margins randomly")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
+    parser.add_argument('--splitted', action='store_true', help="args.data contains multiple datasets")
     args = parser.parse_args()
 
     common.check_dir_valid(args.data)
@@ -69,10 +70,13 @@ if __name__ == '__main__':
 
     args.threshs = sorted(args.threshs)
 
+    all_dirs = [args.data] if args.splitted else common.list_dirs(args.data, full_path=True)
     if args.dest is None:
         args.dest = common.maybe_create(f'{args.data}_cropped_{"_".join(map(str, args.threshs))}')
-        common.maybe_create(args.dest, args.img_dir)
-        common.maybe_create(args.dest, args.mask_dir)
+    for d in all_dirs:
+        dest_dir = d.replace(args.data, args.dest)
+        common.maybe_create(dest_dir, args.img_dir)
+        common.maybe_create(dest_dir, args.mask_dir)
 
-    common.time_method(main, args)
+    common.time_method(main, args, all_dirs)
 
