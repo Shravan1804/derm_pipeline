@@ -25,7 +25,7 @@ def patch_to_full_image(patch):
 def patch_position(patch):
     if PatchExtractor.can_extract_pm_from_patch_name(patch): return PatchExtractor.get_position(patch)
     h_w = os.path.splitext(os.path.basename(patch))[0].split(f'{PatchExtractor.SEP}_h')[1]
-    return h_w.split("_w")
+    return tuple(map(int, h_w.split("_w")))
 
 
 def main(args):
@@ -94,7 +94,7 @@ def main(args):
 
     labels['images'] = new_images
     labels['annotations'] = new_annotations
-    json_path = os.path.join(args.full_imgs, 'full_img_coco.json')
+    json_path = os.path.join(os.path.dirname(args.full_imgs), f'{os.path.basename(args.full_imgs)}.json')
     print("SAVING", json_path)
     json.dump(labels, open(json_path, 'w'), sort_keys=True, indent=4, separators=(',', ': '))
 
