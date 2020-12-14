@@ -129,7 +129,6 @@ class ImageTrainer(train_utils.FastaiTrainer):
         for fold, tr, val in super().split_data(*tuple(np.array(lst) for lst in zip(*fi_dict.keys()))):
             tr = tuple(np.array(lst) for lst in zip(*[img for fik in zip(*tr) for img in fi_dict[fik]]))
             val = tuple(np.array(lst) for lst in zip(*[img for fik in zip(*val) for img in fi_dict[fik]]))
-            _ = list(map(np.random.shuffle, [t for tup in (tr, val) for t in tup]))
             yield fold, tr, val
 
     def load_image_item(self, path):
@@ -146,7 +145,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
                          splitter=fv.IndexSplitter(list(range(len(val[0])))),
                          item_tfms=fv.Resize(self.args.input_size),
                          batch_tfms=tfms)
-        return d.dataloaders(self.args.data, bs=bs)
+        return d.dataloaders(self.args.data, bs=bs, shuffle=True, seed=self.args.seed)
 
     def maybe_progressive_resizing(self, tr, val, fold_suffix):
         if self.args.progr_size:
