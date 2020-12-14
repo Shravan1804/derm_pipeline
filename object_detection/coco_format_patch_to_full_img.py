@@ -1,46 +1,57 @@
 import os
+import sys
 import copy
 import json
 import argparse
+from collections import defaultdict
 
-import cv2
 import numpy as np
 from tqdm import tqdm
 from shapely.ops import unary_union
 from shapely.geometry import Polygon, MultiPoint
 
-import common
-from PatchExtractor import PatchExtractor
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
+from general import common
+from object_detection import coco_format
+from general.PatchExtractor import PatchExtractor
+
+
+def patch_to_full_image(patch):
+    if PatchExtractor.can_extract_pm_from_patch_name(patch): return PatchExtractor.get_full_img_from_patch(patch)
+    file, ext = os.path.splitext(os.path.basename(patch))
+    return f'{file.split(PatchExtractor.SEP)[0]}{ext}'
+
+
+def patch_position(patch):
+    if PatchExtractor.can_extract_pm_from_patch_name(patch): return PatchExtractor.get_position(patch)
+    h_w = os.path.splitext(os.path.basename(patch))[0].split(f'{PatchExtractor.SEP}_h')[1]
+    return h_w.split("_w")
 
 
 def main(args):
     with open(args.labels, 'r') as f:
         labels = json.load(f)
     id_to_patch_name = {img['id']: img['file_name'] for img in labels['images']}
-    patch_id_to_full_img = {k: PatchExtractor.get_full_img_from_patch(v) for k, v in id_to_patch_name.items()}
+    patch_id_to_full_img = {k: patch_to_full_image(v) for k, v in id_to_patch_name.items()}
     full_img_id = {k: i for i, k in enumerate(sorted(set(patch_id_to_full_img.values())))}
 
     print("CREATING NEW LIST OF FULL IMAGES")
     new_images = []
-    for full_img in full_img_id.keys():
-        img_path = os.path.join(args.full_imgs, full_img)
+    for fi, fid in full_img_id.items():
+        img_path = os.path.join(args.full_imgs, fi)
         if not os.path.exists(img_path):
-            print("Warning", img_path, "does not exist...")
-            height, width = -1, -1
-        else:
-            im = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
-            height, width = im.shape[:2]
-        new_images.append({'width': width, 'license': 0, 'file_name': full_img, 'id': full_img_id[full_img],
-                           'height': height})
+            print("Warning", img_path, "does not exist, skipping ...")
+            continue
+        new_images.append(coco_format.get_img_record(fid, img_path))
 
     print("ADJUSTING ANNOTATIONS POLYGONS TO FULL IMAGES")
-    full_img_annos = {k: [] for k in full_img_id.keys()}
+    full_img_annos = defaultdict(list)
     for lanno in labels['annotations']:
         for seg in lanno['segmentation']:
             anno = copy.deepcopy(lanno)
             anno['segmentation'] = [seg]
             full_img = patch_id_to_full_img[anno['image_id']]
-            y, x = PatchExtractor.get_position(id_to_patch_name[anno['image_id']])
+            y, x = patch_position(id_to_patch_name[anno['image_id']])
             anno['image_id'] = full_img_id[full_img]
             anno['bbox'] = (np.array(anno['bbox']) + np.ones(4) * np.array([x, y, x, y])).tolist()
             n = len(anno['segmentation'][0])
@@ -49,10 +60,10 @@ def main(args):
 
     print("MERGING OVERLAPPING POLYGONS")
     new_annotations = []
-    anno_id = 0
+    anno_id = 1     # MUST start at 1 otherwise pycocotools.cocoeval will not match anno with id 0
     for full_img, f_annos in tqdm(full_img_annos.items()):
-        annos_per_cats = {c['id']: [a for a in f_annos if a['category_id'] == c['id']] for c in labels['categories']}
-        for annos in annos_per_cats.values():
+        cat_annos = {c['id']: [a for a in f_annos if a['category_id'] == c['id']] for c in labels['categories']}
+        for annos in cat_annos.values():
             polys = [Polygon([c[n:n+2] for n in range(0, len(c), 2)]) for c in [a['segmentation'][0] for a in annos]]
             polys_annos = list(zip(polys, annos))
             merge = True

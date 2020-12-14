@@ -6,6 +6,7 @@ import datetime
 import itertools
 import contextlib
 from pathlib import Path
+import PIL.Image as PImage
 from collections import defaultdict
 
 import numpy as np
@@ -141,6 +142,7 @@ def most_common(arr, top=3, return_index=False, return_counts=False):
     if return_counts:
         res = *res, c[res[-1]]
     return res
+
 
 def maybe_create(*d):
     """Receives arbitrary number of dirnames, joins them and create them if they don't exist. Returns joined path."""
@@ -286,6 +288,12 @@ def img_bgr_to_rgb(im):
     if len(im.shape) != 3:
         raise Exception(f"Error cannot convert from bgr to rgb, im shape is {im.shape}")
     return cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+
+
+def quick_img_size(img_path):
+    """Returns height, width of img, quicker than cv2 since it does not load the image in memory"""
+    width, height = PImage.open(img_path).size
+    return height, width
 
 
 def load_rgb_img(path):

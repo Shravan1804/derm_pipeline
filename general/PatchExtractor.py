@@ -239,11 +239,20 @@ class PatchExtractor:
         return {'patch_path': patch_name, 'full_img': img_path, 'ps': ps, 'oh': oh, 'ow': ow, 'h': h, 'w': w}
 
     @staticmethod
-    def patch_name_to_pm(patch_name):
-        file, ext = os.path.splitext(os.path.basename(patch_name))
+    def patch_name_re():
         sep = fr'(?P<sep>{PatchExtractor.SEP}(?:{PatchExtractor.RAND})?)'
         reg = re.compile(fr'^(?P<img>.+){sep}_ps(?P<ps>\d+)_oh(?P<oh>\d+)_ow(?P<ow>\d+)_h(?P<h>\d+)_w(?P<w>\d+)$')
-        results = reg.search(file)
+        return reg
+
+    @staticmethod
+    def can_extract_pm_from_patch_name(patch_name):
+        file, ext = os.path.splitext(os.path.basename(patch_name))
+        return PatchExtractor.patch_name_re().search(file) is not None
+
+    @staticmethod
+    def patch_name_to_pm(patch_name):
+        file, ext = os.path.splitext(os.path.basename(patch_name))
+        results = PatchExtractor.patch_name_re().search(file)
         assert results, f"Cannot extract necessary information from patch name: {patch_name}"
         img_path = results.group('img') + ext
         ps, oh, ow, h, w = tuple((int(results.group(k)) for k in ['ps', 'oh', 'ow', 'h', 'w']))

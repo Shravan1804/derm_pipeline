@@ -29,7 +29,7 @@ def get_categories(cat_names, cat_ids):
 
 
 def get_img_record(idx, img_path, im_shape=None, license_id=1):
-    w, h = Image.open(img_path).size if im_shape is None else (im_shape[1], im_shape[0])
+    h, w = common.quick_img_size(img_path) if im_shape is None else im_shape
     return {
         'id': idx,
         'file_name': os.path.basename(img_path),
