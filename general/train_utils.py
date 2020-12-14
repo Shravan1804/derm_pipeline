@@ -56,6 +56,7 @@ def split_model(model, splits):
 
 
 # fastai2 get_preds fails in distributed mode
+# TODO: this version does not distribute load on GPUs
 def custom_get_preds(learn, test_dl):
     """Returns, targs, preds, decoded_preds"""
     targs, outs = [], []

@@ -177,13 +177,14 @@ class ImageTrainer(train_utils.FastaiTrainer):
         return run_params
 
     def get_sorting_run_key(self, run_info):
-        return run_info.replace(f'__F{self.get_run_param(run_info).fold}__', '')
+        return run_info.replace(f'__F{self.get_run_params(run_info).fold}__', '')
 
     def load_learner_from_run_info(self, run_info, mpath, tr, val):
         run_params = self.get_run_params(run_info)
         dls = self.create_dls(tr, val, run_params.bs, run_params.progr_size)
         learn = fd.rank0_first(lambda: self.create_learner(dls))
         train_utils.load_custom_pretrained_weights(learn.model, mpath)
+        learn.model.cuda()
         return learn
 
 
