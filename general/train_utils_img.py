@@ -145,7 +145,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
                          splitter=fv.IndexSplitter(list(range(len(val[0])))),
                          item_tfms=fv.Resize(self.args.input_size),
                          batch_tfms=tfms)
-        return d.dataloaders(self.args.data, bs=bs, shuffle=True, seed=self.args.seed)
+        return d.dataloaders(self.args.data, bs=bs, seed=self.args.seed)
 
     def maybe_progressive_resizing(self, tr, val, fold_suffix):
         if self.args.progr_size:
