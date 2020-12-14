@@ -316,7 +316,7 @@ class FastaiTrainer:
         _, tr, val = next(self.split_data(*self.get_train_items()[0]))
         for mpath in models:
             run_info = os.path.splitext(os.path.basename(mpath))[0].replace(self.MODEL_SUFFIX, "")
-            learn = self.load_learner_from_run_info(run_info, mpath, tr, val)
+            learn = self.load_learner_from_run_info(run_info, tr, val, mpath)
             self.evaluate_on_test_sets(learn, run_info)
         self.generate_tests_reports()
 
