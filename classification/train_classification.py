@@ -30,7 +30,7 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def compute_conf_mat(self, targs, preds): return classif_utils.conf_mat(targs, preds, self.args.cats)
 
     def create_dls(self, tr, val, bs, size):
-        tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))
+        tr, val = tuple(map(np.ndarray.tolist, tr)), tuple(map(np.ndarray.tolist, val))
         return self.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock), tr, val, bs, size)
 
     def create_learner(self, dls):
@@ -60,7 +60,7 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
 def main(args):
     classif = ImageClassificationTrainer(args, stratify=True, full_img_sep=PatchExtractor.SEP)
     classif.train_model()
-    if args.inference: pass
+    if args.inference: classif.inference()
 
 
 if __name__ == '__main__':

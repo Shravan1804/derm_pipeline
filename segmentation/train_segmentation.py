@@ -106,7 +106,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
 def main(args):
     segm = ImageSegmentationTrainer(args)
     segm.train_model()
-    if args.inference: pass
+    if args.inference: segm.inference()
 
 if __name__ == '__main__':
     defaults = {'--bs': 6, '--model': 'resnet34', '--input-size': 256, '--cats': ["other", "pustules", "spots"]}

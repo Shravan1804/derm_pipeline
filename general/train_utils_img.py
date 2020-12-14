@@ -171,7 +171,10 @@ class ImageTrainer(train_utils.FastaiTrainer):
 
     def get_run_params(self, run_info):
         regex = r"^(?:__R(?P<repeat>\d+)__)?__S(?P<progr_size>\d+)px_bs(?P<bs>\d+)____F(?P<fold>\d+)__.*$"
-        return SimpleNamespace(**re.match(regex, run_info).groupdict())
+        run_params = SimpleNamespace(**re.match(regex, run_info).groupdict())
+        run_params.progr_size = int(run_params.progr_size)
+        run_params.bs = int(run_params.bs)
+        return run_params
 
     def get_sorting_run_key(self, run_info):
         return run_info.replace(f'__F{self.get_run_param(run_info).fold}__', '')
