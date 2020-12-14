@@ -183,8 +183,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
         run_params = self.get_run_params(run_info)
         dls = self.create_dls(tr, val, run_params.bs, run_params.progr_size)
         learn = fd.rank0_first(lambda: self.create_learner(dls))
-        if mpath is not None:
-        train_utils.load_custom_pretrained_weights(learn.model, mpath)
+        if mpath is not None: train_utils.load_custom_pretrained_weights(learn.model, mpath)
         learn.model.cuda()
         return learn
 
