@@ -14,13 +14,14 @@ from segmentation.mask_utils import crop_img_and_mask_to_objs
 SEP = '__CROP__'
 
 
-def save_crops(args, thresh, img_path, cropped_imgs, cropped_masks):
+def save_crops(args, thresh, img_path, cropped_imgs, cropped_masks, crop_bboxes):
     file, ext = os.path.splitext(os.path.basename(img_path))
     imdir = os.path.dirname(img_path).replace(args.data, args.dest)
     mdir = imdir.replace(args.img_dir, args.mask_dir)
     suf = f'_{thresh}_{"rand" if args.rand_margins else "notRand"}'
-    for i, (im, mask) in enumerate(zip(cropped_imgs, cropped_masks)):
-        crop_fname = f'{file}{SEP}{suf}_{common.zero_pad(i, len(cropped_imgs))}{ext}'
+    for i, (im, mask, bbox) in enumerate(zip(cropped_imgs, cropped_masks, crop_bboxes)):
+        crop_id = common.zero_pad(i, len(cropped_imgs))
+        crop_fname = f'{file}{SEP}{suf}_{"_".join([str(s) for s in bbox])}__{crop_id}{ext}'
         cv2.imwrite(os.path.join(imdir, crop_fname), cv2.cvtColor(im, cv2.COLOR_RGB2BGR))
         cv2.imwrite(os.path.join(mdir, crop_fname.replace(ext, args.mext)), mask)
 
@@ -33,7 +34,7 @@ def multiprocess_cropping(args, proc_id, images):
         try:
             for thresh in args.threshs:
                 crops = crop_img_and_mask_to_objs(im, mask, thresh, args.rand_margins, single=False, bg=args.bg)
-                save_crops(args, thresh, img_path, *crops[:2])
+                save_crops(args, thresh, img_path, *crops)
         except Exception:
             print(f"Process {proc_id}: error with img {img_path}, skipping.")
     print(f"Process {proc_id}: task completed")
@@ -70,7 +71,7 @@ if __name__ == '__main__':
 
     args.threshs = sorted(args.threshs)
 
-    all_dirs = [args.data] if args.splitted else common.list_dirs(args.data, full_path=True)
+    all_dirs = common.list_dirs(args.data, full_path=True) if args.splitted else [args.data]
     if args.dest is None:
         args.dest = common.maybe_create(f'{args.data}_cropped_{"_".join(map(str, args.threshs))}')
     for d in all_dirs:
