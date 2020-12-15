@@ -21,13 +21,12 @@ def create_segm_masks(args, proc_id, images, coco):
         for catId in sorted([c['id'] for c in coco.cats]):
             for ann in coco.loadAnns(coco.getAnnIds(imgIds=img.id, catIds=catId)):
                 mask[coco.annToMask(ann).astype(np.bool)] = catId
-        cv2.imwrite(os.path.join(args.mask_dir, f'{file}.png'))
+        cv2.imwrite(os.path.join(args.mask_dir, f'{file}.png', mask))
     print(f"Process {proc_id}: task completed")
 
 
 def main(args):
     coco = COCO(args.json)
-    coco.annToMask()
     all_images = [SimpleNamespace(**img) for img in coco.imgs.values()]
     workers, batch_size, batched_images = concurrency.batch_lst(all_images)
     jobs = []
