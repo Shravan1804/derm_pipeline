@@ -68,6 +68,7 @@ def custom_get_preds(learn, test_dl):
     learn.model.train()
     outs, targs = tuple(map(torch.cat, (outs, targs)))
     decode = getattr(learn.loss_func, 'decodes', fv.noop)
+    # cast to normal tensors since fastai fancy types raise issues in metrics such as "unsupported operand type"
     return tuple(t.as_subclass(torch.Tensor) for t in (outs, targs, decode(outs)))
 
 
