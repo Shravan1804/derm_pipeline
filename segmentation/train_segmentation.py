@@ -11,10 +11,10 @@ from fastai.callback.tracker import EarlyStoppingCallback
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common, train_utils, train_utils_img
-import segmentation.segmentation_utils as segm_utils
 import segmentation.mask_utils as mask_utils
+import segmentation.segmentation_utils as segm_utils
 from segmentation.crop_to_thresh import SEP as CROP_SEP
-from object_detection.object_detection_utils import CustomCocoEval
+from object_detection.object_detection_utils import CustomCocoEval, segm_dataset_to_coco_format
 
 
 class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
@@ -61,7 +61,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
 
     def process_test_preds(self, interp):
         interp = super().process_test_preds(interp)
-        to_coco = partial(segm_utils.segm_dataset_to_coco_format, cats=self.args.cats, bg=self.args.bg)
+        to_coco = partial(segm_dataset_to_coco_format, cats=self.args.cats, bg=self.args.bg)
         cocoEval = CustomCocoEval(to_coco(interp.targs), to_coco(interp.decoded, scores=True), all_cats=self.ALL_CATS)
         cocoEval.eval_acc_and_summarize(verbose=False)
         self.coco_param_labels, stats = cocoEval.getPrecisionRecall()  # cocoeval labels is the same for all tests
@@ -99,6 +99,7 @@ def main(args):
     segm = ImageSegmentationTrainer(args)
     segm.train_model()
     if args.inference: segm.inference()
+
 
 if __name__ == '__main__':
     defaults = {'--bs': 6, '--model': 'resnet34', '--input-size': 256, '--cats': ["other", "pustules", "spots"]}
