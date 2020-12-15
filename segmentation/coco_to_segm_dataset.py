@@ -22,14 +22,14 @@ def create_segm_masks(args, proc_id, images, coco):
         for catId in sorted([c['id'] for c in coco.cats.values()]):
             for ann in coco.loadAnns(coco.getAnnIds(imgIds=img.id, catIds=catId)):
                 mask[coco.annToMask(ann).astype(np.bool)] = catId
-        cv2.imwrite(os.path.join(args.mask_dir, f'{file}{args.mext}', mask))
+        cv2.imwrite(os.path.join(args.mask_dir, f'{file}{args.mext}'), mask)
     print(f"Process {proc_id}: task completed")
 
 
 def get_images_without_labels(args, img_with_labels):
     has_labels = [os.path.basename(img.file_name) for img in img_with_labels]
     no_labels = []
-    for f in common.list_files(os.path.join(os.path.basename(args.json), args.img_dir), full_path=True):
+    for f in common.list_files(os.path.join(os.path.dirname(args.json), args.img_dir), full_path=True):
         filename = os.path.basename(f)
         if filename not in has_labels:
             h, w = common.quick_img_size(f)
@@ -40,7 +40,7 @@ def get_images_without_labels(args, img_with_labels):
 def main(args):
     coco = COCO(args.json)
     all_images = [SimpleNamespace(**img) for img in coco.imgs.values()]
-    all_images.extend(get_images_without_labels(all_images))
+    all_images.extend(get_images_without_labels(args, all_images))
     np.random.shuffle(all_images)   # otherwise last process has all the images without annos
     workers, batch_size, batched_images = concurrency.batch_lst(all_images, workers=args.workers)
     jobs = []
