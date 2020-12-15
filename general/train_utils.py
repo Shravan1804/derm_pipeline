@@ -66,8 +66,9 @@ def custom_get_preds(learn, test_dl):
             outs.append(learn.model(batch_x).cpu())
             targs.append(batch_y.cpu())
     learn.model.train()
-    outs = torch.cat(outs)
-    return outs, torch.cat(targs), getattr(learn.loss_func, 'decodes', fv.noop)(outs)
+    outs, targs = tuple(map(torch.cat, (outs, targs)))
+    decode = getattr(learn.loss_func, 'decodes', fv.noop)
+    return tuple(t.as_subclass(torch.Tensor) for t in (outs, targs, decode(outs)))
 
 
 def load_custom_pretrained_weights(model, weights_path):
@@ -257,6 +258,7 @@ class FastaiTrainer:
     def prepare_learner(self, learn):
         if not self.args.full_precision:
             learn.to_fp16()
+        learn.model.cuda()
         return learn
 
     def basic_train(self, learn, run, dls):
