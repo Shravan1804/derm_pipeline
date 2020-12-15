@@ -4,7 +4,6 @@ import json
 import random
 
 import numpy as np
-from PIL import Image
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
