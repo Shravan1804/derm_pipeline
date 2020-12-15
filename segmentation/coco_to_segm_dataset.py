@@ -18,7 +18,7 @@ def create_segm_masks(args, proc_id, images, coco):
     for img in images:
         file, _ = os.path.splitext(os.path.basename(img.file_name))
         mask = np.zeros((img.height, img.width), dtype=np.uint8)
-        for catId in sorted([c['id'] for c in coco.cats]):
+        for catId in sorted([c['id'] for c in coco.cats.values()]):
             for ann in coco.loadAnns(coco.getAnnIds(imgIds=img.id, catIds=catId)):
                 mask[coco.annToMask(ann).astype(np.bool)] = catId
         cv2.imwrite(os.path.join(args.mask_dir, f'{file}.png', mask))
