@@ -303,7 +303,7 @@ def load_rgb_img(path):
 def prepare_img_axs(h_w_ratio, nrows, ncols, figsize_fact=8, no_axis=True):
     base_figsize = (ncols*figsize_fact, nrows*figsize_fact*h_w_ratio)
     fig, axs = plt.subplots(nrows, ncols, figsize=base_figsize)
-    axs = axs.flatten()
+    if nrows > 1 or ncols > 1: axs = axs.flatten()
     if no_axis:
         for ax in axs:
             ax.axis('off')
