@@ -26,15 +26,27 @@ def get_cls_TP_TN_FP_FN(cls_truth, cls_preds):
 
 
 def accuracy(TP, TN, FP, FN, epsilon=1e-8):
+    # Make sure classes are balanced
+    # Proportion of both Positive and Negative that were correctly classified
     return (TP + TN) / (TP + TN + FP + FN + epsilon)
 
 
 def precision(TP, TN, FP, FN, epsilon=1e-8):
+    # Proportion of predicted Positives that are truly Positive
     return TP / (TP + FP + epsilon)
 
 
 def recall(TP, TN, FP, FN, epsilon=1e-8):
+    # Proportion of actual Positives (in ground truth) that are correctly classified
     return TP / (TP + FN + epsilon)
+
+
+def F1(TP, TN, FP, FN, epsilon=1e-8):
+    # Can be used to compare two classifiers BUT
+    # F1-score gives a larger weight to lower numbers e.g. 100% pre and 0% rec => 0% F1
+    # F1-score gives equal weight to pre/rec which may not what we seek depending on the problem
+    pre, rec = precision(TP, TN, FP, FN, epsilon), recall(TP, TN, FP, FN, epsilon)
+    return 2 * pre * rec / (pre + rec)
 
 
 def tensors_mean_std(tensor_lst):

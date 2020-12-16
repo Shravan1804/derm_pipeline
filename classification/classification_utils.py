@@ -12,14 +12,13 @@ def get_image_cls(img_path):
 
 
 def cls_perf(perf, inp, targ, cls_idx, cats, axis=-1):
-    if axis is not None:
-        inp = inp.argmax(dim=axis)
-    if cls_idx is None:
-        res = [train_utils.get_cls_TP_TN_FP_FN(targ == c, inp == c) for c in range(len(cats))]
-        res = torch.cat([torch.tensor(r).float().unsqueeze(0) for r in res], dim=0).sum(axis=0).tolist()
-        return torch.tensor(perf(*res)).float()
-    else:
+    if cls_idx is not None:
+        if axis is not None:
+            inp = inp.argmax(dim=axis)
         return torch.tensor(perf(*train_utils.get_cls_TP_TN_FP_FN(targ == cls_idx, inp == cls_idx))).float()
+    else:
+        cls_res = [cls_perf(perf, inp, targ, c, cats, axis) for c in range(len(cats))]
+        return torch.stack(cls_res).mean()
 
 
 def conf_mat(targs, preds, cats, normalize=True, epsilon=1e-8):
