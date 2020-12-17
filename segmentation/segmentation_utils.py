@@ -23,7 +23,7 @@ def common_segm_args(parser, pdef=dict(), phelp=dict()):
     return parser
 
 
-def get_mask_path(img_path, img_dir, mask_dir, mext):
+def get_mask_path(img_path, img_dir='images', mask_dir='masks', mext='.png'):
     if type(img_path) is str:
         file, ext = os.path.splitext(os.path.basename(img_path))
         return img_path.replace(f'{img_dir}/{file}{ext}', f'{mask_dir}/{file}{mext}')
