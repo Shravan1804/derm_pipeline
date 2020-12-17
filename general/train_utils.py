@@ -68,23 +68,6 @@ def split_model(model, splits):
     return [torch.nn.Sequential(*top_children[i:j]) for i, j in zip(idxs[:-1], idxs[1:])]
 
 
-# fastai2 get_preds fails in distributed mode
-# TODO: this version does not distribute load on GPUs
-def custom_get_preds(learn, test_dl):
-    """Returns, targs, preds, decoded_preds"""
-    targs, outs = [], []
-    learn.model.eval()
-    with torch.no_grad():
-        for batch_x, batch_y in test_dl:
-            outs.append(learn.model(batch_x).cpu())
-            targs.append(batch_y.cpu())
-    learn.model.train()
-    outs, targs = tuple(map(torch.cat, (outs, targs)))
-    decode = getattr(learn.loss_func, 'decodes', fv.noop)
-    # cast to normal tensors since fastai fancy types raise issues in metrics such as "unsupported operand type"
-    return tuple(t.as_subclass(torch.Tensor) for t in (outs, targs, decode(outs)))
-
-
 def load_custom_pretrained_weights(model, weights_path):
     new_state_dict = torch.load(weights_path, map_location=torch.device('cpu'))['model']
     model_state_dict = model.state_dict()
@@ -323,7 +306,6 @@ class FastaiTrainer:
         print("Evaluating WL data:", run)
         dl = learn.dls.test_dl(list(zip(*wl_items)), with_labels=True)
         with GPUManager.running_context(learn, self.args.gpu_ids):
-            #_, targs, decoded_preds = custom_get_preds(learn, dl)
             _, targs, decoded_preds = learn.get_preds(dl=dl, with_decoded=True)
         wl_items, changes = self.correct_wl(wl_items, decoded_preds)
         GPUManager.clean_gpu_memory(dl, learn.dls, learn)
@@ -339,8 +321,6 @@ class FastaiTrainer:
             GPUManager.sync_distributed_process()
             dl = learn.dls.test_dl(list(zip(*test_items_with_cls)), with_labels=True)
             with GPUManager.running_context(learn, self.args.gpu_ids):
-                # interp = SimpleNamespace()
-                # interp.preds, interp.targs, interp.decoded = custom_get_preds(learn, dl)
                 interp = fv.Interpretation.from_learner(learn, dl=dl)
                 GPUManager.clean_gpu_memory(dl)
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(self.process_test_preds(interp))
@@ -355,6 +335,7 @@ class FastaiTrainer:
         return {mn: tuple(s.numpy() for s in tensors_mean_std(mres)) for mn, mres in merged}
 
     def generate_tests_reports(self):
+        print("Aggregating test predictions ...")
         if not GPUManager.is_master_process(): return
         for test_name in self.args.sl_tests:
             test_path = common.maybe_create(self.args.exp_logdir, test_name)
@@ -374,6 +355,7 @@ class FastaiTrainer:
             run_info = os.path.splitext(os.path.basename(mpath))[0].replace(self.MODEL_SUFFIX, "")
             learn = self.load_learner_from_run_info(run_info, tr, val, mpath)
             self.evaluate_on_test_sets(learn, run_info)
+            GPUManager.clean_gpu_memory(learn.dls, learn)
         self.generate_tests_reports()
 
     def train_model(self):
@@ -395,7 +377,7 @@ class FastaiTrainer:
                     learn, _ = self.train_procedure(wl_data, val, f'{fold_suffix}wl_only', repeat_prefix)
                     learn, prev_run = self.train_procedure(tr, val, f'{fold_suffix}_wl_sl', repeat_prefix, learn)
                     wl_data = self.evaluate_and_correct_wl(learn, wl_data, prev_run)
-            
+
             GPUManager.clean_gpu_memory(learn.dls, learn)
         self.generate_tests_reports()
 
