@@ -225,10 +225,6 @@ def check_dir_valid(dirpath):
     assert os.path.exists(dirpath) and os.path.isdir(dirpath), f"Provided dir {dirpath} invalid."
 
 
-def add_classif_args(parser):
-    parser.add_argument('--classif', action='store_true', help="if dataset is classif dataset")
-
-
 def add_obj_detec_args(parser):
     parser.add_argument('--obj-detec', action='store_true', help="if dataset is obj detec dataset")
     parser.add_argument('--img-dir', type=str, default='images', help="dir containing images if --obj-detec")

@@ -1,4 +1,5 @@
 import os
+import gc
 import sys
 import pickle
 import argparse
@@ -104,7 +105,41 @@ class CustomItemGetter(fv.ItemGetter):
     def encodes(self, x): return self.fn(x[self.i])
 
 
+
+
+def show_tensors_in_memory(gpu_only=True):
+    """Prints a list of the Tensors being tracked by the garbage collector."""
+    # inspired from https://forums.fast.ai/t/gpu-memory-not-being-freed-after-training-is-over/10265/7
+    def pretty_size(size): return " × ".join(map(str, size)) if isinstance(size, torch.Size) else size
+
+    def print_tensor_like_obj_details(obj):
+        if not gpu_only or obj.is_cuda:
+            details = f'{type(obj).__name__} '
+            if not torch.is_tensor(obj) and hasattr(obj, "data") and torch.is_tensor(obj.data):
+                details += f'-> {type(obj.data).__name__} '
+            details += f': {"GPU" if obj.is_cuda else "CPU"} {" pinned" if obj.data.is_pinned else ""} '
+            details += f'{" grad" if obj.requires_grad else ""} {pretty_size(obj.data.size())}'
+            print(details)
+
+    total_size = 0
+    for obj in gc.get_objects():
+        try:
+            with_data_tensor = hasattr(obj, "data") and torch.is_tensor(obj.data)
+            if torch.is_tensor(obj) or with_data_tensor:
+                print_tensor_like_obj_details(obj)
+                total_size += obj.data.numel() if with_data_tensor else obj.numel()
+        except Exception as err:
+            print(err)
+    print("Total size:", total_size)
+
+
 class GPUManager:
+    @staticmethod
+    def clean_gpu_memory(*items):
+        for item in items: del item
+        torch.cuda.empty_cache()
+        gc.collect()
+
     @staticmethod
     def default_gpu_device_ids():
         assert torch.cuda.is_available(), "Cannot run without CUDA device"
@@ -283,25 +318,31 @@ class FastaiTrainer:
         learn.save(os.path.join(self.args.exp_logdir, f'{run}{self.MODEL_SUFFIX}'))
 
     def evaluate_and_correct_wl(self, learn, wl_items, run):
+        """Evaluate and correct weak labeled items, clears GPU memory (model and dls)"""
         GPUManager.sync_distributed_process()
         print("Evaluating WL data:", run)
         dl = learn.dls.test_dl(list(zip(*wl_items)), with_labels=True)
         with GPUManager.running_context(learn, self.args.gpu_ids):
-            _, targs, decoded_preds = custom_get_preds(learn, dl)
+            #_, targs, decoded_preds = custom_get_preds(learn, dl)
+            _, targs, decoded_preds = learn.get_preds(dl=dl, with_decoded=True)
         wl_items, changes = self.correct_wl(wl_items, decoded_preds)
+        GPUManager.clean_gpu_memory(dl, learn.dls, learn)
         if GPUManager.is_master_process() and changes != "":
             with open(os.path.join(self.args.exp_logdir, f'{common.now()}_{run}__wl_changes.txt'), 'w') as changelog:
                 changelog.write(changes)
         return wl_items
 
     def evaluate_on_test_sets(self, learn, run):
+        """Evaluate test sets, clears GPU memory held by test dl(s)"""
         print("Testing model:", run)
         for test_name, test_items_with_cls in self.get_test_sets_items():
             GPUManager.sync_distributed_process()
             dl = learn.dls.test_dl(list(zip(*test_items_with_cls)), with_labels=True)
             with GPUManager.running_context(learn, self.args.gpu_ids):
-                interp = SimpleNamespace()
-                interp.preds, interp.targs, interp.decoded = custom_get_preds(learn, dl)
+                # interp = SimpleNamespace()
+                # interp.preds, interp.targs, interp.decoded = custom_get_preds(learn, dl)
+                interp = fv.Interpretation.from_learner(learn, dl=dl)
+                GPUManager.clean_gpu_memory(dl)
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(self.process_test_preds(interp))
 
     def process_test_preds(self, interp):
@@ -346,12 +387,15 @@ class FastaiTrainer:
                 learn, prev_run = self.train_procedure(tr, val, f'{fold_suffix}sl_only')
 
             if self.args.use_wl:
-                if fold == 0: wl_data = self.evaluate_and_correct_wl(learn, wl_data, prev_run)
+                if fold == 0:
+                    wl_data = self.evaluate_and_correct_wl(learn, wl_data, prev_run)
                 for repeat in range(self.args.nrepeats):
                     repeat_prefix = f'__R{common.zero_pad(repeat, self.args.nrepeats)}__'
                     print(f"WL-SL train procedure {repeat + 1}/{self.args.nrepeats}")
                     learn, _ = self.train_procedure(wl_data, val, f'{fold_suffix}wl_only', repeat_prefix)
                     learn, prev_run = self.train_procedure(tr, val, f'{fold_suffix}_wl_sl', repeat_prefix, learn)
                     wl_data = self.evaluate_and_correct_wl(learn, wl_data, prev_run)
+            
+            GPUManager.clean_gpu_memory(learn.dls, learn)
         self.generate_tests_reports()
 
