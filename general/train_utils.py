@@ -4,7 +4,6 @@ import sys
 import pickle
 import argparse
 from pathlib import Path
-from types import SimpleNamespace
 from collections import defaultdict
 
 import numpy as np
@@ -88,8 +87,6 @@ class CustomItemGetter(fv.ItemGetter):
     def encodes(self, x): return self.fn(x[self.i])
 
 
-
-
 def show_tensors_in_memory(gpu_only=True):
     """Prints a list of the Tensors being tracked by the garbage collector."""
     # inspired from https://forums.fast.ai/t/gpu-memory-not-being-freed-after-training-is-over/10265/7
@@ -129,26 +126,33 @@ class GPUManager:
         return list(range(torch.cuda.device_count()))
 
     @staticmethod
-    def in_distributed_mode():
-        return os.environ.get('RANK', None) is not None
+    def in_parallel_mode(): return not GPUManager.in_distributed_mode() and torch.cuda.device_count() > 1
 
     @staticmethod
-    def in_parallel_mode():
-        return not GPUManager.in_distributed_mode() and torch.cuda.device_count() > 1
+    def in_distributed_mode(): return os.environ.get('RANK', None) is not None
+
+    @staticmethod
+    def distributed_rank(): return int(os.environ.get('RANK', 0))
+
+    @staticmethod
+    def is_master_process(): return GPUManager.distributed_rank() == 0 if GPUManager.in_distributed_mode() else True
+
+    @staticmethod
+    def init_distributed_process():
+        if GPUManager.in_distributed_mode():
+            rank = GPUManager.distributed_rank()
+            fd.setup_distrib(rank)
+            torch.cuda.set_device(rank)
+
+
+    @staticmethod
+    def sync_distributed_process():
+        if GPUManager.in_distributed_mode(): fv.distrib_barrier()
 
     @staticmethod
     def running_context(learn, device_ids=None):
         device_ids = list(range(torch.cuda.device_count())) if device_ids is None else device_ids
         return learn.distrib_ctx() if GPUManager.in_distributed_mode() else learn.parallel_ctx(device_ids)
-
-    @staticmethod
-    def sync_distributed_process():
-        if GPUManager.in_distributed_mode():
-            fv.distrib_barrier()
-
-    @staticmethod
-    def is_master_process():
-        return os.environ.get('RANK') == "0" if GPUManager.in_distributed_mode() else True
 
 
 class FastaiTrainer:
@@ -214,6 +218,8 @@ class FastaiTrainer:
 
         assert torch.cuda.is_available(), "Cannot run without CUDA device"
         args.bs = args.bs * len(args.gpu_ids) if GPUManager.in_parallel_mode() else args.bs
+        # required for segmentation otherwise causes a NCCL error in inference distrib running context
+        if GPUManager.in_distributed_mode(): GPUManager.init_distributed_process()
 
         if args.encrypted:
             args.ckey = os.environ.get('CRYPTO_KEY').encode() if GPUManager.in_distributed_mode() else args.ckey
