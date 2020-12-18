@@ -45,11 +45,11 @@ class CustomCocoEval(COCOeval):
         lmin, lmax = np.quantile(areas, large_thresh).astype(np.int), int(np.max(areas) * max_fact)
         return [[0, lmax], [0, lmin//2], [lmin//2, lmin], [lmin, lmax]]
 
-    def computeMaxDets(self, facts=(1.25, 1.5)):
-        """The min dets will be the max amount of objs in any GT img and the value obtained after multiplying facts"""
+    def computeMaxDets(self, facts=(1, 1.5, 2)):
+        """The min dets will be the max amount of objs in any GT img multiplied by provided facts"""
         dets = np.array([len(img_anns) for img_anns in self.cocoGt.imgToAnns.values()])
         max_dets = np.max(dets)
-        return ("x1", *tuple(f"x{f}" for f in facts)), [max_dets, *tuple(int(f*max_dets) for f in facts)]
+        return tuple(f"x{f}" for f in facts), tuple(int(f*max_dets) for f in facts)
 
     def __init__(self, *args, all_cats="all", **kwargs):
         super().__init__(*args, **kwargs)
