@@ -166,6 +166,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
             if it == 0 and learn is None: learn = fd.rank0_first(lambda: self.create_learner(dls))
             self.basic_train(learn, f'{run_prefix}{run}', dls)
             self.evaluate_on_test_sets(learn, run)
+            train_utils.GPUManager.clean_gpu_memory(learn.dls)
         return learn, run
 
     def get_run_params(self, run_info):
