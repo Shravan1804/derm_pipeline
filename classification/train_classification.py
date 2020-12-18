@@ -49,10 +49,8 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
         wl_items, labels = wl_items_with_labels
         preds = np.array(self.args.cats)[preds.numpy()]
         corr = labels != preds
-        changelog = 'file;old_label;new_label\n'
-        changelog += "\n".join([f'{i};{ic};{p}' for i, ic, p in zip(wl_items[corr], labels[corr], preds[corr])])
         labels[corr] = np.array([p for p in preds[corr]])
-        return (wl_items, labels), changelog
+        return wl_items, labels
 
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='accuracy', min_delta=0.01, patience=3)

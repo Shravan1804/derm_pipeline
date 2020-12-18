@@ -89,7 +89,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         wl_items, labels = wl_items_with_labels
         labels = [mask_utils.non_binary_mask_to_rles(self.load_image_item(pred.numpy())) for pred in preds]
         # preds size is self.args.input_size but wl_items are orig size => first item_tfms should resize the input
-        return (wl_items, np.array(labels)), ""
+        return wl_items, np.array(labels)
 
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='foreground_acc', min_delta=0.01, patience=3)
