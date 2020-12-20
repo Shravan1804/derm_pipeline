@@ -298,13 +298,13 @@ class FastaiTrainer:
         lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
         return lr_min/10
 
-    def basic_train(self, learn, run, dls, lr=None, save_model=True):
+    def basic_train(self, run, learn, dls=None, lr=None, save_model=True):
         GPUManager.sync_distributed_process()
         print("Training model:", run)
-        learn.dls = dls
+        if dls is not None: learn.dls = dls
         train_cbs = self.get_train_cbs(run)
         with GPUManager.running_context(learn, self.args.gpu_ids):
-            lr = self.auto_lr_find(learn) if lr is None else lr
+            if lr is None: lr = self.auto_lr_find(learn)
             learn.fine_tune(self.args.epochs, base_lr=lr, freeze_epochs=self.args.fepochs, cbs=train_cbs)
         if save_model: learn.save(os.path.join(self.args.exp_logdir, f'{run}{self.MODEL_SUFFIX}_lr{lr:.2e}'))
 
