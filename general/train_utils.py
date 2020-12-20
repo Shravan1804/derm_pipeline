@@ -82,11 +82,6 @@ def load_custom_pretrained_weights(model, weights_path):
     model.load_state_dict(model_state_dict)
 
 
-class CustomItemGetter(fv.ItemGetter):
-    def __init__(self, i, fn): fv.store_attr()
-    def encodes(self, x): return self.fn(x[self.i])
-
-
 def show_tensors_in_memory(gpu_only=True):
     """Prints a list of the Tensors being tracked by the garbage collector."""
     # inspired from https://forums.fast.ai/t/gpu-memory-not-being-freed-after-training-is-over/10265/7
