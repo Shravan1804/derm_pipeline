@@ -177,6 +177,7 @@ class FastaiTrainer:
 
         parser.add_argument('--model', type=str, default=pdef.get('--model', None), help="Model name")
         parser.add_argument('--bs', default=pdef.get('--bs', 6), type=int, help="Batch size per GPU device")
+        parser.add_argument('--lr', type=float, help='when None: uses auto_lr in parallel mode else .002')
         parser.add_argument('--fepochs', type=int, default=4, help='Epochs for frozen model')
         parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 26), help='Epochs for unfrozen model')
 
@@ -295,16 +296,18 @@ class FastaiTrainer:
         return learn
 
     def auto_lr_find(self, learn):
-        lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
+        # TODO: lr_find fails in DPP
+        if GPUManager.in_parallel_mode(): lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
+        else: return .002
         return lr_min/10
 
-    def basic_train(self, run, learn, dls=None, lr=None, save_model=True):
+    def basic_train(self, run, learn, dls=None, save_model=True):
         GPUManager.sync_distributed_process()
         print("Training model:", run)
         if dls is not None: learn.dls = dls
         train_cbs = self.get_train_cbs(run)
         with GPUManager.running_context(learn, self.args.gpu_ids):
-            if lr is None: lr = self.auto_lr_find(learn)
+            lr = self.auto_lr_find(learn) if self.args.lr is None else self.args.lr
             learn.fine_tune(self.args.epochs, base_lr=lr, freeze_epochs=self.args.fepochs, cbs=train_cbs)
         if save_model: learn.save(os.path.join(self.args.exp_logdir, f'{run}{self.MODEL_SUFFIX}_lr{lr:.2e}'))
 
