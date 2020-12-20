@@ -298,15 +298,15 @@ class FastaiTrainer:
         lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
         return lr_min/10
 
-    def basic_train(self, learn, run, dls):
+    def basic_train(self, learn, run, dls, lr=None, save_model=True):
         GPUManager.sync_distributed_process()
         print("Training model:", run)
         learn.dls = dls
         train_cbs = self.get_train_cbs(run)
         with GPUManager.running_context(learn, self.args.gpu_ids):
-            lr_min = self.auto_lr_find(learn)
-            learn.fine_tune(self.args.epochs, base_lr=lr_min, freeze_epochs=self.args.fepochs, cbs=train_cbs)
-        learn.save(os.path.join(self.args.exp_logdir, f'{run}{self.MODEL_SUFFIX}_lr{lr_min:.2e}'))
+            lr = self.auto_lr_find(learn) if lr is None else lr
+            learn.fine_tune(self.args.epochs, base_lr=lr, freeze_epochs=self.args.fepochs, cbs=train_cbs)
+        if save_model: learn.save(os.path.join(self.args.exp_logdir, f'{run}{self.MODEL_SUFFIX}_lr{lr:.2e}'))
 
     def evaluate_and_correct_wl(self, learn, wl_items, run):
         """Evaluate and correct weak labeled items, clears GPU memory (model and dls)"""
