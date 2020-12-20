@@ -177,7 +177,8 @@ class FastaiTrainer:
 
         parser.add_argument('--model', type=str, default=pdef.get('--model', None), help="Model name")
         parser.add_argument('--bs', default=pdef.get('--bs', 6), type=int, help="Batch size per GPU device")
-        parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 26), help='Number of epochs to run')
+        parser.add_argument('--fepochs', type=int, default=4, help='Epochs for frozen model')
+        parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 26), help='Epochs for unfrozen model')
 
         parser.add_argument('--no-norm', action='store_true', help="Do not normalizes data")
         parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
@@ -293,13 +294,19 @@ class FastaiTrainer:
         learn.model.cuda()
         return learn
 
+    def auto_lr_find(self, learn):
+        lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
+        return lr_min/10
+
     def basic_train(self, learn, run, dls):
         GPUManager.sync_distributed_process()
         print("Training model:", run)
         learn.dls = dls
+        train_cbs = self.get_train_cbs(run)
         with GPUManager.running_context(learn, self.args.gpu_ids):
-            learn.fine_tune(self.args.epochs, cbs=self.get_train_cbs(run))
-        learn.save(os.path.join(self.args.exp_logdir, f'{run}{self.MODEL_SUFFIX}'))
+            lr_min = self.auto_lr_find(learn)
+            learn.fine_tune(self.args.epochs, base_lr=lr_min, freeze_epochs=self.args.fepochs, cbs=train_cbs)
+        learn.save(os.path.join(self.args.exp_logdir, f'{run}{self.MODEL_SUFFIX}_lr{lr_min:.2e}'))
 
     def evaluate_and_correct_wl(self, learn, wl_items, run):
         """Evaluate and correct weak labeled items, clears GPU memory (model and dls)"""
@@ -350,7 +357,7 @@ class FastaiTrainer:
         models = [m for m in common.list_files(self.args.exp_logdir, full_path=True) if m.endswith(".pth")]
         _, tr, val = next(self.split_data(*self.get_train_items()[0]))
         for mpath in models:
-            run_info = os.path.splitext(os.path.basename(mpath))[0].replace(self.MODEL_SUFFIX, "")
+            run_info = os.path.basename(mpath).split(self.MODEL_SUFFIX)[0]
             learn = self.load_learner_from_run_info(run_info, tr, val, mpath)
             self.evaluate_on_test_sets(learn, run_info)
             GPUManager.clean_gpu_memory(learn.dls, learn)
