@@ -24,9 +24,14 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         parser = super(ImageSegmentationTrainer, ImageSegmentationTrainer).get_argparser(desc, pdef, phelp)
         return segm_utils.common_segm_args(parser, pdef, phelp)
 
-    def __init__(self, args):
+    @staticmethod
+    def prepare_training(args):
+        args.exp_name = "img_segm_" + args.exp_name
+        super(ImageSegmentationTrainer, ImageSegmentationTrainer).prepare_training(args)
+
+    def __init__(self, args, stratify=False, full_img_sep=CROP_SEP):
         self.NO_BG = '_no_bg'    # used to differentiate metrics ignoring background
-        super().__init__(args, stratify=False, full_img_sep=CROP_SEP)
+        super().__init__(args, stratify, full_img_sep)
 
     def load_items(self, path):
         images = np.array(common.list_files(os.path.join(path, self.args.img_dir), full_path=True, posix_path=True))
@@ -77,7 +82,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
 
     def create_dls(self, tr, val, bs, size):
         tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))
-        blocks = fv.ImageBlock, fv.MaskBlock(args.cats)
+        blocks = fv.ImageBlock, fv.MaskBlock(self.args.cats)
         return self.create_dls_from_lst(blocks, tr, val, bs, size, get_y=self.load_mask)
 
     def create_learner(self, dls):
@@ -106,8 +111,7 @@ if __name__ == '__main__':
     parser = ImageSegmentationTrainer.get_argparser(desc="Fastai image classification", pdef=defaults)
     args = parser.parse_args()
 
-    args.exp_name = "img_segm_" + args.exp_name
-
-    train_utils_img.ImageTrainer.prepare_training(args)
+    ImageSegmentationTrainer.prepare_training(args)
 
     common.time_method(main, args)
+

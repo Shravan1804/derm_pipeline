@@ -15,6 +15,16 @@ import classification.classification_utils as classif_utils
 
 
 class ImageClassificationTrainer(train_utils_img.ImageTrainer):
+    @staticmethod
+    def prepare_training(args):
+        args.exp_name = "img_classif_"+args.exp_name
+        if args.cats is None:
+            args.cats = common.list_dirs(os.path.join(args.data, args.sl_train), full_path=False)
+        super(ImageClassificationTrainer, ImageClassificationTrainer).prepare_training(args)
+
+    def __init__(self, args, stratify=True, full_img_sep=PatchExtractor.SEP):
+        super().__init__(args, stratify, full_img_sep)
+
     def load_items(self, path):
         images = common.list_files_in_dirs(path, full_path=True, posix_path=True)
         return np.array(images), np.array([classif_utils.get_image_cls(img_path) for img_path in images])
@@ -57,21 +67,17 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
 
 
 def main(args):
-    classif = ImageClassificationTrainer(args, stratify=True, full_img_sep=PatchExtractor.SEP)
+    classif = ImageClassificationTrainer(args)
     classif.train_model()
     if args.inference: classif.inference()
 
 
 if __name__ == '__main__':
     defaults = {'--bs': 6, '--model': 'resnet34', '--input-size': 256}
-    parser = train_utils_img.ImageTrainer.get_argparser(desc="Fastai image classification", pdef=defaults)
+    parser = ImageClassificationTrainer.get_argparser(desc="Fastai image classification", pdef=defaults)
     args = parser.parse_args()
 
-    args.exp_name = "img_classif_"+args.exp_name
-    if args.cats is None:
-        args.cats = common.list_dirs(os.path.join(args.data, args.sl_train), full_path=False)
-
-    train_utils_img.ImageTrainer.prepare_training(args)
+    ImageClassificationTrainer.prepare_training(args)
 
     common.time_method(main, args)
 
