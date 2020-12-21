@@ -213,16 +213,15 @@ class ImageTBCb(fc.TensorBoardBaseCallback):
         grouped, reduced = defaultdict(dict), defaultdict(dict)
         for n, v in zip(self.recorder.metric_names[2:-1], self.recorder.log[2:-1]):
             if n in self.grouped_metrics:
-                perf = n.split('_')[1]
-                if self.all_cats in n:
-                    reduced[perf][n] = v
-                else:
-                    grouped[perf][n] = v
+                perf = n.split('_')[0]
+                cat_code = n.replace(f'{perf}_', '')
+                # check if all_cat IN cat_code because there can be different variation (eg all & all_no_bg in segm)
+                if self.all_cats in cat_code: reduced[n] = v
+                else: grouped[perf][cat_code] = v
             else:
                 log_group = 'Loss' if "loss" in n else 'Metrics'
                 self.writer.add_scalar(f'{self.run_info}_{log_group}/{n}', v, self.train_iter)
         for perf, v in grouped.items():
             self.writer.add_scalars(f'{self.run_info}_Metrics/{perf}', v, self.train_iter)
-        for n, v in reduced.items():
-            self.writer.add_scalars(f'{self.run_info}_Metrics/{self.all_cats}_{n}', v, self.train_iter)
+        self.writer.add_scalars(f'{self.run_info}_Metrics/ALL', reduced, self.train_iter)
 
