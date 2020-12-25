@@ -4,6 +4,7 @@ import sys
 import pickle
 import argparse
 from pathlib import Path
+from types import SimpleNamespace
 from collections import defaultdict
 
 import numpy as np
@@ -329,7 +330,8 @@ class FastaiTrainer:
             GPUManager.sync_distributed_process()
             dl = learn.dls.test_dl(list(zip(*test_items_with_cls)), with_labels=True)
             with GPUManager.running_context(learn, self.args.gpu_ids):
-                interp = fv.Interpretation.from_learner(learn, dl=dl)
+                interp = SimpleNamespace()
+                interp.preds, interp.targs, interp.decoded = learn.get_preds(dl=dl, with_decoded=True)
                 GPUManager.clean_gpu_memory(dl)
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(self.process_test_preds(interp))
 
