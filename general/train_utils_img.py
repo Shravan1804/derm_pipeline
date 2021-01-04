@@ -104,12 +104,12 @@ class ImageTrainer(train_utils.FastaiTrainer):
         return test_sets_items
 
     def get_train_items(self):
-        sl_images = self.load_items(os.path.join(self.args.data, self.args.sl_train))
+        sl_images = [self.load_items(os.path.join(self.args.data, sl)) for sl in self.args.sl_train]
         if self.args.use_wl:
-            wl_images = self.load_items(os.path.join(self.args.data, self.args.wl_train))
+            wl_images = [self.load_items(os.path.join(self.args.data, wl)) for wl in self.args.wl_train]
         else:
-            wl_images = (np.array([]), np.array([]))
-        return sl_images, wl_images
+            wl_images = [(np.array([]), np.array([]))]
+        return tuple(map(np.concatenate, zip(*sl_images))), tuple(map(np.concatenate, zip(*wl_images)))
 
     def get_full_img_cls(self, img_path):
         if self.stratify: raise NotImplementedError

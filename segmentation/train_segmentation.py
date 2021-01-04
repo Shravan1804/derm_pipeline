@@ -35,8 +35,8 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         super().__init__(args, stratify, full_img_sep)
 
     def load_items(self, path):
-        images = np.array(common.list_files(os.path.join(path, self.args.img_dir), full_path=True, posix_path=True))
-        return images, np.array([self.get_image_mask_path(img_path) for img_path in images])
+        images = common.list_files(os.path.join(path, self.args.img_dir), full_path=True, posix_path=True)
+        return np.array(images), np.array([self.get_image_mask_path(img_path) for img_path in images])
 
     def get_image_mask_path(self, img_path):
         return segm_utils.get_mask_path(img_path, self.args.img_dir, self.args.mask_dir, self.args.mext)

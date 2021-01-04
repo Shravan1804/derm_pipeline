@@ -157,8 +157,8 @@ class FastaiTrainer:
         parser = argparse.ArgumentParser(description=desc)
         parser.add_argument('--use-wl', action='store_true', help="Data dir contains wl and sl data")
         parser.add_argument('--nrepeats', default=3, type=int, help="N repeat: wl pretrain -> sl train -> wl correct")
-        parser.add_argument('--wl-train', type=str, help="weak labels (wl) dir")
-        parser.add_argument('--sl-train', type=str, help="strong labels (sl) dir")
+        parser.add_argument('--wl-train', type=str, nargs='+', help="weak labels (wl) dirs")
+        parser.add_argument('--sl-train', type=str, nargs='+', help="strong labels (sl) dirs")
         parser.add_argument('--sl-tests', type=str, nargs='+', help="sl test dirs")
 
         parser.add_argument('--encrypted', action='store_true', help="Data is encrypted")
