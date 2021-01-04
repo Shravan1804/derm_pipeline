@@ -180,7 +180,7 @@ class FastaiTrainer:
         parser.add_argument('--bs', default=pdef.get('--bs', 6), type=int, help="Batch size per GPU device")
         parser.add_argument('--lr', type=float, help='when None: uses auto_lr in parallel mode else .002')
         parser.add_argument('--fepochs', type=int, default=4, help='Epochs for frozen model')
-        parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 26), help='Epochs for unfrozen model')
+        parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 12), help='Epochs for unfrozen model')
 
         parser.add_argument('--no-norm', action='store_true', help="Do not normalizes data")
         parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")

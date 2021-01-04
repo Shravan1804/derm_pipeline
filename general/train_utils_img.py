@@ -163,8 +163,9 @@ class ImageTrainer(train_utils.FastaiTrainer):
 
     def train_procedure(self, tr, val, fold_suffix, run_prefix="", learn=None):
         for it, run, dls in self.maybe_progressive_resizing(tr, val, fold_suffix):
+            run = f'{run_prefix}{run}'
             if it == 0 and learn is None: learn = fd.rank0_first(lambda: self.create_learner(dls))
-            self.basic_train(f'{run_prefix}{run}', learn, dls)
+            self.basic_train(run, learn, dls)
             self.evaluate_on_test_sets(learn, run)
             train_utils.GPUManager.clean_gpu_memory(learn.dls)
         return learn, run
