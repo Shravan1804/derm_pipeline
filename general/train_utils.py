@@ -333,7 +333,9 @@ class FastaiTrainer:
                 interp = SimpleNamespace()
                 interp.preds, interp.targs, interp.decoded = learn.get_preds(dl=dl, with_decoded=True)
                 GPUManager.clean_gpu_memory(dl)
-            self.test_set_results[test_name][self.get_sorting_run_key(run)].append(self.process_test_preds(interp))
+            interp = self.process_test_preds(interp)
+            del interp.preds, interp.targs, interp.decoded
+            self.test_set_results[test_name][self.get_sorting_run_key(run)].append(interp)
 
     def process_test_preds(self, interp):
         """Adds custom metrics results to interp object. Should return interp."""
