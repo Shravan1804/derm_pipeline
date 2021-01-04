@@ -196,11 +196,13 @@ class ImageTBCb(fc.TensorBoardBaseCallback):
         self.grouped_metrics = grouped_metrics
         self.all_cats = all_cats
 
+    def can_run(self):
+        return not hasattr(self.learn, 'lr_finder') and not hasattr(self, "gather_preds")\
+               and train_utils.GPUManager.is_master_process() and getattr(self, "frozen_idx", 0) == 0
+
     def before_fit(self):
-        self.run = not hasattr(self.learn, 'lr_finder') and not hasattr(self, "gather_preds") \
-                   and int(os.environ.get('RANK', 0)) == 0 and getattr(self, "frozen_idx", 0) == 0
-        if not self.run: return
-        self._setup_writer()
+        self.run = self.can_run()
+        if self.run: self._setup_writer()
 
     def after_batch(self):
         if not self.run: return
