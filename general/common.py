@@ -1,12 +1,12 @@
 import os
 import sys
 import cv2
-import time
 import datetime
 import itertools
 import contextlib
 from pathlib import Path
 import PIL.Image as PImage
+from timeit import default_timer
 from collections import defaultdict
 
 import numpy as np
@@ -236,42 +236,52 @@ def add_multi_proc_args(parser):
     parser.add_argument('--bs', type=int, help="Batch size per worker")
 
 
-def print_prepend(msg):
+@contextlib.contextmanager
+def mynullcontext(enter_result=None):     # 3.6 alternative to contextlib.nullcontext()
+    yield enter_result
+
+
+@contextlib.contextmanager
+def elapsed_timer():
+    # https://stackoverflow.com/questions/7370801/how-to-measure-elapsed-time-in-python?page=2&tab=active#tab-top
+    start = default_timer()
+    elapser = lambda: default_timer() - start
+    yield lambda: elapser()
+    end = default_timer()
+    elapser = lambda: end-start
+
+
+def time_method(m, *args, **kwargs):
+    with elapsed_timer() as elapsed:
+        m(*args, **kwargs)
+        print(f"Work completed in {datetime.timedelta(seconds=elapsed())}.")
+
+
+class PrintPrepender:
     # https://stackoverflow.com/questions/58866481/how-could-i-override-pythons-print-function-to-prepend-some-arbitrary-text-to-e
-    class PrintPrepender:
-        stdout = sys.stdout
+    stdout = sys.stdout
 
-        def __init__(self, text_to_prepend):
-            self.text_to_prepend = text_to_prepend
-            self.buffer = [self.text_to_prepend]
+    def __init__(self, text_to_prepend):
+        self.text_to_prepend = text_to_prepend
+        self.buffer = [self.text_to_prepend]
 
-        def write(self, text):
-            lines = text.splitlines(keepends=True)
-            for line in lines:
-                self.buffer.append(line)
-                self.flush()
-                if line.endswith(os.linesep):
-                    self.buffer.append(self.text_to_prepend)
+    def write(self, text):
+        lines = text.splitlines(keepends=True)
+        for line in lines:
+            self.buffer.append(line)
+            self.flush()
+            if line.endswith(os.linesep):
+                self.buffer.append(self.text_to_prepend)
 
-        def flush(self, *args):
-            self.stdout.write(''.join(self.buffer))
-            self.stdout.flush()
-            self.buffer.clear()
-
-    return PrintPrepender(msg)
+    def flush(self, *args):
+        self.stdout.write(''.join(self.buffer))
+        self.stdout.flush()
+        self.buffer.clear()
 
 
-def time_method(m, args, *d, prepend=None):
-    #### 3.6 alternative to contextlib.nullcontext()
-    from contextlib import contextmanager
-    @contextmanager
-    def nullcontext(enter_result=None):
-        yield enter_result
-    ####
-    start = time.time()
-    with nullcontext() if prepend is None else contextlib.redirect_stdout(print_prepend(prepend)):
-        m(args, *d)
-    print(f"Work completed in {datetime.timedelta(seconds=time.time() - start)}.")
+def stdout_prepend(f, pre_msg, *args):
+    with contextlib.redirect_stdout(PrintPrepender(pre_msg)):
+        f(*args)
 
 
 def plt_save_fig(path, close=True, **kwargs):

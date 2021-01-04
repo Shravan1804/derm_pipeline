@@ -198,7 +198,7 @@ class ImageTBCb(fc.TensorBoardBaseCallback):
 
     def before_fit(self):
         self.run = not hasattr(self.learn, 'lr_finder') and not hasattr(self, "gather_preds") \
-                   and int(os.environ.get('RANK', 0)) == 0
+                   and int(os.environ.get('RANK', 0)) == 0 and getattr(self, "frozen_idx", 0) == 0
         if not self.run: return
         self._setup_writer()
 
