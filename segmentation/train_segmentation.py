@@ -1,5 +1,6 @@
 import os
 import sys
+import datetime
 from pathlib import PosixPath
 from functools import partial
 
@@ -67,7 +68,10 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def process_test_preds(self, interp):
         interp = super().process_test_preds(interp)
         to_coco = partial(segm_dataset_to_coco_format, cats=self.args.cats, bg=self.args.bg)
-        cocoEval = CustomCocoEval(to_coco(interp.targs), to_coco(interp.decoded, scores=True), all_cats=self.ALL_CATS)
+        with common.elapsed_timer() as elapsed:
+            gt, dt = to_coco(interp.targs), to_coco(interp.decoded, scores=True)
+            print(f"Segmentation dataset converted in {datetime.timedelta(seconds=elapsed())}.")
+        cocoEval = CustomCocoEval(gt, dt, all_cats=self.ALL_CATS)
         cocoEval.eval_acc_and_summarize(verbose=False)
         self.coco_param_labels, stats = cocoEval.getPrecisionRecall()  # cocoeval labels is the same for all tests
         interp.metrics['cocoeval'] = torch.Tensor(stats)
