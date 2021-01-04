@@ -198,7 +198,7 @@ class ImageTBCb(fc.TensorBoardBaseCallback):
 
     def can_run(self):
         return not hasattr(self.learn, 'lr_finder') and not hasattr(self, "gather_preds")\
-               and train_utils.GPUManager.is_master_process() and getattr(self, "frozen_idx", 0) == 0
+               and train_utils.GPUManager.is_master_process()
 
     def before_fit(self):
         self.run = self.can_run()
