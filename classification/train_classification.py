@@ -18,7 +18,7 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     @staticmethod
     def prepare_training(args):
         args.exp_name = "img_classif_"+args.exp_name
-        if args.cats is None: args.cats = common.list_dirs(os.path.join(args.data, args.sl_train), full_path=False)
+        if args.cats is None: args.cats = common.list_dirs(os.path.join(args.data, args.sl_train[0]), full_path=False)
         super(ImageClassificationTrainer, ImageClassificationTrainer).prepare_training(args)
 
     def __init__(self, args, stratify=True, full_img_sep=PatchExtractor.SEP):
