@@ -62,6 +62,7 @@ if __name__ == '__main__':
     parser.add_argument('--rand-margins', action='store_true', help="Grow crops margins randomly")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
     parser.add_argument('--splitted', action='store_true', help="args.data contains multiple datasets")
+    parser.add_argument('--ignore', nargs='+', type=str, help="dirs to be ignored in cropping (e.g. weak labels)")
     args = parser.parse_args()
 
     common.check_dir_valid(args.data)
@@ -72,6 +73,7 @@ if __name__ == '__main__':
     args.threshs = sorted(args.threshs)
 
     all_dirs = common.list_dirs(args.data, full_path=True) if args.splitted else [args.data]
+    all_dirs = [d for d in all_dirs if d not in args.ignore]
     if args.dest is None:
         args.dest = common.maybe_create(f'{args.data}_cropped_{"_".join(map(str, args.threshs))}')
     for d in all_dirs:
