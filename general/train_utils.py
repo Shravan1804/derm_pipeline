@@ -296,14 +296,14 @@ class FastaiTrainer:
         return learn
 
     def auto_lr_find(self, learn):
-        # TODO: lr_find fails in DPP
         if GPUManager.in_distributed_mode():
             def fixed_lr_find(self):
                 self.learn.opt.zero_grad()  # Need to zero the gradients of the model before detaching the optimizer for future fits
                 tmp_f = self.path / self.model_dir / '_tmp.pth'
                 if tmp_f.exists():
                     self.learn.load('_tmp', with_opt=True)
-                    if GPUManager.is_master_process() and tmp_f.exists(): os.remove(tmp_f)
+                    GPUManager.sync_distributed_process()
+                    if GPUManager.is_master_process(): os.remove(tmp_f)
             fv.LRFinder.after_fit = fixed_lr_find
         lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
         return lr_min/10
