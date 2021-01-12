@@ -331,8 +331,8 @@ class FastaiTrainer:
 
     def evaluate_on_test_sets(self, learn, run):
         """Evaluate test sets, clears GPU memory held by test dl(s)"""
-        print("Testing model:", run)
         for test_name, test_items_with_cls in self.get_test_sets_items():
+            print("Testing model", run, "on", test_name)
             GPUManager.sync_distributed_process()
             dl = learn.dls.test_dl(list(zip(*test_items_with_cls)), with_labels=True)
             with GPUManager.running_context(learn, self.args.gpu_ids):
