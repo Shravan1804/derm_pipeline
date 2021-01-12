@@ -14,6 +14,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.pat
 from general import common, concurrency
 
 
+def add_encrypted_args(parser):
+    parser.add_argument('--encrypted', action='store_true', help="Data is encrypted")
+    parser.add_argument('--ckey', type=str, help="Data encryption key")
+
+
 def decrypt_img(img_path, fkey):
     return np.array(PIL.Image.open(io.BytesIO(decrypt(img_path, fkey))))
     # CV2 version, hangs in distributed mode

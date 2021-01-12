@@ -8,6 +8,12 @@ import queue
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common
 
+
+def add_multi_proc_args(parser):
+    parser.add_argument('--workers', type=int, default=8, help="Number of workers to use")
+    parser.add_argument('--bs', type=int, help="Batch size per worker")
+
+
 def batch_lst(files, bs=None, workers=None):
     workers = min(mp.cpu_count() - 2, len(files)) if workers is None else workers
     bs = math.ceil(len(files) / workers) if bs is None else bs

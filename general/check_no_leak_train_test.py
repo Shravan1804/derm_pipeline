@@ -1,9 +1,11 @@
 import os
+import sys
 import argparse
 import multiprocessing as mp
 
-import common
-import concurrency
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
+from general import common, concurrency
+from segmentation.segmentation_utils import common_segm_args
 
 
 def get_image_name(args, path):
@@ -17,7 +19,7 @@ def get_files_to_search(args):
     if args.classif:
         dir1_files = common.list_files(args.dir1, full_path=True, recursion=True)
         dir2_files = common.list_files(args.dir2, full_path=True, recursion=True)
-    elif args.obj_detec:
+    elif args.segm:
         dir1_files = common.list_files(os.path.join(args.dir1, args.img_dir))
         dir2_files = common.list_files(os.path.join(args.dir2, args.img_dir))
     else:
@@ -71,11 +73,12 @@ if __name__ == '__main__':
     parser.add_argument('--dir1', type=str, required=True, help="first directory (e.g. train dir)")
     parser.add_argument('--dir2', type=str, required=True, help="second directory (e.g. test dir)")
     parser.add_argument('--classif', action='store_true', help="expect class subdirs in provided dirs")
+    parser.add_argument('--segm', action='store_true', help="if dataset is segm dataset")
+    common_segm_args(parser)
     parser.add_argument('--crops', action='store_true', help="dir contains imgs_crops => checks if same orig img")
     parser.add_argument('--patch', action='store_true', help="dir contains patches => checks if same img in both dirs")
     parser.add_argument('--patch-sep', type=str, default='__SEP__', help="patch name separator")
     parser.add_argument('--verbose', action='store_true', help="show occurrences")
-    common.add_obj_detec_args(parser)
     args = parser.parse_args()
 
     common.check_dir_valid(args.dir1)

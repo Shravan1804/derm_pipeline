@@ -225,17 +225,6 @@ def check_dir_valid(dirpath):
     assert os.path.exists(dirpath) and os.path.isdir(dirpath), f"Provided dir {dirpath} invalid."
 
 
-def add_obj_detec_args(parser):
-    parser.add_argument('--obj-detec', action='store_true', help="if dataset is obj detec dataset")
-    parser.add_argument('--img-dir', type=str, default='images', help="dir containing images if --obj-detec")
-    parser.add_argument('--mext', type=str, default='.png', help="masks file extension")
-
-
-def add_multi_proc_args(parser):
-    parser.add_argument('--workers', type=int, help="Number of workers to use")
-    parser.add_argument('--bs', type=int, help="Batch size per worker")
-
-
 @contextlib.contextmanager
 def mynullcontext(enter_result=None):     # 3.6 alternative to contextlib.nullcontext()
     yield enter_result
