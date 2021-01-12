@@ -22,13 +22,15 @@ def get_all_files(args):
 
 
 def try_open_files(proc_id, files, args):
-    if args.verbose: print(f'Proc {proc_id} started processing {len(files)} files.')
-    for f in files:
+    n = len(files)
+    if args.verbose: print(f'Proc {proc_id} started processing {n} files.')
+    for i, f in enumerate(files):
         try:
             im = crypto.decrypt_img(f, args.ckey) if args.encrypted else PIL.Image.open(f)
         except Exception as err:
             print(f'Proc {proc_id} encountered an error with file {f}, skipped')
-    if args.verbose: print(f'Proc {proc_id} completed processing {len(files)} files.')
+        if args.verbose and i == n//2: print(f'Proc {proc_id} processed {i}/{n} files.')
+    if args.verbose: print(f'Proc {proc_id} completed processing {n} files.')
 
 
 def main(args):
