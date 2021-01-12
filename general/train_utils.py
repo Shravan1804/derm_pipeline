@@ -277,8 +277,7 @@ class FastaiTrainer:
             splitter = no_cv_splitter(n_splits=1, test_size=self.args.valid_size, random_state=self.args.seed)
 
         for fold, (train_idx, valid_idx) in enumerate(splitter.split(items, items_cls)):
-            if self.args.cross_val:
-                print(f"Data fold {fold + 1}/{self.args.nfolds}")
+            if self.args.cross_val and not self.args.inference: print(f"Data fold {fold + 1}/{self.args.nfolds}")
             yield fold, (items[train_idx], items_cls[train_idx]), (items[valid_idx], items_cls[valid_idx])
 
     def get_train_cbs(self, run):
