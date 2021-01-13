@@ -1,6 +1,7 @@
 import os
 import sys
 import argparse
+from functools import partial
 import multiprocessing as mp
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
@@ -38,8 +39,8 @@ def get_files_to_search(args):
     return terms, search_in
 
 
-def search_terms(proc_id, terms, search_in, verbose):
-    if verbose:
+def search_terms(proc_id, terms, search_in, args):
+    if args.verbose:
         print(f'Proc {proc_id} searching for {len(terms)} terms in a list of {len(search_in)} items.')
     count = 0
     duplicates = {}
@@ -47,11 +48,11 @@ def search_terms(proc_id, terms, search_in, verbose):
         for s, ss in search_in:
             if t == s:
                 duplicates[t] = duplicates.get(t, []) + [(tt, ss)]
-        if verbose and count > 0 and count % 5000 == 0:
+        if args.verbose and count > 0 and count % 5000 == 0:
             print(f'Proc {proc_id} completed {count}/{len(terms)} lookups ({len(terms)-count} remaining).')
         count += 1
     print(f'Proc {proc_id} found {len(duplicates.keys())} duplicates: {duplicates.keys()}')
-    if verbose:
+    if args.verbose:
         for k, v in duplicates.items():
             print(f"{k} has {len(v)} occurrences: {v}")
 
@@ -59,12 +60,7 @@ def search_terms(proc_id, terms, search_in, verbose):
 def main(args):
     terms, search_in = get_files_to_search(args)
     workers, batch_size, batched_dirs = concurrency.batch_lst(terms)
-    jobs = []
-    for i, batch in zip(range(workers), batched_dirs):
-        jobs.append(mp.Process(target=search_terms, args=(i, batch, search_in, args.verbose)))
-        jobs[i].start()
-    for j in jobs:
-        j.join()
+    concurrency.multi_process_fn(workers, batched_dirs, partial(search_terms, search_in=search_in, args=args))
     print("done")
 
 

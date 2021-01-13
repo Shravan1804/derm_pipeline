@@ -1,6 +1,7 @@
 import os
 import sys
 import argparse
+from functools import partial
 import multiprocessing as mp
 
 import PIL
@@ -37,12 +38,7 @@ def main(args):
     print("Checking data integrity of", args.data)
     files = get_all_files(args)
     workers, batch_size, batched_files = concurrency.batch_lst(files, bs=args.bs, workers=args.workers)
-    jobs = []
-    for i, batch in zip(range(workers), batched_files):
-        jobs.append(mp.Process(target=try_open_files, args=(i, batch, args)))
-        jobs[i].start()
-    for j in jobs:
-        j.join()
+    concurrency.multi_process_fn(workers, batched_files, partial(try_open_files, args=args))
     print("done")
 
 

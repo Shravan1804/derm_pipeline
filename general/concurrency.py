@@ -15,8 +15,9 @@ def add_multi_proc_args(parser):
 
 
 def batch_lst(files, bs=None, workers=None):
-    workers = min(mp.cpu_count() - 2, len(files)) if workers is None else workers
-    bs = math.ceil(len(files) / workers) if bs is None else bs
+    n = len(files)
+    if workers is None: workers = min(mp.cpu_count() - 2, n)
+    if bs is None or bs * workers < n: bs = math.ceil(n / workers)
     return workers, bs, common.batch_list(files, bs)
 
 
@@ -35,3 +36,13 @@ def unload_mpqueue(pmq, processes):
             continue
         liveprocs = [p for p in liveprocs if p.is_alive()]
     return pms
+
+
+def multi_process_fn(workers, batches, fn):
+    jobs = []
+    for i, batch in zip(range(workers), batches):
+        jobs.append(mp.Process(target=fn, args=(i, batch)))
+        jobs[i].start()
+    for j in jobs:
+        j.join()
+
