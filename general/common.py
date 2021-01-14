@@ -295,14 +295,16 @@ def load_rgb_img(path):
     return img_bgr_to_rgb(cv2.imread(path, cv2.IMREAD_UNCHANGED))
 
 
-def prepare_img_axs(h_w_ratio, nrows, ncols, figsize_fact=8, no_axis=True, flatten=True):
+def prepare_img_axs(h_w_ratio, nrows, ncols, figsize_fact=8, no_axis=True, flatten=True, title=None):
     base_figsize = (ncols*figsize_fact, nrows*figsize_fact*h_w_ratio)
+    plt.rcParams['font.size'] = base_figsize[0] * .8
     fig, axs = plt.subplots(nrows, ncols, figsize=base_figsize)
     nd = nrows > 1 or ncols > 1
     if no_axis:
         for ax in axs.flatten() if nd else [axs]:
             ax.axis('off')
     if nd and flatten: axs = axs.flatten()
+    if title is not None: fig.suptitle(title, fontsize=base_figsize[0] * 1.4)
     return fig, axs
 
 
