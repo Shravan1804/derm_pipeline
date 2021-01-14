@@ -120,6 +120,7 @@ class CustomCocoEval(COCOeval):
         pre_rec, pre_rec_err = eval_stats_with_err
         pre_rec_labels, ious, cats, areaRngLbl, maxDetsLbl = eval_stats_labels
 
+        all_labels = cats, *(areaRngLbl, maxDetsLbl) * len(cats)
         A = slice(None)
         # idx_slices are ([:, :, :, 0, -1], [:, :, 0, :, -1], [:, :, 0, 0, :])
         # idx_slices = (A, A, A, 0, -1), (A, A, 0, A, -1), (A, A, 0, 0, A)
@@ -132,7 +133,7 @@ class CustomCocoEval(COCOeval):
         idx_slice_titles = (i for ii in ((f'{c} cat & maxDets', f'{c} cat & all sizes') for c in cats) for i in ii)
         idx_slice_titles = "all sizes & maxDets", *idx_slice_titles
 
-        for labels, idxs, code, title in zip(eval_stats_labels[2:], idx_slices, idx_slices_codes, idx_slice_titles):
+        for labels, idxs, code, title in zip(all_labels, idx_slices, idx_slices_codes, idx_slice_titles):
             fig, axs = plt.subplots(1, 2, figsize=figsize)
             xiou = ious[None].repeat(labels.size, axis=0)
             for ax, vname, values, err in zip(axs, pre_rec_labels, pre_rec[idxs], pre_rec_err[idxs]):
