@@ -120,11 +120,17 @@ class CustomCocoEval(COCOeval):
         pre_rec, pre_rec_err = eval_stats_with_err
         pre_rec_labels, ious, cats, areaRngLbl, maxDetsLbl = eval_stats_labels
 
-        base = slice(None), slice(None)
+        A = slice(None)
         # idx_slices are ([:, :, :, 0, -1], [:, :, 0, :, -1], [:, :, 0, 0, :])
-        idx_slices = ((*base, slice(None), 0, -1), (*base, 0, slice(None), -1), (*base, 0, 0, slice(None)))
-        idx_slices_codes = "cats", "areaRng", "maxDets"
-        idx_slice_titles = "all sizes and maxDets", "all cats and maxDets", "all cats and sizes"
+        # idx_slices = (A, A, A, 0, -1), (A, A, 0, A, -1), (A, A, 0, 0, A)
+        idx_slices = (i for ii in (((A, A, ci, A, -1), (A, A, ci, 0, A)) for ci in range(len(cats))) for i in ii)
+        idx_slices = (A, A, A, 0, -1), *idx_slices
+        # idx_slices_codes = "cats", "areaRng", "maxDets"
+        idx_slices_codes = (i for ii in ((f'areaRng_{c}', f'maxDets_{c}') for c in cats) for i in ii)
+        idx_slices_codes = "cats", *idx_slices_codes
+        # idx_slice_titles = "all sizes and maxDets", "all cats and maxDets", "all cats and sizes"
+        idx_slice_titles = (i for ii in ((f'{c} cat & maxDets', f'{c} cat & all sizes') for c in cats) for i in ii)
+        idx_slice_titles = "all sizes & maxDets", *idx_slice_titles
 
         for labels, idxs, code, title in zip(eval_stats_labels[2:], idx_slices, idx_slices_codes, idx_slice_titles):
             fig, axs = plt.subplots(1, 2, figsize=figsize)
