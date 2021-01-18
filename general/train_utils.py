@@ -313,7 +313,8 @@ class FastaiTrainer:
         if dls is not None: learn.dls = dls
         train_cbs = self.get_train_cbs(run)
         with GPUManager.running_context(learn, self.args.gpu_ids):
-            lr = self.auto_lr_find(learn) if self.args.lr is None else self.args.lr
+            #lr = self.auto_lr_find(learn) if self.args.lr is None else self.args.lr
+            lr = .002 if self.args.lr is None else self.args.lr
             learn.fine_tune(self.args.epochs, base_lr=lr, freeze_epochs=self.args.fepochs, cbs=train_cbs)
         if save_model: learn.save(os.path.join(self.args.exp_logdir, f'{run}{self.MODEL_SUFFIX}_lr{lr:.2e}'))
 
