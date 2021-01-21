@@ -18,6 +18,27 @@ def rles_to_non_binary_mask(rles):
     return sum([k*pycoco_mask.decode(rle) for k, rle in rles])
 
 
+def rm_small_objs_from_non_bin_mask(non_binary_mask, min_size, cats_with_bg, bg=0):
+    res = np.zeros(non_binary_mask.shape, dtype=np.uint8)
+    for c, _ in enumerate(cats_with_bg):
+        if c == bg: continue  # background
+        binary_mask = rm_small_objs_from_bin_mask(non_binary_mask == c, min_size)
+        res[binary_mask > 0] = c
+    return res
+
+
+def rm_small_objs_from_bin_mask(binary_mask, min_size):
+    nb_obj, obj_labels = cv2.connectedComponents(binary_mask.astype(np.uint8))
+    if nb_obj < 2: return binary_mask  # only background
+    obj_ids, inverse, sizes = np.unique(obj_labels, return_inverse=True, return_counts=True)
+    for i, size in enumerate(sizes):
+        if size < min_size: obj_ids[i] = 0  # set this component to background
+
+    mask_cleaned = np.reshape(obj_ids[inverse], binary_mask.shape)
+    mask_cleaned[mask_cleaned > 0] = 1
+    return mask_cleaned.astype(np.uint8)
+
+
 def crop_im(im, bbox):
     wmin, hmin, wmax, hmax = bbox
     return im[hmin:hmax+1, wmin:wmax+1]

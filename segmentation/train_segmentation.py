@@ -22,6 +22,8 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     @staticmethod
     def get_argparser(desc="Fastai segmentation image trainer arguments", pdef=dict(), phelp=dict()):
         # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
+        parser.add_argument('--rm-small-objs', action='store_true', help="Remove objs smaller than --min-size")
+        parser.add_argument('--min-size', default=60, type=int, help="Objs below this size will be discarded")
         parser = super(ImageSegmentationTrainer, ImageSegmentationTrainer).get_argparser(desc, pdef, phelp)
         return segm_utils.common_segm_args(parser, pdef, phelp)
 
@@ -43,7 +45,11 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
 
     def load_mask(self, item):
         is_path = type(item) in (str, PosixPath)
-        return self.load_image_item(item) if is_path else mask_utils.rles_to_non_binary_mask(item)
+        mask = self.load_image_item(item) if is_path else mask_utils.rles_to_non_binary_mask(item)
+        if self.args.rm_small_objs:
+            mask = mask_utils.rm_small_objs_from_non_bin_mask(mask, self.args.min_size, self.args.cats, self.args.bg)
+        return mask
+
 
     def get_cat_metric_name(self, perf_fn, cat, bg=None):
         return f'{super().get_cat_metric_name(perf_fn, cat)}{"" if bg is None else self.NO_BG}'
