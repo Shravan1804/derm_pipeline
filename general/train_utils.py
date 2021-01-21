@@ -312,7 +312,7 @@ class FastaiTrainer:
         GPUManager.sync_distributed_process()
         print("Training model:", run)
         if dls is not None: learn.dls = dls
-        lr = fd.rank0_first(lambda: self.auto_lr_find(learn, run)) if self.args.lr is None else self.args.lr
+        lr = self.auto_lr_find(learn, run) if self.args.lr is None else self.args.lr
         #lr = .002 if self.args.lr is None else self.args.lr
         train_cbs = self.get_train_cbs(run)
         with GPUManager.running_context(learn, self.args.gpu_ids):
