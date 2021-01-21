@@ -295,20 +295,26 @@ class FastaiTrainer:
         return learn
 
     def auto_lr_find(self, learn, run):
-        if GPUManager.is_master_process():
+        if GPUManager.in_distributed_mode():
+            def fixed_lr_find(self):
+                self.learn.opt.zero_grad()  # Need to zero the gradients of the model before detaching the optimizer for future fits
+                tmp_f = self.path / self.model_dir / '_tmp.pth'
+                if tmp_f.exists():
+                    self.learn.load('_tmp', with_opt=True)
+                    if GPUManager.is_master_process(): os.remove(tmp_f)
+            fv.LRFinder.after_fit = fixed_lr_find
+        with GPUManager.running_context(learn, self.args.gpu_ids):
             lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
-            with open(os.path.join(self.args.exp_logdir, f'{run}_auto_lr.p'), 'wb') as f: pickle.dump(lr_min, f)
-        else:
-            with open(os.path.join(self.args.exp_logdir, f'{run}_auto_lr.p'), 'rb') as f: lr_min = pickle.load(f)
-        return lr_min / 10
+        GPUManager.sync_distributed_process()
+        return lr_min/10
 
     def basic_train(self, run, learn, dls=None, save_model=True):
         GPUManager.sync_distributed_process()
         print("Training model:", run)
         if dls is not None: learn.dls = dls
-        train_cbs = self.get_train_cbs(run)
         lr = fd.rank0_first(lambda: self.auto_lr_find(learn, run)) if self.args.lr is None else self.args.lr
         #lr = .002 if self.args.lr is None else self.args.lr
+        train_cbs = self.get_train_cbs(run)
         with GPUManager.running_context(learn, self.args.gpu_ids):
             learn.fine_tune(self.args.epochs, base_lr=lr, freeze_epochs=self.args.fepochs, cbs=train_cbs)
         if save_model: learn.save(os.path.join(self.args.exp_logdir, f'{run}{self.MODEL_SUFFIX}_lr{lr:.2e}'))
