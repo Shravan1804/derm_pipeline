@@ -294,18 +294,12 @@ class FastaiTrainer:
         learn.model.cuda()
         return learn
 
-    def auto_lr_find(self, learn):
-        if GPUManager.in_distributed_mode():
-            def fixed_lr_find(self):
-                self.learn.opt.zero_grad()  # Need to zero the gradients of the model before detaching the optimizer for future fits
-                tmp_f = self.path / self.model_dir / '_tmp.pth'
-                if tmp_f.exists():
-                    self.learn.load('_tmp', with_opt=True)
-                    if GPUManager.is_master_process(): os.remove(tmp_f)
-                GPUManager.sync_distributed_process()
-            fv.LRFinder.after_fit = fixed_lr_find
-        lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
-        return lr_min/10
+    def auto_lr_find(self, learn, run):
+        if GPUManager.is_master_process():
+            lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
+            with open(os.path.join(self.args.exp_logdir, f'{run}_auto_lr.p'), 'wb') as f: pickle.dump(lr_min, f)
+        else: lr_min = with open(os.path.join(self.args.exp_logdir, f'{run}_auto_lr.p'), 'rb') as f: pickle.load(f)
+        return lr_min / 10
 
     def basic_train(self, run, learn, dls=None, save_model=True):
         GPUManager.sync_distributed_process()
@@ -313,7 +307,7 @@ class FastaiTrainer:
         if dls is not None: learn.dls = dls
         train_cbs = self.get_train_cbs(run)
         with GPUManager.running_context(learn, self.args.gpu_ids):
-            lr = self.auto_lr_find(learn) if self.args.lr is None else self.args.lr
+            lr = fd.rank0_first(lambda: self.auto_lr_find(learn, run)) if self.args.lr is None else self.args.lr
             #lr = .002 if self.args.lr is None else self.args.lr
             learn.fine_tune(self.args.epochs, base_lr=lr, freeze_epochs=self.args.fepochs, cbs=train_cbs)
         if save_model: learn.save(os.path.join(self.args.exp_logdir, f'{run}{self.MODEL_SUFFIX}_lr{lr:.2e}'))
@@ -360,8 +354,7 @@ class FastaiTrainer:
             for run, folds_results in self.test_set_results[test_name].items():
                 agg = self.aggregate_test_performance(folds_results)
                 self.plot_test_performance(test_path, run, agg)
-                with open(os.path.join(test_path, f'{run}_test_results.p'), 'wb') as f:
-                    pickle.dump(agg, f)
+                with open(os.path.join(test_path, f'{run}_test_results.p'), 'wb') as f: pickle.dump(agg, f)
 
     def inference(self):
         if not self.args.inference:
