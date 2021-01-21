@@ -298,7 +298,8 @@ class FastaiTrainer:
         if GPUManager.is_master_process():
             lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
             with open(os.path.join(self.args.exp_logdir, f'{run}_auto_lr.p'), 'wb') as f: pickle.dump(lr_min, f)
-        else: lr_min = with open(os.path.join(self.args.exp_logdir, f'{run}_auto_lr.p'), 'rb') as f: pickle.load(f)
+        else:
+            with open(os.path.join(self.args.exp_logdir, f'{run}_auto_lr.p'), 'rb') as f: lr_min = pickle.load(f)
         return lr_min / 10
 
     def basic_train(self, run, learn, dls=None, save_model=True):
