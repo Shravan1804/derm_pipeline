@@ -59,15 +59,17 @@ class CustomCocoEval(COCOeval):
         self.params.areaRng = self.computeAreaRng()
         self.params.maxDetsLbl, self.params.maxDets = self.computeMaxDets()
 
-    def getPrecisionRecall(self):
+    def get_precision_recall_with_labels(self):
         """Returns eval labels and results, each of shape (2, nbIoUs, nbCats, nbAreasRngs, nbMaxDets)"""
         p = self.params
         labels = tuple(map(np.array, (("Precision", "Recall"), p.iouThrs, self.cats, p.areaRngLbl, p.maxDetsLbl)))
+        lab_vals = tuple(map(np.array, (p.areaRng, p.maxDets)))
+        labels, lab_vals = np.array(labels, dtype=np.object), np.array(lab_vals, dtype=np.object)
         # average precision over all recall thresholds
         pre, rec = self.eval['precision'].mean(axis=1), self.eval['recall']
         pre_w_all_cats = np.concatenate((pre.mean(axis=1, keepdims=True), pre), axis=1)
         rec_w_all_cats = np.concatenate((rec.mean(axis=1, keepdims=True), rec), axis=1)
-        return np.array(labels, dtype=np.object), np.stack((pre_w_all_cats, rec_w_all_cats))
+        return labels, lab_vals, np.stack((pre_w_all_cats, rec_w_all_cats))
 
     def eval_acc_and_summarize(self, verbose=True):
         self.evaluate()

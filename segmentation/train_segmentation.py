@@ -1,7 +1,6 @@
 import os
 import sys
 import datetime
-from pathlib import PosixPath
 from functools import partial
 
 import numpy as np
@@ -22,9 +21,9 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     @staticmethod
     def get_argparser(desc="Fastai segmentation image trainer arguments", pdef=dict(), phelp=dict()):
         # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
+        parser = super(ImageSegmentationTrainer, ImageSegmentationTrainer).get_argparser(desc, pdef, phelp)
         parser.add_argument('--rm-small-objs', action='store_true', help="Remove objs smaller than --min-size")
         parser.add_argument('--min-size', default=60, type=int, help="Objs below this size will be discarded")
-        parser = super(ImageSegmentationTrainer, ImageSegmentationTrainer).get_argparser(desc, pdef, phelp)
         return segm_utils.common_segm_args(parser, pdef, phelp)
 
     @staticmethod
@@ -44,9 +43,10 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         return segm_utils.get_mask_path(img_path, self.args.img_dir, self.args.mask_dir, self.args.mext)
 
     def load_mask(self, item):
-        is_path = type(item) in (str, PosixPath)
+        is_path = common.is_path(item)
         mask = self.load_image_item(item) if is_path else mask_utils.rles_to_non_binary_mask(item)
         if self.args.rm_small_objs:
+            if common.is_path(mask): mask = mask_utils.load_mask_array(mask)
             mask = mask_utils.rm_small_objs_from_non_bin_mask(mask, self.args.min_size, self.args.cats, self.args.bg)
         return mask
 
@@ -79,8 +79,9 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
             print(f"Segmentation dataset converted in {datetime.timedelta(seconds=elapsed())}.")
         cocoEval = CustomCocoEval(gt, dt, all_cats=self.ALL_CATS)
         cocoEval.eval_acc_and_summarize(verbose=False)
-        self.coco_param_labels, stats = cocoEval.getPrecisionRecall()  # cocoeval labels is the same for all tests
+        self.coco_param_labels, param_labels_vals, stats = cocoEval.get_precision_recall_with_labels()
         interp.metrics['cocoeval'] = torch.Tensor(stats)
+        interp.metrics['cocoeval_label_vals'] = torch.Tensor(param_labels_vals)
         return interp
 
     def plot_test_performance(self, test_path, run, agg_perf):

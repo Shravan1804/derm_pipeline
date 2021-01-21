@@ -4,7 +4,7 @@ import cv2
 import datetime
 import itertools
 import contextlib
-from pathlib import Path
+from pathlib import Path, PosixPath
 import PIL.Image as PImage
 from timeit import default_timer
 from collections import defaultdict
@@ -107,6 +107,10 @@ def recursive_default_dict():
 def flatten(lst):
     """Flattens lst of lsts"""
     return [elem for sublst in lst for elem in sublst]
+
+
+def is_path(item):
+    return type(item) in (str, PosixPath, Path)
 
 
 def merge(lst, cond_fn, merge_fn):
