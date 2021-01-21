@@ -79,9 +79,10 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
             print(f"Segmentation dataset converted in {datetime.timedelta(seconds=elapsed())}.")
         cocoEval = CustomCocoEval(gt, dt, all_cats=self.ALL_CATS)
         cocoEval.eval_acc_and_summarize(verbose=False)
-        self.coco_param_labels, param_labels_vals, stats = cocoEval.get_precision_recall_with_labels()
+        self.coco_param_labels, areaRng, maxDets, stats = cocoEval.get_precision_recall_with_labels()
         interp.metrics['cocoeval'] = torch.Tensor(stats)
-        interp.metrics['cocoeval_label_vals'] = torch.Tensor(param_labels_vals)
+        interp.metrics['cocoeval_areaRng'] = torch.Tensor(areaRng)
+        interp.metrics['cocoeval_maxDets'] = torch.Tensor(maxDets)
         return interp
 
     def plot_test_performance(self, test_path, run, agg_perf):
