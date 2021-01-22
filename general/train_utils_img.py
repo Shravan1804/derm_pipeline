@@ -134,7 +134,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
     def load_image_item(self, item):
         if type(item) is np.ndarray: return item
         elif self.args.encrypted: return crypto.decrypt_img(item, self.args.ckey)
-        else: item
+        else: return item
 
     def create_dls_from_lst(self, blocks, tr, val, bs, size, get_x=None, get_y=None):
         tfms = fv.aug_transforms(size=size)
