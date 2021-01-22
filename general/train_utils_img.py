@@ -147,6 +147,9 @@ class ImageTrainer(train_utils.FastaiTrainer):
                          splitter=fv.IndexSplitter(list(range(len(val[0])))),
                          item_tfms=fv.Resize(self.args.input_size),
                          batch_tfms=tfms)
+        if self.args.debug_dls:
+            if train_utils.GPUManager.is_master_process(): d.summary(self.args.data, bs=bs)
+            sys.exit()
         # set path args so that learner objects use it
         return d.dataloaders(self.args.data, path=self.args.exp_logdir, bs=bs, seed=self.args.seed)
 

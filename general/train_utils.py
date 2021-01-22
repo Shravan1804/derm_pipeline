@@ -191,6 +191,7 @@ class FastaiTrainer:
         parser.add_argument("--num-machines", type=int, default=1, help="number of machines")
 
         parser.add_argument('--seed', type=int, default=pdef.get('--seed', 42), help="Random seed")
+        parser.add_argument('--debug-dls', action='store_true', help="Summarize dls then exits")
 
         return parser
 
