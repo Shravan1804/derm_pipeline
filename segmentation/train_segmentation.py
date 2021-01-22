@@ -43,13 +43,13 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         return segm_utils.get_mask_path(img_path, self.args.img_dir, self.args.mask_dir, self.args.mext)
 
     def load_mask(self, item):
-        is_path = common.is_path(item)
-        mask = self.load_image_item(item) if is_path else mask_utils.rles_to_non_binary_mask(item)
+        if type(item) is np.ndarray: mask = item
+        elif common.is_path(item): mask = self.load_image_item(item)
+        else: mask = mask_utils.rles_to_non_binary_mask(item)
         if self.args.rm_small_objs:
             if common.is_path(mask): mask = mask_utils.load_mask_array(mask)
             mask = mask_utils.rm_small_objs_from_non_bin_mask(mask, self.args.min_size, self.args.cats, self.args.bg)
         return mask
-
 
     def get_cat_metric_name(self, perf_fn, cat, bg=None):
         return f'{super().get_cat_metric_name(perf_fn, cat)}{"" if bg is None else self.NO_BG}'

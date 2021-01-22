@@ -131,8 +131,10 @@ class ImageTrainer(train_utils.FastaiTrainer):
             val = tuple(np.array(lst) for lst in zip(*[img for fik in zip(*val) for img in fi_dict[fik]]))
             yield fold, tr, val
 
-    def load_image_item(self, path):
-        return crypto.decrypt_img(path, self.args.ckey) if self.args.encrypted else path
+    def load_image_item(self, item):
+        if type(item) is np.ndarray: return item
+        elif self.args.encrypted: return crypto.decrypt_img(item, self.args.ckey)
+        else: item
 
     def create_dls_from_lst(self, blocks, tr, val, bs, size, get_x=None, get_y=None):
         tfms = fv.aug_transforms(size=size)
