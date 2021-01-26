@@ -259,6 +259,15 @@ class PatchExtractor:
         randomly_sampled = PatchExtractor.RAND in results.group('sep')
         return PatchExtractor.create_pm(img_path, ps, oh, ow, h, w, randomly_sampled, patch_name)
 
+    @staticmethod
+    def rebuild_im_from_patches(pms, patches, full_shape=None):
+        if full_shape is None: full_shape = cv2.imread(pms[0]['full_img'], cv2.IMREAD_UNCHANGED).shape
+        im = np.zeros(full_shape)
+        for pm, patch in zip(pms, patches):
+            h, w, ps = pm['h'], pm['w'], pm['ps']
+            im[h:h + ps, w:w + ps] = patch
+        return im
+
 
 def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest):
     pms = []
