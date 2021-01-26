@@ -301,7 +301,7 @@ def load_rgb_img(path):
 
 def prepare_img_axs(h_w_ratio, nrows, ncols, figsize_fact=8, no_axis=True, flatten=True, title=None):
     base_figsize = (ncols*figsize_fact, nrows*figsize_fact*h_w_ratio)
-    plt.rcParams['font.size'] = base_figsize[0] * .8
+    plt.rcParams['font.size'] = max(base_figsize) * .8
     fig, axs = plt.subplots(nrows, ncols, figsize=base_figsize)
     nd = nrows > 1 or ncols > 1
     if no_axis:
