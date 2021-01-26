@@ -1,6 +1,5 @@
 import os
 import sys
-from pathlib import Path
 
 import cv2
 
@@ -37,6 +36,7 @@ def load_img_and_mask(img_path, mask_path):
 
 def cls_perf(perf, inp, targ, cls_idx, cats, bg=None, axis=1):
     """If bg sets then computes perf without background"""
+    targ = targ.as_subclass(torch.Tensor)
     if cls_idx is not None:
         if cls_idx == bg: return torch.tensor(0).float()
         if axis is not None: inp = inp.argmax(dim=axis)
