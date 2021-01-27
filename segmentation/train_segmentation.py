@@ -10,7 +10,8 @@ import fastai.vision.all as fv
 from fastai.callback.tracker import EarlyStoppingCallback
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import common, train_utils, train_utils_img
+from general import common
+from training import train_utils, train_utils_img
 import segmentation.mask_utils as mask_utils
 import segmentation.segmentation_utils as segm_utils
 from segmentation.crop_to_thresh import SEP as CROP_SEP

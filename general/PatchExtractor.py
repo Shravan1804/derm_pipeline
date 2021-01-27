@@ -265,6 +265,8 @@ class PatchExtractor:
         im = np.zeros(full_shape)
         for pm, patch in zip(pms, patches):
             h, w, ps = pm['h'], pm['w'], pm['ps']
+            pdim = ps, ps
+            if patch.shape[:2] != pdim: patch = cv2.resize(np.array(patch), pdim, interpolation=cv2.INTER_NEAREST)
             im[h:h + ps, w:w + ps] = patch
         return im
 

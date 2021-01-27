@@ -9,7 +9,8 @@ import fastai.vision.all as fv
 from fastai.callback.tracker import EarlyStoppingCallback
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import common, train_utils, train_utils_img
+from general import common
+from training import train_utils, train_utils_img
 from general.PatchExtractor import PatchExtractor
 import classification.classification_utils as classif_utils
 

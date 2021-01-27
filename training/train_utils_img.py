@@ -12,7 +12,8 @@ import fastai.distributed as fd   # needed for fastai multi gpu
 import fastai.callback.tensorboard as fc
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import common, crypto, train_utils
+from general import common, crypto
+from training import train_utils
 
 
 class ImageTrainer(train_utils.FastaiTrainer):
@@ -67,6 +68,12 @@ class ImageTrainer(train_utils.FastaiTrainer):
                 self.create_cats_metrics(perf_fn, cat_id, cat, metrics_fn)
         return metrics_fn
 
+    def plot_custom_metrics(self, ax, agg_perf, show_val, title=None):
+        ax.axis('on')
+        bar_perf = {mn: cat_mres for p in self.BASIC_PERF_FNS for mn, cat_mres in agg_perf.items() if p in mn}
+        bar_cats = self.get_cats_with_all()
+        common.grouped_barplot_with_err(ax, bar_perf, bar_cats, xlabel='Classes', show_val=show_val, title=title)
+
     def process_test_preds(self, interp):
         interp = super().process_test_preds(interp)
         interp.metrics['cm'] = self.compute_conf_mat(interp.targs, interp.decoded)
@@ -85,9 +92,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
         for show_val in [False, True]:
             save_path = os.path.join(test_path, f'{run}{"_show_val" if show_val else ""}.jpg')
             fig, axs = plt.subplots(1, 2, figsize=self.args.test_figsize)
-            bar_perf = {mn: cat_mres for p in self.BASIC_PERF_FNS for mn, cat_mres in agg_perf.items() if p in mn}
-            bar_cats = self.get_cats_with_all()
-            common.grouped_barplot_with_err(axs[0], bar_perf, bar_cats, xlabel='Classes', show_val=show_val)
+            self.plot_custom_metrics(axs[0], agg_perf, show_val)
             common.plot_confusion_matrix(axs[1], agg_perf['cm'], self.args.cats)
             fig.tight_layout(pad=.2)
             plt.savefig(save_path, dpi=400)
