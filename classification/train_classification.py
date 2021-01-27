@@ -1,5 +1,6 @@
 import os
 import sys
+import collections
 from functools import partial
 
 import numpy as np
@@ -16,6 +17,14 @@ import classification.classification_utils as classif_utils
 
 
 class ImageClassificationTrainer(train_utils_img.ImageTrainer):
+    @staticmethod
+    def get_argparser(desc="Fastai segmentation image trainer arguments", pdef=dict(), phelp=dict()):
+        # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
+        parser = super(ImageClassificationTrainer, ImageClassificationTrainer).get_argparser(desc, pdef, phelp)
+        parser.add_argument('--imbalanced', action='store_true', help="Data classes imbalanced, apply weighted loss")
+        return parser
+
+
     @staticmethod
     def prepare_training(args):
         args.exp_name = "img_classif_"+args.exp_name
@@ -43,16 +52,24 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
         tr, val = tuple(map(np.ndarray.tolist, tr)), tuple(map(np.ndarray.tolist, val))
         return self.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock(vocab=self.args.cats)), tr, val, bs, size)
 
+    def get_class_weights(self, dls):
+        counts = collections.Counter([x[1] for x in dls.train_ds.items])
+        class_counts = np.array([counts[c] for c in dls.vocab])
+        return class_counts.max() / class_counts
+
     def create_learner(self, dls):
+        if self.args.imbalanced:
+            loss_func = fv.CrossEntropyLossFlat(weight=self.get_class_weights(dls))
+        else: loss_func = None
         metrics = list(self.cust_metrics.values()) + [fv.accuracy]  # for early stop callback
         if "efficientnet" in self.args.model:
             from efficientnet_pytorch import EfficientNet
             model = EfficientNet.from_pretrained(self.args.model)
             model._fc = torch.nn.Linear(model._fc.in_features, dls.c)
             model_splitter = lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params)
-            learn = fv.Learner(dls, model, metrics=metrics, splitter=model_splitter)
+            learn = fv.Learner(dls, model, metrics=metrics, loss_func=loss_func, splitter=model_splitter)
         else:
-            learn = fv.cnn_learner(dls, getattr(fv, self.args.model), metrics=metrics)
+            learn = fv.cnn_learner(dls, getattr(fv, self.args.model), loss_func=loss_func, metrics=metrics)
         return self.prepare_learner(learn)
 
     def correct_wl(self, wl_items_with_labels, preds):
