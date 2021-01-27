@@ -6,7 +6,8 @@ import cv2
 import torch
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import common, train_utils
+from general import common
+from training import train_utils
 from classification.classification_utils import conf_mat
 
 
