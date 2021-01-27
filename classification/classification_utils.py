@@ -4,7 +4,7 @@ import sys
 import torch
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import train_utils
+from training import train_utils
 
 
 def get_image_cls(img_path):
