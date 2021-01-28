@@ -21,7 +21,8 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def get_argparser(desc="Fastai segmentation image trainer arguments", pdef=dict(), phelp=dict()):
         # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
         parser = super(ImageClassificationTrainer, ImageClassificationTrainer).get_argparser(desc, pdef, phelp)
-        parser.add_argument('--imbalanced', action='store_true', help="Data classes imbalanced, apply weighted loss")
+        parser.add_argument('--weighted-loss', action='store_true', help="Uses weighted loss based on class distrib")
+        parser.add_argument('--oversample', action='store_true', help="Uses weighted dls based on class distrib")
         return parser
 
     @staticmethod
@@ -49,16 +50,25 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
 
     def create_dls(self, tr, val, bs, size):
         tr, val = tuple(map(np.ndarray.tolist, tr)), tuple(map(np.ndarray.tolist, val))
-        return self.create_dls_from_lst((fv.ImageBlock, fv.CategoryBlock(vocab=self.args.cats)), tr, val, bs, size)
+        args = (fv.ImageBlock, fv.CategoryBlock(vocab=self.args.cats)), tr, val, bs, size
+        if self.args.oversample:
+            kwargs = {'dl_type': fv.WeightedDL, 'wgts': self.get_train_items_weights(tr),
+                      'dl_kwargs': [{}, {'cls': fv.TfmdDL}]}
+        else: kwargs = {}
+        return self.create_dls_from_lst(*args, **kwargs)
 
-    def get_class_weights(self, dls):
-        counts = collections.Counter([x[1] for x in dls.train_ds.items])
-        class_counts = np.array([counts[c] for c in dls.vocab])
+    def get_class_weights(self, train_items):
+        counts = collections.Counter([x[1] for x in train_items])
+        class_counts = np.array([counts[c] for c in self.args.cats])
         return torch.FloatTensor(class_counts.max() / class_counts)
 
+    def get_train_items_weights(self, train_items):
+        labels, class_weights = [x[1] for x in train_items], self.get_class_weights(train_items).numpy()
+        return class_weights[fv.CategoryMap(self.args.cats).map_objs(labels)]
+
     def create_learner(self, dls):
-        if self.args.imbalanced:
-            loss_func = fv.CrossEntropyLossFlat(weight=self.get_class_weights(dls).to(dls.device))
+        if self.args.weighted_loss:
+            loss_func = fv.CrossEntropyLossFlat(weight=self.get_class_weights(dls.train_ds.items).to(dls.device))
         else: loss_func = None
         metrics = list(self.cust_metrics.values()) + [fv.accuracy]  # for early stop callback
         if "efficientnet" in self.args.model:

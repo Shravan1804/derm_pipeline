@@ -141,7 +141,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
         elif self.args.encrypted: return crypto.decrypt_img(item, self.args.ckey)
         else: return item
 
-    def create_dls_from_lst(self, blocks, tr, val, bs, size, get_x=None, get_y=None):
+    def create_dls_from_lst(self, blocks, tr, val, bs, size, get_x=None, get_y=None, **kwargs):
         tfms = fv.aug_transforms(size=size)
         if not self.args.no_norm:
             tfms.append(fv.Normalize.from_stats(*fv.imagenet_stats))
@@ -156,7 +156,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
             if train_utils.GPUManager.is_master_process(): d.summary(self.args.data, bs=bs)
             sys.exit()
         # set path args so that learner objects use it
-        return d.dataloaders(self.args.data, path=self.args.exp_logdir, bs=bs, seed=self.args.seed)
+        return d.dataloaders(self.args.data, path=self.args.exp_logdir, bs=bs, seed=self.args.seed, **kwargs)
 
     def maybe_progressive_resizing(self, tr, val, fold_suffix):
         if self.args.progr_size:
