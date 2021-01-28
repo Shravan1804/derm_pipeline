@@ -37,8 +37,9 @@ class ImageTrainer(train_utils.FastaiTrainer):
     @staticmethod
     def get_exp_logdir(args, custom=""):
         d = f'_input{args.input_size}'
-        d += f'_progr-size{"_".join(map(str, args.size_facts))}' if args.progr_size else ""
-        return super(ImageTrainer, ImageTrainer).get_exp_logdir(args, custom=f'{d}_{custom}')
+        if args.progr_size: d += f'_progr-size{"_".join(map(str, args.size_facts))}'
+        custom = f'{d}_{custom}'
+        return super(ImageTrainer, ImageTrainer).get_exp_logdir(args, custom=custom)
 
     @staticmethod
     def prepare_training(args):

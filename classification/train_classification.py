@@ -26,6 +26,14 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
         return parser
 
     @staticmethod
+    def get_exp_logdir(args, custom=""):
+        d = ''
+        if args.weighted_loss: d += '_weighted-loss'
+        if args.oversample: d += '_oversample'
+        custom = f'{d}_{custom}'
+        return super(ImageClassificationTrainer, ImageClassificationTrainer).get_exp_logdir(args, custom=custom)
+
+    @staticmethod
     def prepare_training(args):
         args.exp_name = "img_classif_"+args.exp_name
         if args.cats is None: args.cats = common.list_dirs(os.path.join(args.data, args.sl_train[0]), full_path=False)
