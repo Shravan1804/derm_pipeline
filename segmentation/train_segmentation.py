@@ -121,7 +121,7 @@ def main(args):
 
 if __name__ == '__main__':
     defaults = {'--bs': 6, '--model': 'resnet34', '--input-size': 256, '--cats': ["other", "pustules", "spots"]}
-    parser = ImageSegmentationTrainer.get_argparser(desc="Fastai image classification", pdef=defaults)
+    parser = ImageSegmentationTrainer.get_argparser(pdef=defaults)
     args = parser.parse_args()
 
     ImageSegmentationTrainer.prepare_training(args)

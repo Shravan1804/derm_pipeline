@@ -199,20 +199,18 @@ class FastaiTrainer:
     def get_exp_logdir(args, custom=""):
         d = f'{common.now()}_{args.model}_bs{args.bs}_epo{args.epochs}_seed{args.seed}' \
             f'_world{args.num_machines * len(args.gpu_ids)}'
-        d += '' if args.no_norm else '_normed'
+        if not args.no_norm: d += '_normed'
         d += '_fp32' if args.full_precision else '_fp16'
         d += f'_CV{args.nfolds}' if args.cross_val else f'_noCV_valid{args.valid_size}'
         d += '_WL' if args.use_wl else '_SL'
         d += f'_{custom}_{args.exp_name}'
+        if args.inference: d += '_INFERENCE'
         return d
 
     @staticmethod
     def prepare_training(args):
         common.set_seeds(args.seed)
         common.check_dir_valid(args.data)
-
-        if args.inference:
-            common.check_dir_valid(args.exp_logdir)
 
         assert torch.cuda.is_available(), "Cannot run without CUDA device"
         args.bs = args.bs * len(args.gpu_ids) if GPUManager.in_parallel_mode() else args.bs
@@ -234,7 +232,7 @@ class FastaiTrainer:
         self.stratify = stratify
         self.cust_metrics = self.prepare_custom_metrics()
         self.test_set_results = {test_name: defaultdict(list) for test_name in self.args.sl_tests}
-        print("Training args:", self.args)
+        print("Training" if self.args.inference else "Inference", "args:", self.args)
 
     def prepare_custom_metrics(self): raise NotImplementedError
 
