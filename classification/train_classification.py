@@ -52,7 +52,7 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
         blocks = fv.ImageBlock, fv.CategoryBlock(vocab=self.args.cats)
         tr, val = tuple(map(np.ndarray.tolist, tr)), tuple(map(np.ndarray.tolist, val))
         if self.args.oversample:
-            kwargs = {'dl_type': fv.WeightedDL, 'wgts': self.get_train_items_weights(list(zip(tr))),
+            kwargs = {'dl_type': fv.WeightedDL, 'wgts': self.get_train_items_weights(list(zip(*tr))),
                       'dl_kwargs': [{}, {'cls': fv.TfmdDL}]}
         else: kwargs = {}
         return self.create_dls_from_lst(blocks, tr, val, bs, size, **kwargs)
