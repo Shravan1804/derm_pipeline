@@ -49,13 +49,13 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def compute_conf_mat(self, targs, preds): return classif_utils.conf_mat(targs, preds, self.args.cats)
 
     def create_dls(self, tr, val, bs, size):
+        blocks = fv.ImageBlock, fv.CategoryBlock(vocab=self.args.cats)
         tr, val = tuple(map(np.ndarray.tolist, tr)), tuple(map(np.ndarray.tolist, val))
-        args = (fv.ImageBlock, fv.CategoryBlock(vocab=self.args.cats)), tr, val, bs, size
         if self.args.oversample:
-            kwargs = {'dl_type': fv.WeightedDL, 'wgts': self.get_train_items_weights(tr),
+            kwargs = {'dl_type': fv.WeightedDL, 'wgts': self.get_train_items_weights(list(zip(tr))),
                       'dl_kwargs': [{}, {'cls': fv.TfmdDL}]}
         else: kwargs = {}
-        return self.create_dls_from_lst(*args, **kwargs)
+        return self.create_dls_from_lst(blocks, tr, val, bs, size, **kwargs)
 
     def get_class_weights(self, train_items):
         counts = collections.Counter([x[1] for x in train_items])
