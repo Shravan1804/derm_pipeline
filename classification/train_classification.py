@@ -24,7 +24,6 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
         parser.add_argument('--imbalanced', action='store_true', help="Data classes imbalanced, apply weighted loss")
         return parser
 
-
     @staticmethod
     def prepare_training(args):
         args.exp_name = "img_classif_"+args.exp_name
@@ -55,11 +54,11 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def get_class_weights(self, dls):
         counts = collections.Counter([x[1] for x in dls.train_ds.items])
         class_counts = np.array([counts[c] for c in dls.vocab])
-        return class_counts.max() / class_counts
+        return torch.FloatTensor(class_counts.max() / class_counts)
 
     def create_learner(self, dls):
         if self.args.imbalanced:
-            loss_func = fv.CrossEntropyLossFlat(weight=self.get_class_weights(dls))
+            loss_func = fv.CrossEntropyLossFlat(weight=self.get_class_weights(dls).to(dls.device))
         else: loss_func = None
         metrics = list(self.cust_metrics.values()) + [fv.accuracy]  # for early stop callback
         if "efficientnet" in self.args.model:
