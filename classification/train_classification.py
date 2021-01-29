@@ -81,7 +81,7 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def get_loss_fn(self, dls):
         class_weights = self.get_class_weights(dls.train_ds.items).to(dls.device) if self.args.weighted_loss else None
         if self.args.label_smoothing_loss:
-            loss_func = fv.FixedLabelSmoothingCrossEntropyFlat(weight=class_weights)
+            loss_func = FixedLabelSmoothingCrossEntropyFlat(weight=class_weights)
         else:
             loss_func = fv.CrossEntropyLossFlat(weight=class_weights)
 
