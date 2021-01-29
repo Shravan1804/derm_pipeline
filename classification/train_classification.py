@@ -20,10 +20,11 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     @staticmethod
     def get_argparser(desc="Fastai segmentation image trainer arguments", pdef=dict(), phelp=dict()):
         # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
-        parser = super(ImageClassificationTrainer, ImageClassificationTrainer).get_argparser(desc, pdef, phelp)
-        parser.add_argument('--weighted-loss', action='store_true', help="Uses weighted loss based on class distrib")
-        parser.add_argument('--oversample', action='store_true', help="Uses weighted dls based on class distrib")
-        return parser
+        psr = super(ImageClassificationTrainer, ImageClassificationTrainer).get_argparser(desc, pdef, phelp)
+        psr.add_argument('--label-smoothing-loss', action='store_true', help="Uses label smoothing loss")
+        psr.add_argument('--weighted-loss', action='store_true', help="Uses weighted loss based on class distrib")
+        psr.add_argument('--oversample', action='store_true', help="Uses weighted dls based on class distrib")
+        return psr
 
     @staticmethod
     def get_exp_logdir(args, custom=""):
@@ -76,10 +77,15 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
         labels, class_weights = [x[1] for x in train_items], self.get_class_weights(train_items).numpy()
         return class_weights[fv.CategoryMap(self.args.cats).map_objs(labels)]
 
+    def get_loss_fn(self, dls):
+        class_weights = self.get_class_weights(dls.train_ds.items).to(dls.device) if self.args.weighted_loss else None
+        if self.args.label_smoothing_loss:
+            loss_func = fv.LabelSmoothingCrossEntropyFlat(weight=class_weights)
+        else:
+            loss_func = fv.CrossEntropyLossFlat(weight=class_weights)
+
     def create_learner(self, dls):
-        if self.args.weighted_loss:
-            loss_func = fv.CrossEntropyLossFlat(weight=self.get_class_weights(dls.train_ds.items).to(dls.device))
-        else: loss_func = None
+        loss_func = self.get_loss_fn(dls)
         metrics = list(self.cust_metrics.values()) + [fv.accuracy]  # for early stop callback
         if "efficientnet" in self.args.model:
             from efficientnet_pytorch import EfficientNet

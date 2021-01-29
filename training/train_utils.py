@@ -232,7 +232,7 @@ class FastaiTrainer:
         self.stratify = stratify
         self.cust_metrics = self.prepare_custom_metrics()
         self.test_set_results = {test_name: defaultdict(list) for test_name in self.args.sl_tests}
-        print("Training" if self.args.inference else "Inference", "args:", self.args)
+        print("Inference" if self.args.inference else "Training", "args:", self.args)
 
     def prepare_custom_metrics(self): raise NotImplementedError
 
@@ -293,26 +293,22 @@ class FastaiTrainer:
         learn.model.cuda()
         return learn
 
-    def auto_lr_find(self, learn, run):
-        if GPUManager.in_distributed_mode():
-            def fixed_lr_find(self):
-                self.learn.opt.zero_grad()  # Need to zero the gradients of the model before detaching the optimizer for future fits
-                tmp_f = self.path / self.model_dir / '_tmp.pth'
-                if tmp_f.exists():
-                    self.learn.load('_tmp', with_opt=True)
-                    if GPUManager.is_master_process(): os.remove(tmp_f)
-            fv.LRFinder.after_fit = fixed_lr_find
-        with GPUManager.running_context(learn, self.args.gpu_ids):
-            lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
-        GPUManager.sync_distributed_process()
-        return lr_min/10
+    def set_lr(self, learn):
+        if self.args.lr is not None:
+            lr = self.args.lr
+        elif GPUManager.in_distributed_mode():  # auto_lr find causes deadlock in distrib mode
+            lr = .002
+        else:
+            with GPUManager.running_context(learn, self.args.gpu_ids):
+                lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
+            lr = lr_min / 10
+        return lr
 
     def basic_train(self, run, learn, dls=None, save_model=True):
         GPUManager.sync_distributed_process()
         print("Training model:", run)
         if dls is not None: learn.dls = dls
-        #lr = self.auto_lr_find(learn, run) if self.args.lr is None else self.args.lr
-        lr = .002 if self.args.lr is None else self.args.lr
+        lr = self.set_lr(learn)
         train_cbs = self.get_train_cbs(run)
         with GPUManager.running_context(learn, self.args.gpu_ids):
             learn.fine_tune(self.args.epochs, base_lr=lr, freeze_epochs=self.args.fepochs, cbs=train_cbs)
