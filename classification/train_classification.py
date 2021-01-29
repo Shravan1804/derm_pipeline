@@ -14,6 +14,7 @@ from general import common
 from training import train_utils, train_utils_img
 from general.PatchExtractor import PatchExtractor
 import classification.classification_utils as classif_utils
+from training.fastai_monkey_patches import FixedLabelSmoothingCrossEntropyFlat
 
 
 class ImageClassificationTrainer(train_utils_img.ImageTrainer):
@@ -80,7 +81,7 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def get_loss_fn(self, dls):
         class_weights = self.get_class_weights(dls.train_ds.items).to(dls.device) if self.args.weighted_loss else None
         if self.args.label_smoothing_loss:
-            loss_func = fv.LabelSmoothingCrossEntropyFlat(weight=class_weights)
+            loss_func = fv.FixedLabelSmoothingCrossEntropyFlat(weight=class_weights)
         else:
             loss_func = fv.CrossEntropyLossFlat(weight=class_weights)
 
