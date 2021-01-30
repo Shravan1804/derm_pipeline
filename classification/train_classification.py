@@ -84,6 +84,7 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
             loss_func = FixedLabelSmoothingCrossEntropyFlat(weight=class_weights)
         else:
             loss_func = fv.CrossEntropyLossFlat(weight=class_weights)
+        return loss_func
 
     def create_learner(self, dls):
         loss_func = self.get_loss_fn(dls)
