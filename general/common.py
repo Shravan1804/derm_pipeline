@@ -1,15 +1,18 @@
 import os
 import sys
 import cv2
+import math
 import datetime
 import itertools
 import contextlib
-from pathlib import Path, PosixPath
-import PIL.Image as PImage
 from timeit import default_timer
+from string import ascii_uppercase
 from collections import defaultdict
+from pathlib import Path, PosixPath
+
 
 import numpy as np
+import PIL.Image as PImage
 import matplotlib.pyplot as plt
 
 
@@ -122,6 +125,34 @@ def merge(lst, cond_fn, merge_fn):
                 new_lst = sub_lst[:j] + sub_lst[j+1:] + [merge_fn(item_a, item_b)]
                 return merge(new_lst, cond_fn, merge_fn)
     return lst
+
+
+def decimal_to_base(n, base, ndigits=-1):
+    """Converts n from base 10 to specified base"""
+    res, count = [], 0
+    while(n > 0):
+        rem = int(n % base)
+        res = [rem] + res
+        n = (n-rem)/base
+        count += 1
+    if ndigits != -1:
+        assert count <= ndigits, f"{int(n)} cannot be converted in base {base} with only {ndigits} digits."
+        while count+1 <= ndigits:
+            res = [0] + res
+            count += 1
+    elif count == 0: res = [0]
+    return res
+
+
+def generate_codes(ncodes, alphabet=ascii_uppercase, size=None):
+    n_symbols = len(set(ascii_uppercase))
+    min_symbols = int(math.log(ncodes, len(alphabet))) + 1
+    if size is None: size = min_symbols
+    if size != -1:
+        error_msg = f"Error, requested {ncodes} different codes but an alphabet with only {n_symbols}" \
+                    f"different symbols was provided (require at least {min_symbols} different symbols)."
+        assert size >= min_symbols, error_msg
+    return ["".join([alphabet[i] for i in decimal_to_base(c, len(alphabet), ndigits=size)]) for c in range(ncodes)]
 
 
 def int_to_bins(n, bins, rand=False):
