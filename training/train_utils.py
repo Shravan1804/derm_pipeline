@@ -50,6 +50,28 @@ def F1(TP, TN, FP, FN, epsilon=1e-8):
     return 2 * pre * rec / (pre + rec)
 
 
+def specificity(TP, TN, FP, FN, epsilon=1e-8):
+    # Proportion of true negative given gt is false
+    # Proba negative test given patient is not sick
+    return TN / (TN + FP + epsilon)
+
+
+def sensitivity(TP, TN, FP, FN, epsilon=1e-8):
+    # Proportion true positive given gt is true (i.e. RECALL)
+    # Proba positive test given patient is sick
+    return TP / (TP + FN + epsilon)
+
+
+def ppv(TP, TN, FP, FN, epsilon=1e-8):
+    # Positive predictive values: proportion of positive predictions that are true positives (i.e. PRECISION)
+    return TP / (TP + FP + epsilon)
+
+
+def npv(TP, TN, FP, FN, epsilon=1e-8):
+    # Negative predictive values: proportion of negative predictions that are true negatives
+    return TN / (TN + FN + epsilon)
+
+
 def tensors_mean_std(tensor_lst):
     tensors = torch.cat([t.unsqueeze(0) for t in tensor_lst], dim=0)
     mean = tensors.mean(axis=0)
