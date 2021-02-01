@@ -116,7 +116,6 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
 def main(args):
     segm = ImageSegmentationTrainer(args)
     segm.train_model()
-    if args.inference: segm.inference()
 
 
 if __name__ == '__main__':

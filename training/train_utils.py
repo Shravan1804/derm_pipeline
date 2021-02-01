@@ -312,7 +312,9 @@ class FastaiTrainer:
         print("Training model:", run)
         with GPUManager.running_context(learn, self.args.gpu_ids):
             learn.fine_tune(self.args.epochs, base_lr=lr, freeze_epochs=self.args.fepochs, cbs=train_cbs)
-        if save_model: learn.save(os.path.join(self.args.exp_logdir, f'{run}{self.MODEL_SUFFIX}_lr{lr:.2e}'))
+        if save_model:
+            model_dir = common.maybe_create(self.args.exp_logdir, learn.model_dir)
+            learn.save(os.path.join(model_dir, f'{run}{self.MODEL_SUFFIX}_lr{lr:.2e}'))
 
     def evaluate_and_correct_wl(self, learn, wl_items, run):
         """Evaluate and correct weak labeled items, clears GPU memory (model and dls)"""
@@ -357,19 +359,6 @@ class FastaiTrainer:
                 agg = self.aggregate_test_performance(folds_results)
                 self.plot_test_performance(test_path, run, agg)
                 with open(os.path.join(test_path, f'{run}_test_results.p'), 'wb') as f: pickle.dump(agg, f)
-
-    def inference(self):
-        if not self.args.inference:
-            print("Inference mode not set, skipping inference.")
-            return
-        models = [m for m in common.list_files(self.args.exp_logdir, full_path=True) if m.endswith(".pth")]
-        _, tr, val = next(self.split_data(*self.get_train_items()[0]))
-        for mpath in models:
-            run_info = os.path.basename(mpath).split(self.MODEL_SUFFIX)[0]
-            learn = self.load_learner_from_run_info(run_info, tr, val, mpath)
-            self.evaluate_on_test_sets(learn, run_info)
-            GPUManager.clean_gpu_memory(learn.dls, learn)
-        self.generate_tests_reports()
 
     def train_model(self):
         if self.args.inference:

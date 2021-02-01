@@ -122,7 +122,6 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
 def main(args):
     classif = ImageClassificationTrainer(args)
     classif.train_model()
-    if args.inference: classif.inference()
 
 
 if __name__ == '__main__':
