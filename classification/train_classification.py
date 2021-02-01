@@ -46,8 +46,8 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
             args.exp_logdir = os.path.join(args.logdir, ImageClassificationTrainer.get_exp_logdir(args))
         super(ImageClassificationTrainer, ImageClassificationTrainer).prepare_training(args)
 
-    def __init__(self, args, stratify=True, full_img_sep=PatchExtractor.SEP):
-        super().__init__(args, stratify, full_img_sep)
+    def __init__(self, args, stratify=True, full_img_sep=PatchExtractor.SEP, **kwargs):
+        super().__init__(args, stratify, full_img_sep, **kwargs)
 
     def load_items(self, path):
         images = common.list_files_in_dirs(path, full_path=True, posix_path=True)

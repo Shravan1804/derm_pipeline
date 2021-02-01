@@ -32,9 +32,9 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         args.exp_name = "img_segm_" + args.exp_name
         super(ImageSegmentationTrainer, ImageSegmentationTrainer).prepare_training(args)
 
-    def __init__(self, args, stratify=False, full_img_sep=CROP_SEP):
+    def __init__(self, args, stratify=False, full_img_sep=CROP_SEP, **kwargs):
         self.NO_BG = '_no_bg'    # used to differentiate metrics ignoring background
-        super().__init__(args, stratify, full_img_sep)
+        super().__init__(args, stratify, full_img_sep, **kwargs)
 
     def load_items(self, path):
         images = common.list_files(os.path.join(path, self.args.img_dir), full_path=True, posix_path=True)

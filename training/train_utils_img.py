@@ -47,10 +47,10 @@ class ImageTrainer(train_utils.FastaiTrainer):
             args.exp_logdir = os.path.join(args.logdir, ImageTrainer.get_exp_logdir(args))
         super(ImageTrainer, ImageTrainer).prepare_training(args)
 
-    def __init__(self, args, stratify, full_img_sep):
+    def __init__(self, args, stratify, full_img_sep, perf_fns=['precision', 'recall'], **kwargs):
         self.ALL_CATS = 'all'
         self.full_img_sep = full_img_sep
-        self.BASIC_PERF_FNS = ['precision', 'recall']
+        self.BASIC_PERF_FNS = perf_fns
         super().__init__(args, stratify)
 
     def compute_conf_mat(self, targs, preds): raise NotImplementedError

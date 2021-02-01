@@ -206,6 +206,7 @@ class FastaiTrainer:
         parser.add_argument('--no-norm', action='store_true', help="Do not normalizes data")
         parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
         parser.add_argument('--early-stop', action='store_true', help="Early stopping during training")
+        parser.add_argument('--no-plot', action='store_true', help="Will not plot test results (e.g. too many classes)")
 
         parser.add_argument('--proc-gpu', type=int, default=0, help="Id of gpu to be used by process")
         parser.add_argument("--gpu-ids", type=int, nargs='+', default=GPUManager.default_gpu_device_ids(),
@@ -379,7 +380,7 @@ class FastaiTrainer:
             test_path = common.maybe_create(self.args.exp_logdir, test_name)
             for run, folds_results in self.test_set_results[test_name].items():
                 agg = self.aggregate_test_performance(folds_results)
-                self.plot_test_performance(test_path, run, agg)
+                if not self.args.no_plot: self.plot_test_performance(test_path, run, agg)
                 with open(os.path.join(test_path, f'{run}_test_results.p'), 'wb') as f: pickle.dump(agg, f)
 
     def train_model(self):
