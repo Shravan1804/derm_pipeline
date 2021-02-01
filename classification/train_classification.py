@@ -28,6 +28,8 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
         psr.add_argument('--ce-loss', action='store_true', help="cross entropy loss")
         psr.add_argument('--weighted-loss', action='store_true', help="Uses weighted loss based on class distrib")
         psr.add_argument('--oversample', action='store_true', help="Uses weighted dls based on class distrib")
+
+        psr.add_argument('--RMSProp', action='store_true', help="Use RMSProp optimizer")
         return psr
 
     @staticmethod
@@ -95,17 +97,26 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
             loss_func = None
         return loss_func
 
+    def get_opt_fn(self):
+        if self.args.RMSProp:
+            opt_func = fv.RMSProp
+        else:
+            opt_func = None
+        return opt_func
+
     def create_learner(self, dls):
         loss_func = self.get_loss_fn(dls)
+        opt_func = self.get_opt_fn()
         metrics = list(self.cust_metrics.values()) + [fv.accuracy]  # for early stop callback
         if "efficientnet" in self.args.model:
             from efficientnet_pytorch import EfficientNet
             model = EfficientNet.from_pretrained(self.args.model)
             model._fc = torch.nn.Linear(model._fc.in_features, dls.c)
-            model_splitter = lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params)
-            learn = fv.Learner(dls, model, metrics=metrics, loss_func=loss_func, splitter=model_splitter)
+            msplitter = lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params)
+            learn = fv.Learner(dls, model, metrics=metrics, loss_func=loss_func, opt_func=opt_func, splitter=msplitter)
         else:
-            learn = fv.cnn_learner(dls, getattr(fv, self.args.model), loss_func=loss_func, metrics=metrics)
+            model = getattr(fv, self.args.model)
+            learn = fv.cnn_learner(dls, model, loss_func=loss_func, opt_func=opt_func, metrics=metrics)
         return self.prepare_learner(learn)
 
     def correct_wl(self, wl_items_with_labels, preds):
