@@ -1,6 +1,8 @@
+import torch
 import fastai.vision.all as fv
 
 
+# OFFICIAL VERSION DOES NOT SEEM TO SUPPORT THE WEIGHT ARGS
 class FixedLabelSmoothingCrossEntropyFlat(fv.BaseLoss):
     "Same as `LabelSmoothingCrossEntropy`, but flattens input and target."
     y_int = True
@@ -10,7 +12,7 @@ class FixedLabelSmoothingCrossEntropyFlat(fv.BaseLoss):
     def decodes(self, out):    return out.argmax(dim=-1)
 
 
-# Cell
+# EXACT COPY, NEEDED OTHERWISE FIXED FLAT COMPLAINS OVER WEIGHT ARGS
 class FixedLabelSmoothingCrossEntropy(fv.Module):
     y_int = True
     def __init__(self, eps:float=0.1, weight=None, reduction='mean'):
@@ -28,3 +30,30 @@ class FixedLabelSmoothingCrossEntropy(fv.Module):
     def activation(self, out): return fv.F.softmax(out, dim=-1)
     def decodes(self, out):    return out.argmax(dim=-1)
 
+
+# OFFICIAL VERSION NOT PART OF LATEST RELEASE YET
+class FixedFocalLossFlat(fv.CrossEntropyLossFlat):
+    """
+    Same as CrossEntropyLossFlat but with focal paramter, `gamma`. Focal loss is introduced by Lin et al.
+    https://arxiv.org/pdf/1708.02002.pdf. Note the class weighting factor in the paper, alpha, can be
+    implemented through pytorch `weight` argument in nn.CrossEntropyLoss.
+    """
+    y_int = True
+    @fv.use_kwargs_dict(keep=True, weight=None, ignore_index=-100, reduction='mean')
+    def __init__(self, *args, gamma=2, axis=-1, **kwargs):
+        self.gamma = gamma
+        self.reduce = kwargs.pop('reduction') if 'reduction' in kwargs else 'mean'
+        super().__init__(*args, reduction='none', axis=axis, **kwargs)
+    def __call__(self, inp, targ, **kwargs):
+        ce_loss = super().__call__(inp, targ, **kwargs)
+        pt = torch.exp(-ce_loss)
+        fl_loss = (1-pt)**self.gamma * ce_loss
+        return fl_loss.mean() if self.reduce == 'mean' else fl_loss.sum() if self.reduce == 'sum' else fl_loss
+
+class FocalLossPlusCElossFlat(FixedFocalLossFlat):
+    @fv.use_kwargs_dict(keep=True, weight=None, ignore_index=-100, reduction='mean')
+    def __init__(self, *args, gamma=2, axis=-1, **kwargs):
+        super().__init__(*args, gamma=gamma, axis=axis, **kwargs)
+        self.CEloss = fv.CrossEntropyLossFlat(*args, axis=axis, **kwargs)
+    def __call__(self, inp, targ, **kwargs):
+        return super().__call__(inp, targ, **kwargs) + self.CEloss(inp, targ, **kwargs)

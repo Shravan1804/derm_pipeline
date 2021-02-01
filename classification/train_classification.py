@@ -14,7 +14,7 @@ from general import common
 from training import train_utils, train_utils_img
 from general.PatchExtractor import PatchExtractor
 import classification.classification_utils as classif_utils
-from training.fastai_monkey_patches import FixedLabelSmoothingCrossEntropyFlat
+import training.fastai_monkey_patches as fmp
 
 
 class ImageClassificationTrainer(train_utils_img.ImageTrainer):
@@ -22,7 +22,10 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def get_argparser(desc="Fastai segmentation image trainer arguments", pdef=dict(), phelp=dict()):
         # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
         psr = super(ImageClassificationTrainer, ImageClassificationTrainer).get_argparser(desc, pdef, phelp)
-        psr.add_argument('--label-smoothing-loss', action='store_true', help="Uses label smoothing loss")
+        psr.add_argument('--label-smoothing-loss', action='store_true', help="For unsure labels")
+        psr.add_argument('--focal-loss', action='store_true', help="In imbalanced ds, favor hard cases")
+        psr.add_argument('--focal-loss-plus-ce-loss', action='store_true', help="Focal loss + cross entropy loss")
+        psr.add_argument('--ce-loss', action='store_true', help="cross entropy loss")
         psr.add_argument('--weighted-loss', action='store_true', help="Uses weighted loss based on class distrib")
         psr.add_argument('--oversample', action='store_true', help="Uses weighted dls based on class distrib")
         return psr
@@ -81,9 +84,15 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def get_loss_fn(self, dls):
         class_weights = self.get_class_weights(dls.train_ds.items).to(dls.device) if self.args.weighted_loss else None
         if self.args.label_smoothing_loss:
-            loss_func = FixedLabelSmoothingCrossEntropyFlat(weight=class_weights)
-        else:
+            loss_func = fmp.FixedLabelSmoothingCrossEntropyFlat(weight=class_weights)
+        elif self.args.focal_loss:
+            loss_func = fmp.FixedFocalLossFlat(weight=class_weights)
+        elif self.args.focal_loss_plus_ce_loss:
+            loss_func = fmp.FocalLossPlusCElossFlat(weight=class_weights)
+        elif self.args.ce_loss:
             loss_func = fv.CrossEntropyLossFlat(weight=class_weights)
+        else:
+            loss_func = None
         return loss_func
 
     def create_learner(self, dls):
