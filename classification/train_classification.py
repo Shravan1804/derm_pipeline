@@ -101,7 +101,7 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
         if self.args.RMSProp:
             opt_func = fv.RMSProp
         else:
-            opt_func = None
+            opt_func = fv.Adam
         return opt_func
 
     def create_learner(self, dls):
