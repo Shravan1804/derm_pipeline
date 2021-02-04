@@ -243,6 +243,11 @@ def crop_img_and_mask_to_objs(im, mask, thresh=.01, rand=True, single=True, only
         return im_crops, mask_crops, cleaned_cropped_bboxes
 
 
+def im_mask_on_ax(ax, im, mask, title=None):
+    common.img_on_ax(im, ax, title=title)
+    ax.imshow(mask, cmap='jet', alpha=0.4)
+
+
 def show_im_with_masks(im, mask, cats):
     _, axs = common.prepare_img_axs(im.shape[0]/im.shape[1], 1, len(cats) + 1)
     common.img_on_ax(im, axs[0], title='Original image')
@@ -263,8 +268,7 @@ def show_im_with_mask_overlaid(im, mask, cats, bg=0, show_bg=False):
     for ax, cls_idx, cat in zip(axs[1:], cls_idxs, cls_labels):
         m = (mask == cls_idx).astype(np.uint8)
         obj_prop = get_obj_proportion(m)[0]
-        common.img_on_ax(im, ax, title=f'{cat} segmentation ({obj_prop:.{3}f}%)')
-        ax.imshow(m, cmap='jet', alpha=0.4)
+        im_mask_on_ax(ax, im, m, title=f'{cat} segmentation ({obj_prop:.{3}f}%)')
 
 
 def show_im_with_crops_bboxes(im, mask, obj_threshs=[.01], ncols=4, bg=0):
@@ -277,7 +281,5 @@ def show_im_with_crops_bboxes(im, mask, obj_threshs=[.01], ncols=4, bg=0):
             crop_bboxes = crop_img_and_mask_to_objs(im_arr, m, t, rand, single=False, only_bboxes=True, bg=bg)
             for (wmin, hmin, wmax, hmax) in crop_bboxes:
                 cv2.rectangle(im_arr, (wmin, hmin), (wmax, hmax), 255, 5)
-            common.img_on_ax(im_arr, axs[r*ncols + i], title=f' {"Rand bbox" if rand else "Bbox"} thresh {t}')
-            axs[r*ncols + i].imshow(m, cmap='jet', alpha=0.4)
-
+            im_mask_on_ax(axs[r*ncols + i], im_arr, m, title=f' {"Rand bbox" if rand else "Bbox"} thresh {t}')
 

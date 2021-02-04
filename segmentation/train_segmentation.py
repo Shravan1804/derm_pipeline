@@ -37,7 +37,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         super().__init__(args, stratify, full_img_sep, **kwargs)
 
     def load_items(self, path):
-        images = common.list_files(os.path.join(path, self.args.img_dir), full_path=True, posix_path=True)
+        images = common.list_images(os.path.join(path, self.args.img_dir), full_path=True, posix_path=True)
         return np.array(images), np.array([self.get_image_mask_path(img_path) for img_path in images])
 
     def get_image_mask_path(self, img_path):
@@ -73,6 +73,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def compute_conf_mat(self, targs, preds): return segm_utils.pixel_conf_mat(targs, preds, self.args.cats)
 
     def process_test_preds(self, interp):
+        interp.targs = interp.targs.as_subclass(torch.Tensor)   # otherwise issues with fastai PILMask custom class
         interp = super().process_test_preds(interp)
         to_coco = partial(segm_dataset_to_coco_format, cats=self.args.cats, bg=self.args.bg)
         with common.elapsed_timer() as elapsed:

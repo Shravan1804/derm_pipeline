@@ -406,7 +406,6 @@ class FastaiTrainer:
                     learn, _ = self.train_procedure(wl_data, val, f'{fold_suffix}wl_only', repeat_prefix)
                     learn, prev_run = self.train_procedure(tr, val, f'{fold_suffix}_wl_sl', repeat_prefix, learn)
                     wl_data = self.evaluate_and_correct_wl(learn, wl_data, prev_run)
-
             GPUManager.clean_gpu_memory(learn.dls, learn)
         self.generate_tests_reports()
 

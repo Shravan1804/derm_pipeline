@@ -195,6 +195,10 @@ def reproduce_dir_structure(source, dest):
         reproduce_dir_structure(os.path.join(source, d), os.path.join(dest, d))
 
 
+def list_images(root, **kwargs):
+    return [f for f in list_files(root, **kwargs) if os.path.splitext(f)[1] in ('.jpg', '.png', '.tiff')]
+
+
 def list_files(root, full_path=False, posix_path=False, recursion=False, max_rec_level=-1):
     """Return the list of files, if recursion stops at max_rec_level unless negative then goes all levels."""
     lf = [os.path.join(root, f) if full_path else f for f in os.listdir(root) if os.path.isfile(os.path.join(root, f))]
@@ -327,7 +331,11 @@ def quick_img_size(img_path):
 
 
 def load_rgb_img(path):
-    return img_bgr_to_rgb(cv2.imread(path, cv2.IMREAD_UNCHANGED))
+    return img_bgr_to_rgb(load_img(path))
+
+
+def load_img(path):
+    return cv2.imread(path, cv2.IMREAD_UNCHANGED)
 
 
 def prepare_img_axs(h_w_ratio, nrows, ncols, figsize_fact=8, no_axis=True, flatten=True, title=None):

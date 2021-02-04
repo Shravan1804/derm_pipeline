@@ -270,6 +270,13 @@ class PatchExtractor:
             im[h:h + ps, w:w + ps] = patch
         return im
 
+    @staticmethod
+    def image_to_patches(img_path, ps):
+        patcher = PatchExtractor([ps])
+        im = patcher.load_image(img_path)
+        pms = patcher.patch_grid(img_path, im)
+        return [PatchExtractor.extract_patch(im, pm) for pm in pms], pms
+
 
 def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest):
     pms = []

@@ -99,7 +99,8 @@ class ImageTrainer(train_utils.FastaiTrainer):
             plt.savefig(save_path, dpi=400)
 
     def tensorboard_cb(self, run_info):
-        return ImageTBCb(self.args.exp_logdir, run_info, self.cust_metrics.keys(), self.ALL_CATS)
+        tbdir = common.maybe_create(self.args.exp_logdir, 'tb_logs')
+        return ImageTBCb(tbdir, run_info, self.cust_metrics.keys(), self.ALL_CATS)
 
     def get_test_sets_items(self):
         if self.args.sl_tests is None:
