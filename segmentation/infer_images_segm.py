@@ -38,6 +38,7 @@ class ImageSegmentationInference(ImageInference):
         else: im, gt = common.load_rgb_img(img_path), None
         pred = PatchExtractor.rebuild_im_from_patches(interp.pms, interp.decoded, im.shape[:2])
         save_tag = "_" + os.path.basename(self.args.mdir) if self.args.mdir is not None else ""
+        if self.args.ps is not None: save_tag += f'_ps{self.args.ps}px'
         spath = common.maybe_create(self.args.exp_logdir, f'preds{save_tag}_{self.args.exp_name}')
         im_fname = os.path.basename(img_path)
         if not self.args.no_plot: self.plot_results(interp, im_fname, im, gt, pred, with_labels, spath)

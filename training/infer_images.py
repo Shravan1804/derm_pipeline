@@ -23,8 +23,9 @@ class ImageInference:
 
         if args.mpath is not None: common.check_file_valid(args.mpath)
         elif args.mdir is None and args.exp_logdir is not None:
-            if len(ImageInference.get_model_weights_files(args.exp_logdir)) > 0: args.mdir = args.exp_logdir
-        if args.mdir is not None: common.check_dir_valid(args.mdir)
+            exp_logdir_mdir = os.path.join(args.exp_logdir, 'models')
+            if len(ImageInference.get_model_weights_files(exp_logdir_mdir)) > 0: args.mdir = exp_logdir_mdir
+        common.check_dir_valid(args.mdir)
 
         if args.impath is not None: common.check_file_valid(args.impath)
         elif args.imdir is not None: common.check_dir_valid(args.imdir)
@@ -56,7 +57,7 @@ class ImageInference:
 
     def inference(self):
         if self.args.mpath is not None: model_paths = [self.args.mpath]
-        else: model_paths = [m for m in common.list_files(self.args.mdir, full_path=True) if m.endswith(".pth")]
+        else: model_paths = ImageInference.get_model_weights_files(self.args.mdir)
         _, tr, val = next(self.trainer.split_data(*self.trainer.get_train_items()[0]))
         for mpath in model_paths:
             run_info = os.path.basename(mpath).split(self.trainer.MODEL_SUFFIX)[0]
