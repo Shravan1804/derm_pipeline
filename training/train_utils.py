@@ -227,13 +227,17 @@ class FastaiTrainer:
         d += f'_CV{args.nfolds}' if args.cross_val else f'_noCV_valid{args.valid_size}'
         d += '_WL' if args.use_wl else '_SL'
         d += f'_{custom}_{args.exp_name}'
-        if args.inference: d += '_INFERENCE'
         return d
 
     @staticmethod
     def prepare_training(args):
         common.set_seeds(args.seed)
         common.check_dir_valid(args.data)
+        dirnames = []
+        if args.wl_train is not None: dirnames.extend(args.wl_train)
+        if args.sl_train is not None: dirnames.extend(args.sl_train)
+        if args.sl_tests is not None: dirnames.extend(args.sl_tests)
+        for d in dirnames: common.check_dir_valid(os.path.join(args.data, d))
 
         assert torch.cuda.is_available(), "Cannot run without CUDA device"
         args.bs = args.bs * len(args.gpu_ids) if GPUManager.in_parallel_mode() else args.bs
@@ -377,7 +381,7 @@ class FastaiTrainer:
         print("Aggregating test predictions ...")
         if not GPUManager.is_master_process(): return
         for test_name in self.args.sl_tests:
-            test_path = common.maybe_create(self.args.exp_logdir, test_name)
+            test_path = common.maybe_create(self.args.exp_logdir, f'{test_name}_{self.args.exp_name}')
             for run, folds_results in self.test_set_results[test_name].items():
                 agg = self.aggregate_test_performance(folds_results)
                 if not self.args.no_plot: self.plot_test_performance(test_path, run, agg)

@@ -43,7 +43,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
 
     @staticmethod
     def prepare_training(args):
-        if args.exp_logdir is None and not args.inference:
+        if args.exp_logdir is None:
             args.exp_logdir = os.path.join(args.logdir, ImageTrainer.get_exp_logdir(args))
         super(ImageTrainer, ImageTrainer).prepare_training(args)
 
