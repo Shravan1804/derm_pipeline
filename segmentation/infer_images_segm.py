@@ -29,7 +29,7 @@ class ImageSegmentationInference(ImageInference):
                 mask_patches, _ = self.maybe_patch(mask_path)
                 items = list(zip(im_patches, mask_patches))
             else: items = [(p,) for p in im_patches]
-            interp = self.infer_items(self, learn, items, with_labels)
+            interp = self.infer_items(learn, items, with_labels)
             interp.pms = pms
             self.process_results(img_path, mask_path, interp, with_labels)
 

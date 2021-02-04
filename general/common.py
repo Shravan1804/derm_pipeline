@@ -335,7 +335,7 @@ def load_rgb_img(path):
 
 
 def load_img(path):
-    if is_path(path) and not type(path) is str: path = str(path)
+    if is_path(path) and type(path) is not str: path = str(path)
     return cv2.imread(path, cv2.IMREAD_UNCHANGED)
 
 
