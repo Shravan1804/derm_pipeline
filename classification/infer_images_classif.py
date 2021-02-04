@@ -20,7 +20,7 @@ def main(args):
 
 if __name__ == '__main__':
     pdef = {'--bs': 6, '--model': 'resnet34', '--input-size': 256}
-    parser = ImageClassificationInference.prepare_inference_args(ImageClassificationTrainer.get_argparser(pdef=pdef))
+    parser = ImageClassificationInference.get_argparser(ImageClassificationTrainer.get_argparser(pdef=pdef))
     args = parser.parse_args()
 
     ImageClassificationInference.prepare_inference(args)

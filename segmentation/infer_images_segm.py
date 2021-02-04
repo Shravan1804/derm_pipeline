@@ -74,7 +74,7 @@ def main(args):
 
 if __name__ == '__main__':
     pdef = {'--bs': 6, '--model': 'resnet34', '--input-size': 256, '--cats': ["other", "pustules", "spots"]}
-    parser = ImageSegmentationInference.prepare_inference_args(ImageSegmentationTrainer.get_argparser(pdef=pdef))
+    parser = ImageSegmentationInference.get_argparser(ImageSegmentationTrainer.get_argparser(pdef=pdef))
     args = parser.parse_args()
 
     ImageSegmentationInference.prepare_inference(args)
