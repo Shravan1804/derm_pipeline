@@ -14,6 +14,11 @@ from segmentation.train_segmentation import ImageSegmentationTrainer
 
 
 class ImageSegmentationInference(ImageInference):
+    @staticmethod
+    def prepare_inference(args):
+        super(ImageSegmentationInference, ImageSegmentationInference).prepare_inference(args)
+        ImageSegmentationTrainer.prepare_training(args)
+
     def inference_items(self):
         """Returns list of tuples of images and mask if available"""
         if self.args.impath is not None: return [(Path(self.args.impath), None)]
@@ -69,9 +74,10 @@ def main(args):
 
 if __name__ == '__main__':
     pdef = {'--bs': 6, '--model': 'resnet34', '--input-size': 256, '--cats': ["other", "pustules", "spots"]}
-    args = ImageSegmentationInference.prepare_inference_args(ImageSegmentationTrainer.get_argparser(pdef=pdef))
+    parser = ImageSegmentationInference.prepare_inference_args(ImageSegmentationTrainer.get_argparser(pdef=pdef))
+    args = parser.parse_args()
 
-    ImageSegmentationTrainer.prepare_training(args)
+    ImageSegmentationInference.prepare_inference(args)
 
     common.time_method(main, args)
 

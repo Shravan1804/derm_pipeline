@@ -11,14 +11,17 @@ from general.PatchExtractor import PatchExtractor
 
 class ImageInference:
     @staticmethod
-    def prepare_inference_args(parser):
+    def get_argparser(parser):
         parser.add_argument('--mpath', type=str, help="Model weights path (use if single model inference required)")
         parser.add_argument('--mdir', type=str, help="Model weights dir path (multiple models inference)")
         parser.add_argument('--impath', type=str, help="path of image to apply inference on")
         parser.add_argument('--imdir', type=str, help="path of dir with images to apply inference on")
 
         parser.add_argument('--ps', type=int, help="Patch px side size to cut images")
-        args = parser.parse_args()
+        return parser
+
+    @staticmethod
+    def prepare_inference(args):
         args.inference = True
 
         if args.mpath is not None: common.check_file_valid(args.mpath)

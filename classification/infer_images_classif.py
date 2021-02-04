@@ -8,8 +8,10 @@ from classification.train_classification import ImageClassificationTrainer
 
 
 class ImageClassificationInference(ImageInference):
-    pass
-
+    @staticmethod
+    def prepare_inference(args):
+        super(ImageClassificationInference, ImageClassificationInference).prepare_inference(args)
+        ImageClassificationTrainer.prepare_training(args)
 
 def main(args):
     classif = ImageClassificationInference(ImageClassificationTrainer(args))
@@ -18,9 +20,10 @@ def main(args):
 
 if __name__ == '__main__':
     pdef = {'--bs': 6, '--model': 'resnet34', '--input-size': 256}
-    args = ImageClassificationInference.prepare_inference_args(ImageClassificationTrainer.get_argparser(pdef=pdef))
+    parser = ImageClassificationInference.prepare_inference_args(ImageClassificationTrainer.get_argparser(pdef=pdef))
+    args = parser.parse_args()
 
-    ImageClassificationTrainer.prepare_training(args)
+    ImageClassificationInference.prepare_inference(args)
 
     common.time_method(main, args)
 
