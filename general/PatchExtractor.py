@@ -134,8 +134,7 @@ class PatchExtractor:
     def load_image(self, img_path):
         if common.is_path(img_path) and type(img_path) is not str: img_path = str(img_path)
         common.check_file_valid(img_path)
-        im = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
-        return self.maybe_resize(im)
+        return self.maybe_resize(common.load_img(img_path))
 
     def save_patches(self, source, dest, dirname, grids):
         dest = common.maybe_create(dest, dirname)

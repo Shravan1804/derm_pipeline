@@ -1,5 +1,6 @@
 import os
 import sys
+from types import SimpleNamespace
 
 import fastai.vision.all as fv
 
@@ -48,15 +49,16 @@ class ImageInference:
     def learner_inference(self, learn): raise NotImplementedError
 
     def maybe_patch(self, img_path):
-        if self.args.ps is None: return [common.load_rgb_img(img_path)], None
+        if self.args.ps is None: return [common.load_img(img_path)], None
         else: return PatchExtractor.image_to_patches(img_path, self.args.ps)
 
     def infer_items(self, learn, items, with_labels):
         dl = learn.dls.test_dl(items, with_labels=with_labels)
         with GPUManager.running_context(learn, self.args.gpu_ids):
-            res = fv.Interpretation.from_learner(learn, dl=dl)
+            interp = SimpleNamespace()
+            interp.preds, interp.targs, interp.decoded = learn.get_preds(dl=dl, with_decoded=True)
         GPUManager.clean_gpu_memory(dl)
-        return res
+        return interp
 
     def inference(self):
         if self.args.mpath is not None: model_paths = [self.args.mpath]
