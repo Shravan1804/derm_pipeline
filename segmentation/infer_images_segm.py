@@ -2,6 +2,7 @@ import os
 import sys
 from pathlib import Path
 
+import cv2
 import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
@@ -41,7 +42,8 @@ class ImageSegmentationInference(ImageInference):
     def process_results(self, img_path, mask_path, interp, with_labels):
         if with_labels: im, gt = segm_utils.load_img_and_mask(img_path, mask_path)
         else: im, gt = common.load_rgb_img(img_path), None
-        pred = PatchExtractor.rebuild_im_from_patches(interp.pms, interp.decoded, im.shape[:2])
+        if interp.pms is None: pred = mask_utils.resize_mask(interp.decoded[0].numpy(), im.shape[:2])
+        else: PatchExtractor.rebuild_im_from_patches(interp.pms, interp.decoded.numpy(), im.shape[:2])
         save_tag = "_" + os.path.basename(self.args.mdir) if self.args.mdir is not None else ""
         if self.args.ps is not None: save_tag += f'_ps{self.args.ps}px'
         spath = common.maybe_create(self.args.exp_logdir, f'preds{save_tag}_{self.args.exp_name}')
