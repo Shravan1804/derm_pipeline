@@ -67,7 +67,7 @@ class ImageSegmentationInference(ImageInference):
             agg_perf = self.trainer.aggregate_test_performance([self.trainer.process_test_preds(interp)])
             self.trainer.plot_custom_metrics(axs[axi], agg_perf, show_val=True)
         fig.tight_layout(pad=.2)
-        fig.savefig(save_path, dpi=150)
+        common.plt_save_fig(save_path, fig=fig, dpi=150)
 
 
 def main(args):

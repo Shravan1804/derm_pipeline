@@ -312,10 +312,13 @@ def stdout_prepend(f, pre_msg, *args):
         f(*args)
 
 
-def plt_save_fig(path, close=True, **kwargs):
-    plt.savefig(path, **kwargs)
-    if close:
-        plt.close()
+def plt_save_fig(path, fig=None, close=True, **kwargs):
+    if fig is None:
+        plt.savefig(path, **kwargs)
+        if close: plt.close(plt.gcf())
+    else:
+        fig.savefig(path, **kwargs)
+        if close: plt.close(fig)
 
 
 def img_bgr_to_rgb(im):
