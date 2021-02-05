@@ -2,8 +2,6 @@ import os
 import sys
 from types import SimpleNamespace
 
-import fastai.vision.all as fv
-
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common
 from training.train_utils import GPUManager

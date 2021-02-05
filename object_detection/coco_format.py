@@ -134,7 +134,7 @@ def visualize_dataset(img_dir, anno_json, dest):
     coco = COCO(anno_json)
     imgs = coco.loadImgs(coco.getImgIds())
     for img in tqdm(imgs):
-        im = common.load_rgb_img(os.path.join(img_dir, img['file_name']))
+        im = common.load_img(os.path.join(img_dir, img['file_name']))
         plt.figure(figsize=(10, 10))
         plt.axis('off')
         plt.imshow(im)

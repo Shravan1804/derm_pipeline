@@ -41,7 +41,7 @@ class ImageSegmentationInference(ImageInference):
 
     def process_results(self, img_path, mask_path, interp, with_labels, save_dir):
         if with_labels: im, gt = segm_utils.load_img_and_mask(img_path, mask_path)
-        else: im, gt = common.load_rgb_img(img_path), None
+        else: im, gt = common.load_img(img_path), None
         if interp.pms is None: pred = mask_utils.resize_mask(interp.decoded[0].numpy(), im.shape[:2])
         else: pred = PatchExtractor.rebuild_im_from_patches(interp.pms, interp.decoded.numpy(), im.shape[:2])
         save_path = os.path.join(save_dir, os.path.splitext(os.path.basename(img_path))[0] + "_preds.jpg")
@@ -63,7 +63,7 @@ class ImageSegmentationInference(ImageInference):
             agg_perf = self.trainer.aggregate_test_performance([self.trainer.process_test_preds(interp)])
             self.trainer.plot_custom_metrics(axs[axi], agg_perf, show_val=True)
         fig.tight_layout(pad=.2)
-        common.plt_save_fig(save_path, fig=fig, dpi=150)
+        if save_path is not None: common.plt_save_fig(save_path, fig=fig, dpi=150)
 
 
 def main(args):

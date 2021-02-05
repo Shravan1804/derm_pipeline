@@ -212,7 +212,7 @@ def main(args):
     for img_id, img_path in enumerate(img_list):
         print(f"Image {img_id+1}/{len(img_list)}: {img_path}")
         file, ext = os.path.splitext(os.path.basename(img_path))
-        im = common.load_rgb_img(img_path)
+        im = common.load_img(img_path)
 
         patch_maps = patcher.patch_grid(img_path, im)
         b_pms = common.batch_list(patch_maps, args.bs)

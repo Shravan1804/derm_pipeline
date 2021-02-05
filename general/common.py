@@ -321,25 +321,22 @@ def plt_save_fig(path, fig=None, close=True, **kwargs):
         if close: plt.close(fig)
 
 
-def img_bgr_to_rgb(im):
-    if len(im.shape) != 3:
-        raise Exception(f"Error cannot convert from bgr to rgb, im shape is {im.shape}")
-    return cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-
-
 def quick_img_size(img_path):
     """Returns height, width of img, quicker than cv2 since it does not load the image in memory"""
     width, height = PImage.open(img_path).size
     return height, width
 
 
-def load_rgb_img(path):
-    return img_bgr_to_rgb(load_img(path))
+def img_bgr_to_rgb(im):
+    if len(im.shape) != 3:
+        raise Exception(f"Error cannot convert from bgr to rgb, im shape is {im.shape}")
+    return cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
 
 
 def load_img(path):
     if is_path(path) and type(path) is not str: path = str(path)
-    return cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    im = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    return img_bgr_to_rgb(im) if len(im.shape) > 2 else im
 
 
 def prepare_img_axs(h_w_ratio, nrows, ncols, figsize_fact=8, no_axis=True, flatten=True, title=None):
@@ -361,7 +358,7 @@ def img_on_ax(im, ax, title=None):
     ax.axis('off')
 
 
-def plt_show_img(im, title, show=True, save_path=None):
+def plt_show_img(im, title="", show=True, save_path=None):
     fig, ax = plt.subplots()
     img_on_ax(im, ax, title=title)
     if save_path is not None:
