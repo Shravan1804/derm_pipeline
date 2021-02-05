@@ -32,7 +32,7 @@ def get_mask_path(img_path, img_dir='images', mask_dir='masks', mext='.png'):
 
 
 def load_img_and_mask(img_path, mask_path):
-    return common.load_rgb_img(img_path), cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
+    return common.load_rgb_img(img_path), common.load_img(mask_path)
 
 
 def cls_perf(perf, inp, targ, cls_idx, cats, bg=None, axis=1):
