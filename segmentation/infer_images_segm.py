@@ -58,7 +58,7 @@ class ImageSegmentationInference(ImageInference):
         mask_utils.im_mask_on_ax(axs[axi], im, pred, "Predictions")
         axi += 1
         if with_labels:
-            mask_utils.im_mask_on_ax(axs[axi], im, (gt != pred).astype(np.uint8), "Predictions different from GT")
+            mask_utils.im_mask_on_ax(axs[axi], im, (gt != pred).astype(np.uint8), "Preds != GT")
             axi += 1
             agg_perf = self.trainer.aggregate_test_performance([self.trainer.process_test_preds(interp)])
             self.trainer.plot_custom_metrics(axs[axi], agg_perf, show_val=True)
