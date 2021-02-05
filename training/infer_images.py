@@ -26,10 +26,11 @@ class ImageInference:
         args.inference = True
 
         if args.mpath is not None: common.check_file_valid(args.mpath)
-        elif args.mdir is None and args.exp_logdir is not None:
-            exp_logdir_mdir = os.path.join(args.exp_logdir, 'models')
-            if len(ImageInference.get_model_weights_files(exp_logdir_mdir)) > 0: args.mdir = exp_logdir_mdir
-        common.check_dir_valid(args.mdir)
+        else:
+            if args.mdir is None and args.exp_logdir is not None:
+                exp_logdir_mdir = os.path.join(args.exp_logdir, 'models')
+                if len(ImageInference.get_model_weights_files(exp_logdir_mdir)) > 0: args.mdir = exp_logdir_mdir
+            common.check_dir_valid(args.mdir)
 
         if args.impath is not None: common.check_file_valid(args.impath)
         elif args.imdir is not None: common.check_dir_valid(args.imdir)
