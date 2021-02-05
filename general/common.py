@@ -67,7 +67,7 @@ def grouped_barplot_with_err(ax, stats, groupLabels, xlabel=None, ylabel=None, t
         ax.bar(positions + offset, vals, color=c, width=barwidth, yerr=err, label=key, error_kw=ekw, edgecolor='white')
         if show_val: show_graph_values(ax, vals, positions + offset - barwidth/2, yerr=err[1])
 
-    ax.set_ylabel("/".join(stats.keys()) if ylabel is None else ylabel)
+    ax.set_ylabel("Performance" if ylabel is None else ylabel)
     ax.set_xlabel(xlabel)
     ax.set_xticks(positions)
     ax.set_xticklabels(groupLabels, rotation=45)
