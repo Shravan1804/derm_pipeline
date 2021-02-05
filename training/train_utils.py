@@ -239,6 +239,9 @@ class FastaiTrainer:
         if args.sl_tests is not None: dirnames.extend(args.sl_tests)
         for d in dirnames: common.check_dir_valid(os.path.join(args.data, d))
 
+        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, args.gpu_ids))
+        args.gpu_ids = list(range(len(args.gpu_ids)))
+        
         assert torch.cuda.is_available(), "Cannot run without CUDA device"
         args.bs = args.bs * len(args.gpu_ids) if GPUManager.in_parallel_mode() else args.bs
         # required for segmentation otherwise causes a NCCL error in inference distrib running context
