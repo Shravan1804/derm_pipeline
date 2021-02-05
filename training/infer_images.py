@@ -46,7 +46,12 @@ class ImageInference:
         self.trainer = trainer
         self.args = self.trainer.args
 
-    def learner_inference(self, learn): raise NotImplementedError
+    def learner_inference(self, learn, save_dir): raise NotImplementedError
+
+    def get_result_save_path(self, model_info):
+        save_tag = "_" + os.path.basename(self.args.mdir) if self.args.mdir is not None else ""
+        if self.args.ps is not None: save_tag += f'_ps{self.args.ps}px'
+        return common.maybe_create(self.args.exp_logdir, f'preds{save_tag}_{self.args.exp_name}_{model_info}')
 
     def maybe_patch(self, img_path):
         if self.args.ps is None: return [common.load_img(img_path)], None
@@ -68,7 +73,7 @@ class ImageInference:
             run_info = os.path.basename(mpath).split(self.trainer.MODEL_SUFFIX)[0]
             learn = self.trainer.load_learner_from_run_info(run_info, tr, val, mpath)
             if self.args.inference_on_test_dirs: self.trainer.evaluate_on_test_sets(learn, run_info)
-            else: self.learner_inference(learn)
+            else: self.learner_inference(learn, self.get_result_save_path(run_info))
             GPUManager.clean_gpu_memory(learn.dls, learn)
         if self.args.inference_on_test_dirs: self.trainer.generate_tests_reports()
 

@@ -2,7 +2,6 @@ import os
 import sys
 from pathlib import Path
 
-import cv2
 import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
@@ -22,12 +21,17 @@ class ImageSegmentationInference(ImageInference):
 
     def inference_items(self):
         """Returns list of tuples of images and mask if available"""
-        if self.args.impath is not None: return [(Path(self.args.impath), None)]
+        if self.args.impath is not None: imgs = [self.args.impath]
         elif os.path.exists(os.path.join(self.args.imdir, self.args.img_dir)):
-            return [(i, m if os.path.exists(m) else None) for i, m in zip(*self.trainer.load_items(self.args.imdir))]
-        else: return [(f, None) for f in common.list_images(self.args.imdir, full_path=True, posix_path=True)]
+            imgs = common.list_images(os.path.join(self.args.imdir, self.args.img_dir), full_path=True)
+        else: imgs = common.list_images(self.args.imdir, full_path=True)
+        items = []
+        for img in imgs:
+            mpath = Path(self.trainer.get_image_mask_path(img))
+            items.append((Path(img), mpath if os.path.exists(mpath) else None))
+        return items
 
-    def learner_inference(self, learn):
+    def learner_inference(self, learn, save_dir):
         for img_path, mask_path in self.inference_items():
             with_labels = mask_path is not None
             im_patches, pms = self.maybe_patch(img_path)
@@ -37,20 +41,17 @@ class ImageSegmentationInference(ImageInference):
             else: items = [(p,) for p in im_patches]
             interp = self.infer_items(learn, items, with_labels)
             interp.pms = pms
-            self.process_results(img_path, mask_path, interp, with_labels)
+            self.process_results(img_path, mask_path, interp, with_labels, save_dir)
 
-    def process_results(self, img_path, mask_path, interp, with_labels):
+    def process_results(self, img_path, mask_path, interp, with_labels, save_dir):
         if with_labels: im, gt = segm_utils.load_img_and_mask(img_path, mask_path)
         else: im, gt = common.load_rgb_img(img_path), None
         if interp.pms is None: pred = mask_utils.resize_mask(interp.decoded[0].numpy(), im.shape[:2])
         else: pred = PatchExtractor.rebuild_im_from_patches(interp.pms, interp.decoded.numpy(), im.shape[:2])
-        save_tag = "_" + os.path.basename(self.args.mdir) if self.args.mdir is not None else ""
-        if self.args.ps is not None: save_tag += f'_ps{self.args.ps}px'
-        spath = common.maybe_create(self.args.exp_logdir, f'preds{save_tag}_{self.args.exp_name}')
-        im_fname = os.path.basename(img_path)
-        if not self.args.no_plot: self.plot_results(interp, im_fname, im, gt, pred, with_labels, spath)
+        save_path = os.path.join(save_dir, os.path.splitext(os.path.basename(img_path))[0] + "_preds.jpg")
+        if not self.args.no_plot: self.plot_results(interp, im, gt, pred, with_labels, save_path)
 
-    def plot_results(self, interp, im_name, im, gt, pred, with_labels, save_dir):
+    def plot_results(self, interp, im, gt, pred, with_labels, save_path):
         ncols = 5 if with_labels else 2
         fig, axs = common.prepare_img_axs(im.shape[0] / im.shape[1], 1, ncols, flatten=True)
         common.img_on_ax(im, axs[0], title='Original image')
@@ -66,7 +67,7 @@ class ImageSegmentationInference(ImageInference):
             agg_perf = self.trainer.aggregate_test_performance([self.trainer.process_test_preds(interp)])
             self.trainer.plot_custom_metrics(axs[axi], agg_perf, show_val=True)
         fig.tight_layout(pad=.2)
-        fig.savefig(os.path.join(save_dir, os.path.splitext(im_name)[0]+"_preds.jpg"), dpi=150)
+        fig.savefig(save_path, dpi=150)
 
 
 def main(args):
