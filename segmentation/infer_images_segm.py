@@ -25,11 +25,7 @@ class ImageSegmentationInference(ImageInference):
         elif os.path.exists(os.path.join(self.args.imdir, self.args.img_dir)):
             imgs = common.list_images(os.path.join(self.args.imdir, self.args.img_dir), full_path=True)
         else: imgs = common.list_images(self.args.imdir, full_path=True)
-        items = []
-        for img in imgs:
-            mpath = Path(self.trainer.get_image_mask_path(img))
-            items.append((Path(img), mpath if os.path.exists(mpath) else None))
-        return items
+        return [(Path(img), self.trainer.get_image_mask_path(img)) for img in imgs]
 
     def learner_inference(self, learn, save_dir):
         for img_path, mask_path in self.inference_items():

@@ -1,8 +1,6 @@
 import os
 import sys
 
-import cv2
-
 import torch
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
@@ -24,11 +22,14 @@ def common_segm_args(parser, pdef=dict(), phelp=dict()):
 
 
 def get_mask_path(img_path, img_dir='images', mask_dir='masks', mext='.png'):
-    if type(img_path) is str:
+    if not os.path.exists(img_path) or img_dir not in str(img_path):
+        return None
+    elif type(img_path) is str:
         file, ext = os.path.splitext(os.path.basename(img_path))
-        return img_path.replace(f'{img_dir}/{file}{ext}', f'{mask_dir}/{file}{mext}')
-    else:
-        return img_path.parent.parent/mask_dir/(img_path.stem + mext)
+        mask_path = img_path.replace(f'{img_dir}/{file}{ext}', f'{mask_dir}/{file}{mext}')
+    else: mask_path = img_path.parent.parent/mask_dir/(img_path.stem + mext)
+    if os.path.exists(mask_path): return mask_path
+    else: return None
 
 
 def load_img_and_mask(img_path, mask_path):
