@@ -42,8 +42,10 @@ def rm_small_objs_from_bin_mask(binary_mask, min_size):
 def load_mask_array(mask_path): return cv2.imread(str(mask_path), cv2.IMREAD_UNCHANGED)
 
 
-def resize_mask(mask, new_size):
-    return cv2.resize(mask, new_size, interpolation=cv2.INTER_NEAREST)
+def resize_mask(mask, new_size_h_w):
+    h, w = new_size_h_w
+    # cv2 resize new dim takes first w then h!
+    return cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
 
 
 def crop_im(im, bbox):
