@@ -14,7 +14,6 @@ from general import common
 from training import train_utils, train_utils_img
 from general.PatchExtractor import PatchExtractor
 import classification.classification_utils as classif_utils
-import training.fastai_monkey_patches as fmp
 
 
 class ImageClassificationTrainer(train_utils_img.ImageTrainer):
@@ -22,20 +21,12 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def get_argparser(desc="Fastai segmentation image trainer arguments", pdef=dict(), phelp=dict()):
         # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
         psr = super(ImageClassificationTrainer, ImageClassificationTrainer).get_argparser(desc, pdef, phelp)
-        psr.add_argument('--label-smoothing-loss', action='store_true', help="For unsure labels")
-        psr.add_argument('--focal-loss', action='store_true', help="In imbalanced ds, favor hard cases")
-        psr.add_argument('--focal-loss-plus-ce-loss', action='store_true', help="Focal loss + cross entropy loss")
-        psr.add_argument('--ce-loss', action='store_true', help="cross entropy loss")
-        psr.add_argument('--weighted-loss', action='store_true', help="Uses weighted loss based on class distrib")
         psr.add_argument('--oversample', action='store_true', help="Uses weighted dls based on class distrib")
-
-        psr.add_argument('--RMSProp', action='store_true', help="Use RMSProp optimizer")
         return psr
 
     @staticmethod
     def get_exp_logdir(args, custom=""):
         d = ''
-        if args.weighted_loss: d += '_weighted-loss'
         if args.oversample: d += '_oversample'
         custom = f'{d}_{custom}'
         return super(ImageClassificationTrainer, ImageClassificationTrainer).get_exp_logdir(args, custom=custom)
@@ -83,40 +74,18 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
         labels, class_weights = [x[1] for x in train_items], self.get_class_weights(train_items).numpy()
         return class_weights[fv.CategoryMap(self.args.cats).map_objs(labels)]
 
-    def get_loss_fn(self, dls):
-        class_weights = self.get_class_weights(dls.train_ds.items).to(dls.device) if self.args.weighted_loss else None
-        if self.args.label_smoothing_loss:
-            loss_func = fmp.FixedLabelSmoothingCrossEntropyFlat(weight=class_weights)
-        elif self.args.focal_loss:
-            loss_func = fmp.FixedFocalLossFlat(weight=class_weights)
-        elif self.args.focal_loss_plus_ce_loss:
-            loss_func = fmp.FocalLossPlusCElossFlat(weight=class_weights)
-        elif self.args.ce_loss:
-            loss_func = fv.CrossEntropyLossFlat(weight=class_weights)
-        else:
-            loss_func = None
-        return loss_func
-
-    def get_opt_fn(self):
-        if self.args.RMSProp:
-            opt_func = fv.RMSProp
-        else:
-            opt_func = fv.Adam
-        return opt_func
-
     def create_learner(self, dls):
-        loss_func = self.get_loss_fn(dls)
-        opt_func = self.get_opt_fn()
+        learn_kwargs = self.get_learner_kwargs(dls)
         metrics = list(self.cust_metrics.values()) + [fv.accuracy]  # for early stop callback
         if "efficientnet" in self.args.model:
             from efficientnet_pytorch import EfficientNet
             model = EfficientNet.from_pretrained(self.args.model)
             model._fc = torch.nn.Linear(model._fc.in_features, dls.c)
             msplitter = lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params)
-            learn = fv.Learner(dls, model, metrics=metrics, loss_func=loss_func, opt_func=opt_func, splitter=msplitter)
+            learn = fv.Learner(dls, model, metrics=metrics, splitter=msplitter, **learn_kwargs)
         else:
             model = getattr(fv, self.args.model)
-            learn = fv.cnn_learner(dls, model, loss_func=loss_func, opt_func=opt_func, metrics=metrics)
+            learn = fv.cnn_learner(dls, model, metrics=metrics, **learn_kwargs)
         return self.prepare_learner(learn)
 
     def correct_wl(self, wl_items_with_labels, preds):

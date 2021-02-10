@@ -100,8 +100,9 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         return self.create_dls_from_lst(blocks, tr, val, bs, size, get_y=self.load_mask)
 
     def create_learner(self, dls):
+        learn_kwargs = self.get_learner_kwargs(dls)
         metrics = list(self.cust_metrics.values()) + [fv.foreground_acc]
-        learn = fv.unet_learner(dls, getattr(fv, self.args.model), metrics=metrics)
+        learn = fv.unet_learner(dls, getattr(fv, self.args.model), metrics=metrics, **learn_kwargs)
         return self.prepare_learner(learn)
 
     def correct_wl(self, wl_items_with_labels, preds):

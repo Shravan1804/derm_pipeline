@@ -14,6 +14,7 @@ import fastai.callback.tensorboard as fc
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common, crypto
 from training import train_utils
+import training.fastai_monkey_patches as fmp
 
 
 class ImageTrainer(train_utils.FastaiTrainer):
@@ -32,11 +33,22 @@ class ImageTrainer(train_utils.FastaiTrainer):
                             help=phelp.get('--progr-size', "Applies progressive resizing"))
         parser.add_argument('--size-facts', default=pdef.get('--size-facts', [.5, .75, 1]), nargs='+', type=float,
                             help=phelp.get('--size-facts', 'Increase progressive size factors'))
+
+        parser.add_argument('--label-smoothing-loss', action='store_true', help="For unsure labels")
+        parser.add_argument('--focal-loss', action='store_true', help="In imbalanced ds, favor hard cases")
+        parser.add_argument('--focal-loss-plus-ce-loss', action='store_true', help="Focal loss + cross entropy loss")
+        parser.add_argument('--ce-loss', action='store_true', help="cross entropy loss")
+        parser.add_argument('--weighted-loss', action='store_true', help="Uses weighted loss based on class distrib")
         return parser
 
     @staticmethod
     def get_exp_logdir(args, custom=""):
         d = f'_input{args.input_size}'
+        if args.label_smoothing_loss: d += '_smooth-loss'
+        elif args.focal_loss: d += '_focal-loss'
+        elif args.focal_loss_plus_ce_loss: d += '_focal-plus-ce-loss'
+        elif args.ce_loss: d += '_ce-loss'
+        if args.weighted_loss: d += '_weighted-loss'
         if args.progr_size: d += f'_progr-size{"_".join(map(str, args.size_facts))}'
         custom = f'{d}_{custom}'
         return super(ImageTrainer, ImageTrainer).get_exp_logdir(args, custom=custom)
@@ -56,6 +68,27 @@ class ImageTrainer(train_utils.FastaiTrainer):
     def compute_conf_mat(self, targs, preds): raise NotImplementedError
 
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn): raise NotImplementedError
+
+    def get_class_weights(self, dls): raise NotImplementedError
+
+    def get_loss_fn(self, dls):
+        class_weights = self.get_class_weights(dls.train_ds.items).to(dls.device) if self.args.weighted_loss else None
+        if self.args.label_smoothing_loss:
+            loss_func = fmp.FixedLabelSmoothingCrossEntropyFlat(weight=class_weights)
+        elif self.args.focal_loss:
+            loss_func = fmp.FixedFocalLossFlat(weight=class_weights)
+        elif self.args.focal_loss_plus_ce_loss:
+            loss_func = fmp.FocalLossPlusCElossFlat(weight=class_weights)
+        elif self.args.ce_loss:
+            loss_func = fv.CrossEntropyLossFlat(weight=class_weights)
+        else:
+            loss_func = None
+        return loss_func
+
+    def get_learner_kwargs(self, dls):
+        kwargs = super().get_learner_kwargs()
+        kwargs['loss_func'] = self.get_loss_fn(dls)
+        return kwargs
 
     def get_cats_with_all(self):
         return [self.ALL_CATS, *self.args.cats]

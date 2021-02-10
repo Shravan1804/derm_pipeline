@@ -202,6 +202,7 @@ class FastaiTrainer:
         parser.add_argument('--lr', type=float, help='when None: uses auto_lr in parallel mode else .002')
         parser.add_argument('--fepochs', type=int, default=4, help='Epochs for frozen model')
         parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 12), help='Epochs for unfrozen model')
+        parser.add_argument('--RMSProp', action='store_true', help="Use RMSProp optimizer")
 
         parser.add_argument('--no-norm', action='store_true', help="Do not normalizes data")
         parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
@@ -223,6 +224,7 @@ class FastaiTrainer:
         d = f'{common.now()}_{args.model}_bs{args.bs}_epo{args.epochs}_seed{args.seed}' \
             f'_world{args.num_machines * len(args.gpu_ids)}'
         if not args.no_norm: d += '_normed'
+        d += '_RMSProp' if args.RMSProp else '_Adam'
         d += '_fp32' if args.full_precision else '_fp16'
         d += f'_CV{args.nfolds}' if args.cross_val else f'_noCV_valid{args.valid_size}'
         d += '_WL' if args.use_wl else '_SL'
@@ -291,6 +293,13 @@ class FastaiTrainer:
     def plot_test_performance(self, test_path, agg): raise NotImplementedError
 
     def tensorboard_cb(self, run_info): raise NotImplementedError
+
+    def get_learner_kwargs(self):
+        if self.args.RMSProp:
+            opt_func = fv.RMSProp
+        else:
+            opt_func = fv.Adam
+        return {'opt_func': opt_func}
 
     def split_data(self, items: np.ndarray, items_cls: np.ndarray):
         np.random.seed(self.args.seed)
