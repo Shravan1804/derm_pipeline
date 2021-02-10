@@ -34,6 +34,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
 
     def __init__(self, args, stratify=False, full_img_sep=CROP_SEP, **kwargs):
         self.NO_BG = '_no_bg'    # used to differentiate metrics ignoring background
+        self.loss_axis = 1
         super().__init__(args, stratify, full_img_sep, **kwargs)
 
     def load_items(self, path):

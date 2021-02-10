@@ -63,6 +63,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
         self.ALL_CATS = 'all'
         self.full_img_sep = full_img_sep
         self.BASIC_PERF_FNS = perf_fns
+        self.loss_axis = -1
         super().__init__(args, stratify)
 
     def compute_conf_mat(self, targs, preds): raise NotImplementedError
@@ -74,13 +75,13 @@ class ImageTrainer(train_utils.FastaiTrainer):
     def get_loss_fn(self, dls):
         class_weights = self.get_class_weights(dls.train_ds.items).to(dls.device) if self.args.weighted_loss else None
         if self.args.label_smoothing_loss:
-            loss_func = fmp.FixedLabelSmoothingCrossEntropyFlat(weight=class_weights)
+            loss_func = fmp.FixedLabelSmoothingCrossEntropyFlat(weight=class_weights, axis=self.loss_axis)
         elif self.args.focal_loss:
-            loss_func = fmp.FixedFocalLossFlat(weight=class_weights)
+            loss_func = fmp.FixedFocalLossFlat(weight=class_weights, axis=self.loss_axis)
         elif self.args.focal_loss_plus_ce_loss:
-            loss_func = fmp.FocalLossPlusCElossFlat(weight=class_weights)
+            loss_func = fmp.FocalLossPlusCElossFlat(weight=class_weights, axis=self.loss_axis)
         elif self.args.ce_loss:
-            loss_func = fv.CrossEntropyLossFlat(weight=class_weights)
+            loss_func = fv.CrossEntropyLossFlat(weight=class_weights, axis=self.loss_axis)
         else:
             loss_func = None
         return loss_func
