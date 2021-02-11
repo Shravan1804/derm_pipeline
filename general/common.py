@@ -339,6 +339,11 @@ def load_img(path):
     return img_bgr_to_rgb(im) if len(im.shape) > 2 else im
 
 
+def save_img(im, path):
+    """If im has more than two channels, assumes it is an rgb image thus will convert it to bgr before using imwrite"""
+    cv2.imwrite(path, cv2.cvtColor(im, cv2.COLOR_RGB2BGR) if len(im.shape) > 2 else im)
+
+
 def prepare_img_axs(h_w_ratio, nrows, ncols, figsize_fact=8, no_axis=True, flatten=True, title=None):
     base_figsize = (ncols*figsize_fact, nrows*figsize_fact*h_w_ratio)
     plt.rcParams['font.size'] = max(base_figsize) * .8
