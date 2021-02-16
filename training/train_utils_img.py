@@ -168,10 +168,12 @@ class ImageTrainer(train_utils.FastaiTrainer):
         return full_images_dict
 
     def split_data(self, items: np.ndarray, items_cls: np.ndarray):
+        """This version of split data makes sure that patches from the same image do not leak between train/val sets"""
         fi_dict = self.get_full_img_dict(items, items_cls)
         for fold, tr, val in super().split_data(*tuple(np.array(lst) for lst in zip(*fi_dict.keys()))):
             tr = tuple(np.array(lst) for lst in zip(*[img for fik in zip(*tr) for img in fi_dict[fik]]))
-            val = tuple(np.array(lst) for lst in zip(*[img for fik in zip(*val) for img in fi_dict[fik]]))
+            if self.args.valid_size > 0:    # if not True, then patches are from test set => no possible leaks
+                val = tuple(np.array(lst) for lst in zip(*[img for fik in zip(*val) for img in fi_dict[fik]]))
             yield fold, tr, val
 
     def load_image_item(self, item):
