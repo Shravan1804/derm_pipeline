@@ -376,9 +376,10 @@ class FastaiTrainer:
             with GPUManager.running_context(learn, self.args.gpu_ids):
                 interp = SimpleNamespace()
                 interp.preds, interp.targs, interp.decoded = learn.get_preds(dl=dl, with_decoded=True)
-                GPUManager.clean_gpu_memory(dl)
+            interp.dl = dl
             interp = self.process_test_preds(interp)
-            del interp.preds, interp.targs, interp.decoded
+            del interp.preds, interp.targs, interp.decoded, interp.dl
+            GPUManager.clean_gpu_memory(dl)
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(interp)
 
     def process_test_preds(self, interp):
