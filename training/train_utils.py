@@ -341,6 +341,7 @@ class FastaiTrainer:
             with GPUManager.running_context(learn, self.args.gpu_ids):
                 lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
             lr = lr_min / 10
+        print("Learning rate is", lr)
         return lr
 
     def basic_train(self, run, learn, dls=None, save_model=True):

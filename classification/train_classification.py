@@ -76,7 +76,8 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
 
     def create_learner(self, dls):
         learn_kwargs = self.get_learner_kwargs(dls)
-        metrics = list(self.cust_metrics.values()) + [fv.accuracy]  # for early stop callback
+        metrics = list(self.cust_metrics.values())
+        metrics += [fv.Precision(average='micro'), fv.Recall(average='micro')] + [fv.accuracy]  # acc for early stop cb
         if "efficientnet" in self.args.model:
             from efficientnet_pytorch import EfficientNet
             model = EfficientNet.from_pretrained(self.args.model)
