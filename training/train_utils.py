@@ -269,7 +269,7 @@ class FastaiTrainer:
 
     def prepare_custom_metrics(self): raise NotImplementedError
 
-    def load_items(self, path): raise NotImplementedError
+    def load_items(self, path): raise NotImplementedError   # returns tuple of items array and item labels array
 
     def get_test_sets_items(self): raise NotImplementedError
 
@@ -312,6 +312,9 @@ class FastaiTrainer:
 
         if self.args.cross_val:
             splitter = cv_splitter(n_splits=self.args.nfolds, shuffle=True, random_state=self.args.seed)
+        elif self.args.valid_size <= 0:
+            print("WARNING: --valid-size is 0, will use test sets as validation set")
+            yield 0, (items, items_cls), self.get_test_sets_items(merged=True)
         else:
             splitter = no_cv_splitter(n_splits=1, test_size=self.args.valid_size, random_state=self.args.seed)
 
@@ -370,7 +373,7 @@ class FastaiTrainer:
 
     def evaluate_on_test_sets(self, learn, run):
         """Evaluate test sets, clears GPU memory held by test dl(s)"""
-        for test_name, test_items_with_cls in self.get_test_sets_items():
+        for test_name, test_items_with_cls in self.get_test_sets_items(merged=False):
             print("Testing model", run, "on", test_name)
             GPUManager.sync_distributed_process()
             dl = learn.dls.test_dl(list(zip(*test_items_with_cls)), with_labels=True)

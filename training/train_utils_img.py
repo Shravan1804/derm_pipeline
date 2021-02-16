@@ -135,21 +135,24 @@ class ImageTrainer(train_utils.FastaiTrainer):
         tbdir = common.maybe_create(self.args.exp_logdir, 'tb_logs')
         return ImageTBCb(tbdir, run_info, self.cust_metrics.keys(), self.ALL_CATS)
 
-    def get_test_sets_items(self):
+    def get_test_sets_items(self, merged=True):
         if self.args.sl_tests is None:
-            return np.array([])
-        test_sets_items = []
-        for test_dir in self.args.sl_tests:
-            test_sets_items.append((test_dir, self.load_items(os.path.join(self.args.data, test_dir))))
-        return test_sets_items
+            ts_items = np.array([]), np.array([])
+            return ts_items if merged else None, ts_items
+        ts_items = [(td, self.load_items(os.path.join(self.args.data, td))) for td in self.args.sl_tests]
+        if merged: return tuple(map(np.concatenate, zip(*[t[1] for t in ts_items])))
+        else: return ts_items
 
-    def get_train_items(self):
-        sl_images = [self.load_items(os.path.join(self.args.data, sl)) for sl in self.args.sl_train]
-        if self.args.use_wl:
-            wl_images = [self.load_items(os.path.join(self.args.data, wl)) for wl in self.args.wl_train]
-        else:
-            wl_images = [(np.array([]), np.array([]))]
-        return tuple(map(np.concatenate, zip(*sl_images))), tuple(map(np.concatenate, zip(*wl_images)))
+    def get_train_items(self, merged=True):
+        """Returns tuple of sl_items and wl_items, which are both tuples of item and item_cls arrays"""
+        sl_images = [(sl, self.load_items(os.path.join(self.args.data, sl))) for sl in self.args.sl_train]
+        if self.args.use_wl and self.args.wl_train is not None:
+            wl_images = [(wl, self.load_items(os.path.join(self.args.data, wl))) for wl in self.args.wl_train]
+        else: wl_images = [(np.array([]), np.array([]))]
+        if merged:
+            sl_images, wl_images = [s[1] for s in sl_images], [w[1] for w in wl_images]
+            return tuple(map(np.concatenate, zip(*sl_images))), tuple(map(np.concatenate, zip(*wl_images)))
+        else: return sl_images, wl_images
 
     def get_full_img_cls(self, img_path):
         if self.stratify: raise NotImplementedError
