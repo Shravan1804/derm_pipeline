@@ -315,6 +315,7 @@ class FastaiTrainer:
         elif self.args.valid_size <= 0:
             print("WARNING: --valid-size is 0, will use test sets as validation set")
             yield 0, (items, items_cls), self.get_test_sets_items(merged=True)
+            return
         else:
             splitter = no_cv_splitter(n_splits=1, test_size=self.args.valid_size, random_state=self.args.seed)
 
