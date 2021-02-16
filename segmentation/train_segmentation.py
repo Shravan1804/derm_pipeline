@@ -66,7 +66,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def aggregate_test_performance(self, folds_res):
         """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
         agg = super().aggregate_test_performance(folds_res)
-        for perf_fn in self.BASIC_PERF_FNS:
+        for perf_fn in self.args.metrics_fns:
             mns = [self.get_cat_metric_name(perf_fn, cat, self.args.bg) for cat in self.get_cats_with_all()]
             agg[f'{perf_fn}{self.NO_BG}'] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
         return agg

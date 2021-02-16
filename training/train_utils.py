@@ -208,6 +208,7 @@ class FastaiTrainer:
         parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
         parser.add_argument('--early-stop', action='store_true', help="Early stopping during training")
         parser.add_argument('--no-plot', action='store_true', help="Will not plot test results (e.g. too many classes)")
+        parser.add_argument("--metrics-fns", type=str, nargs='+', default=['precision', 'recall'], help="metrics")
 
         parser.add_argument('--proc-gpu', type=int, default=0, help="Id of gpu to be used by process")
         parser.add_argument("--gpu-ids", type=int, nargs='+', default=GPUManager.default_gpu_device_ids(),

@@ -59,10 +59,9 @@ class ImageTrainer(train_utils.FastaiTrainer):
             args.exp_logdir = os.path.join(args.logdir, ImageTrainer.get_exp_logdir(args))
         super(ImageTrainer, ImageTrainer).prepare_training(args)
 
-    def __init__(self, args, stratify, full_img_sep, perf_fns=['precision', 'recall'], **kwargs):
+    def __init__(self, args, stratify, full_img_sep, **kwargs):
         self.ALL_CATS = 'all'
         self.full_img_sep = full_img_sep
-        self.BASIC_PERF_FNS = perf_fns
         self.loss_axis = -1
         super().__init__(args, stratify)
 
@@ -98,14 +97,14 @@ class ImageTrainer(train_utils.FastaiTrainer):
 
     def prepare_custom_metrics(self):
         metrics_fn = {}
-        for perf_fn in self.BASIC_PERF_FNS:
+        for perf_fn in self.args.metrics_fns:
             for cat_id, cat in zip([None, *range(len(self.args.cats))], self.get_cats_with_all()):
                 self.create_cats_metrics(perf_fn, cat_id, cat, metrics_fn)
         return metrics_fn
 
     def plot_custom_metrics(self, ax, agg_perf, show_val, title=None):
         ax.axis('on')
-        bar_perf = {mn: cat_mres for p in self.BASIC_PERF_FNS for mn, cat_mres in agg_perf.items() if p in mn}
+        bar_perf = {mn: cat_mres for p in self.args.metrics_fns for mn, cat_mres in agg_perf.items() if p in mn}
         bar_cats = self.get_cats_with_all()
         common.grouped_barplot_with_err(ax, bar_perf, bar_cats, xlabel='Classes', show_val=show_val, title=title)
 
@@ -117,7 +116,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
     def aggregate_test_performance(self, folds_res):
         agg = super().aggregate_test_performance(folds_res)
         # for each perf_fn, combine results of each cats
-        for perf_fn in self.BASIC_PERF_FNS:
+        for perf_fn in self.args.metrics_fns:
             # order metrics results on self.get_cats_with_all()
             mns = [self.get_cat_metric_name(perf_fn, cat) for cat in self.get_cats_with_all()]
             agg[perf_fn] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
