@@ -39,7 +39,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
 
     def load_items(self, path):
         images = common.list_images(os.path.join(path, self.args.img_dir), full_path=True, posix_path=True)
-        return np.array(images), np.array([self.get_image_mask_path(img_path) for img_path in images])
+        return fv.L(images), fv.L([self.get_image_mask_path(img_path) for img_path in images])
 
     def get_image_mask_path(self, img_path):
         return segm_utils.get_mask_path(img_path, self.args.img_dir, self.args.mask_dir, self.args.mext)
@@ -96,7 +96,6 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
             CustomCocoEval.plot_coco_eval(self.coco_param_labels, agg_perf['cocoeval'], figsize, save_path, show_val)
 
     def create_dls(self, tr, val, bs, size):
-        tr, val = map(lambda x: tuple(map(np.ndarray.tolist, x)), (tr, val))
         blocks = fv.ImageBlock, fv.MaskBlock(self.args.cats)
         return self.create_dls_from_lst(blocks, tr, val, bs, size, get_y=self.load_mask)
 
@@ -110,7 +109,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         wl_items, labels = wl_items_with_labels
         labels = [mask_utils.non_binary_mask_to_rles(self.load_image_item(pred.numpy())) for pred in preds]
         # preds size is self.args.input_size but wl_items are orig size => first item_tfms should resize the input
-        return wl_items, np.array(labels)
+        return wl_items, fv.L(labels)
 
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='foreground_acc', min_delta=0.01, patience=3)

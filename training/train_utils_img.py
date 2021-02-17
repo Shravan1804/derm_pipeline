@@ -135,49 +135,45 @@ class ImageTrainer(train_utils.FastaiTrainer):
         tbdir = common.maybe_create(self.args.exp_logdir, 'tb_logs')
         return ImageTBCb(tbdir, run_info, self.cust_metrics.keys(), self.ALL_CATS)
 
-    def get_test_sets_items(self, merged=True):
-        if self.args.sl_tests is None:
-            ts_items = np.array([]), np.array([])
-            return ts_items if merged else None, ts_items
-        ts_items = [(td, self.load_items(os.path.join(self.args.data, td))) for td in self.args.sl_tests]
-        if merged: return tuple(map(np.concatenate, zip(*[t[1] for t in ts_items])))
-        else: return ts_items
+    def load_multiple_items_sets(self, set_locs, merged):
+        """Loads all sets of items. Merge them if specified. Returns tuples of item and item_cls lists"""
+        if set_locs is None:
+            items_with_cls = fv.L(), fv.L()
+            return items_with_cls if merged else (None, items_with_cls)
+        else:
+            items_sets = [(cl, self.load_items(os.path.join(self.args.data, cl))) for cl in set_locs]
+            return fv.L([t[1] for t in items_sets]).map_zip(fv.operator.add) if merged else items_sets
+
+    def get_test_sets_items(self, merged=True): return self.load_multiple_items_sets(self.args.sl_tests, merged)
 
     def get_train_items(self, merged=True):
-        """Returns tuple of sl_items and wl_items, which are both tuples of item and item_cls arrays"""
-        sl_images = [(sl, self.load_items(os.path.join(self.args.data, sl))) for sl in self.args.sl_train]
-        if self.args.use_wl and self.args.wl_train is not None:
-            wl_images = [(wl, self.load_items(os.path.join(self.args.data, wl))) for wl in self.args.wl_train]
-        else: wl_images = [(np.array([]), np.array([]))]
-        if merged:
-            sl_images, wl_images = [s[1] for s in sl_images], [w[1] for w in wl_images]
-            return tuple(map(np.concatenate, zip(*sl_images))), tuple(map(np.concatenate, zip(*wl_images)))
-        else: return sl_images, wl_images
+        sl, wl = self.args.sl_tests, self.args.wl_train
+        return self.load_multiple_items_sets(sl, merged), self.load_multiple_items_sets(wl, merged)
 
     def get_full_img_cls(self, img_path):
         if self.stratify: raise NotImplementedError
-        else: return 1
+        else: return 1  # when stratified splits are not needed, consider all images have the same cls
 
     def get_full_img_dict(self, images, targets):
         """Returns a dict with keys (full images, tgt) and values the lst of corresponding images."""
-        full_images_dict = defaultdict(list)
+        full_images_dict = defaultdict(fv.L)
         for img, tgt in zip(images, targets):
             file, ext = os.path.splitext(os.path.basename(img))
             fi = f'{file.split(self.full_img_sep)[0] if self.full_img_sep in file else file}{ext}'
             full_images_dict[(fi, self.get_full_img_cls(img))].append((img, tgt))
         return full_images_dict
 
-    def split_data(self, items: np.ndarray, items_cls: np.ndarray):
+    def split_data(self, items, items_cls):
         """This version of split data makes sure that patches from the same image do not leak between train/val sets"""
         fi_dict = self.get_full_img_dict(items, items_cls)
-        for fold, tr, val in super().split_data(*tuple(np.array(lst) for lst in zip(*fi_dict.keys()))):
-            tr = tuple(np.array(lst) for lst in zip(*[img for fik in zip(*tr) for img in fi_dict[fik]]))
-            if self.args.valid_size > 0:    # if not True, then patches are from test set => no possible leaks
-                val = tuple(np.array(lst) for lst in zip(*[img for fik in zip(*val) for img in fi_dict[fik]]))
+        for fold, tr, val in super().split_data(*fv.L(fi_dict.keys()).map_zip(fv.L)):
+            tr = fv.L([fi_dict[fik] for fik in tr.zip()]).concat().map_zip(fv.L)
+            if self.args.valid_size > 0:    # if not True, then valid are patches from test set => no possible leaks
+                val = fv.L([fi_dict[fik] for fik in val.zip()]).concat().map_zip(fv.L)
             yield fold, tr, val
 
     def load_image_item(self, item):
-        if type(item) is np.ndarray: return item
+        if type(item) is np.ndarray: return item    # image/mask is already loaded as np array
         elif self.args.encrypted: return crypto.decrypt_img(item, self.args.ckey)
         else: return item
 

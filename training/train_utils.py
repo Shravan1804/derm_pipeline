@@ -7,7 +7,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from collections import defaultdict
 
-import numpy as np
 from sklearn.model_selection import KFold, ShuffleSplit, StratifiedKFold, StratifiedShuffleSplit
 
 import torch
@@ -236,11 +235,11 @@ class FastaiTrainer:
     def prepare_training(args):
         common.set_seeds(args.seed)
         common.check_dir_valid(args.data)
-        dirnames = []
-        if args.wl_train is not None: dirnames.extend(args.wl_train)
-        if args.sl_train is not None: dirnames.extend(args.sl_train)
-        if args.sl_tests is not None: dirnames.extend(args.sl_tests)
-        for d in dirnames: common.check_dir_valid(os.path.join(args.data, d))
+        data_names = []
+        if args.wl_train is not None: data_names.extend(args.wl_train)
+        if args.sl_train is not None: data_names.extend(args.sl_train)
+        if args.sl_tests is not None: data_names.extend(args.sl_tests)
+        for d in data_names: os.path.exists(os.path.join(args.data, d))
 
         os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, args.gpu_ids))
         args.gpu_ids = list(range(len(args.gpu_ids)))
@@ -302,9 +301,7 @@ class FastaiTrainer:
             opt_func = fv.Adam
         return {'opt_func': opt_func}
 
-    def split_data(self, items: np.ndarray, items_cls: np.ndarray):
-        np.random.seed(self.args.seed)
-
+    def split_data(self, items, items_cls):
         if self.stratify:
             cv_splitter, no_cv_splitter = StratifiedKFold, StratifiedShuffleSplit
         else:

@@ -19,7 +19,7 @@ import classification.classification_utils as classif_utils
 
 class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     @staticmethod
-    def get_argparser(desc="Fastai segmentation image trainer arguments", pdef=dict(), phelp=dict()):
+    def get_argparser(desc="Fastai image classification trainer arguments", pdef=dict(), phelp=dict()):
         # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
         psr = super(ImageClassificationTrainer, ImageClassificationTrainer).get_argparser(desc, pdef, phelp)
         psr.add_argument('--oversample', action='store_true', help="Uses weighted dls based on class distrib")
@@ -45,7 +45,7 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
 
     def load_items(self, path):
         images = common.list_files_in_dirs(path, full_path=True, posix_path=True)
-        return np.array(images), np.array([classif_utils.get_image_cls(img_path) for img_path in images])
+        return fv.L(images), fv.L([classif_utils.get_image_cls(img_path) for img_path in images])
 
     def get_full_img_cls(self, img_path): return classif_utils.get_image_cls(img_path)
 
@@ -59,7 +59,6 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
 
     def create_dls(self, tr, val, bs, size):
         blocks = fv.ImageBlock, fv.CategoryBlock(vocab=self.args.cats)
-        tr, val = tuple(map(np.ndarray.tolist, tr)), tuple(map(np.ndarray.tolist, val))
         if self.args.oversample:
             kwargs = {'dl_type': fv.WeightedDL, 'wgts': self.get_train_items_weights(list(zip(*tr))),
                       'dl_kwargs': [{}, {'cls': fv.TfmdDL}]}
@@ -93,9 +92,9 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def correct_wl(self, wl_items_with_labels, preds):
         wl_items, labels = wl_items_with_labels
         preds = np.array(self.args.cats)[preds.numpy()]
-        corr = labels != preds
+        corr = np.array(labels) != preds
         labels[corr] = np.array([p for p in preds[corr]])
-        return wl_items, labels
+        return wl_items, fv.L(labels.tolist())
 
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='accuracy', min_delta=0.01, patience=3)
