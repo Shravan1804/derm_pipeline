@@ -142,12 +142,12 @@ class ImageTrainer(train_utils.FastaiTrainer):
             return items_with_cls if merged else (None, items_with_cls)
         else:
             items_sets = [(cl, self.load_items(os.path.join(self.args.data, cl))) for cl in set_locs]
-            return fv.L([t[1] for t in items_sets]).map_zip(fv.operator.add) if merged else items_sets
+            return fv.L([t[1] for t in items_sets]).map_zip(fv.L).map(fv.L.concat) if merged else items_sets
 
     def get_test_sets_items(self, merged=True): return self.load_multiple_items_sets(self.args.sl_tests, merged)
 
     def get_train_items(self, merged=True):
-        sl, wl = self.args.sl_tests, self.args.wl_train
+        sl, wl = self.args.sl_train, self.args.wl_train
         return self.load_multiple_items_sets(sl, merged), self.load_multiple_items_sets(wl, merged)
 
     def get_full_img_cls(self, img_path):
@@ -167,9 +167,9 @@ class ImageTrainer(train_utils.FastaiTrainer):
         """This version of split data makes sure that patches from the same image do not leak between train/val sets"""
         fi_dict = self.get_full_img_dict(items, items_cls)
         for fold, tr, val in super().split_data(*fv.L(fi_dict.keys()).map_zip(fv.L)):
-            tr = fv.L([fi_dict[fik] for fik in tr.zip()]).concat().map_zip(fv.L)
+            tr = fv.L([fi_dict[fik] for fik in zip(*tr)]).concat().map_zip(fv.L)
             if self.args.valid_size > 0:    # if not True, then valid are patches from test set => no possible leaks
-                val = fv.L([fi_dict[fik] for fik in val.zip()]).concat().map_zip(fv.L)
+                val = fv.L([fi_dict[fik] for fik in zip(*val)]).concat().map_zip(fv.L)
             yield fold, tr, val
 
     def load_image_item(self, item):
