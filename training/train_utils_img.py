@@ -197,7 +197,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
     def maybe_progressive_resizing(self, tr, val, fold_suffix):
         if self.args.progr_size:
             input_sizes = [int(self.args.input_size * f) for f in self.args.size_facts]
-            batch_sizes = [max(1, min(int(self.args.bs / f / f), tr[0].size) // 2 * 2) for f in self.args.size_facts]
+            batch_sizes = [max(1, min(int(self.args.bs / f / f), len(tr[0])) // 2 * 2) for f in self.args.size_facts]
         else:
             input_sizes = [self.args.input_size]
             batch_sizes = [self.args.bs]
