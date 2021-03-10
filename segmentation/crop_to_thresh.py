@@ -4,22 +4,24 @@ import argparse
 import multiprocessing as mp
 
 import cv2
+import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common, concurrency
 import segmentation.segmentation_utils as seg_utils
-from segmentation.mask_utils import crop_img_and_mask_to_objs
+from segmentation.mask_utils import crop_img_and_mask_to_objs, crop_im
 
 
 SEP = '__CROP__'
 
 
-def save_crops(args, thresh, img_path, cropped_imgs, cropped_masks, crop_bboxes):
+def save_crops(args, thresh, img_path, im, mask, crop_bboxes):
     file, ext = os.path.splitext(os.path.basename(img_path))
     imdir = os.path.dirname(img_path).replace(args.data, args.dest)
     mdir = imdir.replace(args.img_dir, args.mask_dir)
     suf = f'_{thresh}_{"rand" if args.rand_margins else "notRand"}'
-    for i, (im, mask, bbox) in enumerate(zip(cropped_imgs, cropped_masks, crop_bboxes)):
+    for i, bbox in enumerate(crop_bboxes):
+        cropped_imgs, cropped_masks = crop_im(im, bbox), crop_im(mask, bbox)
         crop_id = common.zero_pad(i, len(cropped_imgs))
         crop_fname = f'{file}{SEP}{suf}_{"_".join([str(s) for s in bbox])}__{crop_id}{ext}'
         cv2.imwrite(os.path.join(imdir, crop_fname), cv2.cvtColor(im, cv2.COLOR_RGB2BGR))
@@ -31,10 +33,11 @@ def multiprocess_cropping(args, proc_id, images):
     for img_path in images:
         mask_path = seg_utils.get_mask_path(img_path, args.img_dir, args.mask_dir, args.mext)
         im, mask = seg_utils.load_img_and_mask(img_path, mask_path)
+        if args.cats_ids is not None: mask[~np.isin(mask, args.cats_ids)] = args.bg
         try:
             for thresh in args.threshs:
-                crops = crop_img_and_mask_to_objs(im, mask, thresh, args.rand_margins, single=False, bg=args.bg)
-                save_crops(args, thresh, img_path, *crops)
+                _, _, bboxes = crop_img_and_mask_to_objs(im, mask, thresh, args.rand_margins, single=False, bg=args.bg)
+                save_crops(args, thresh, img_path, im, mask, bboxes)
         except Exception:
             print(f"Process {proc_id}: error with img {img_path}, skipping.")
     print(f"Process {proc_id}: task completed")
@@ -56,7 +59,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Creates crops satisfying objects proportion threshold")
     parser.add_argument('--data', type=str, required=True, help="source data root directory absolute path")
     parser.add_argument('--dest', type=str, help="directory where the crops should be saved")
-    parser.add_argument('--cats', type=str, nargs='+', default=["other", "pustules", "spots"], help="Obj categories")
+    parser.add_argument('--cats-ids', type=int, nargs='+', help="Obj categories to crop on")
+    parser.add_argument('--bg', type=int, default=0, help="bg cat id")
     seg_utils.common_segm_args(parser)
     parser.add_argument('--threshs', nargs='+', default=[.01], type=float, help="Object proportion thresholds")
     parser.add_argument('--rand-margins', action='store_true', help="Grow crops margins randomly")
