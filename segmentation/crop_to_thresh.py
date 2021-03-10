@@ -24,8 +24,8 @@ def save_crops(args, thresh, img_path, im, mask, crop_bboxes):
         cropped_imgs, cropped_masks = crop_im(im, bbox), crop_im(mask, bbox)
         crop_id = common.zero_pad(i, len(cropped_imgs))
         crop_fname = f'{file}{SEP}{suf}_{"_".join([str(s) for s in bbox])}__{crop_id}{ext}'
-        cv2.imwrite(os.path.join(imdir, crop_fname), cv2.cvtColor(im, cv2.COLOR_RGB2BGR))
-        cv2.imwrite(os.path.join(mdir, crop_fname.replace(ext, args.mext)), mask)
+        cv2.imwrite(os.path.join(imdir, crop_fname), cv2.cvtColor(cropped_imgs, cv2.COLOR_RGB2BGR))
+        cv2.imwrite(os.path.join(mdir, crop_fname.replace(ext, args.mext)), cropped_masks)
 
 
 def multiprocess_cropping(args, proc_id, images):
