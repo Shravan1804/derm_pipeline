@@ -60,7 +60,6 @@ if __name__ == '__main__':
     parser.add_argument('--data', type=str, required=True, help="source data root directory absolute path")
     parser.add_argument('--dest', type=str, help="directory where the crops should be saved")
     parser.add_argument('--cats-ids', type=int, nargs='+', help="Obj categories to crop on")
-    parser.add_argument('--bg', type=int, default=0, help="bg cat id")
     seg_utils.common_segm_args(parser)
     parser.add_argument('--threshs', nargs='+', default=[.01], type=float, help="Object proportion thresholds")
     parser.add_argument('--rand-margins', action='store_true', help="Grow crops margins randomly")
