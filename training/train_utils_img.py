@@ -48,6 +48,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
         if args.label_smoothing_loss: d += '_smooth-loss'
         elif args.focal_loss: d += '_focal-loss'
         elif args.focal_loss_plus_ce_loss: d += '_focal-plus-ce-loss'
+        elif args.focal_loss_plus_dice_focal_loss: d += '_focal-plus-dice_focal-loss'
         elif args.ce_loss: d += '_ce-loss'
         if args.weighted_loss: d += '_weighted-loss'
         if args.progr_size: d += f'_progr-size{"_".join(map(str, args.size_facts))}'
