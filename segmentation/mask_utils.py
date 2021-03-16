@@ -274,7 +274,7 @@ def show_im_with_mask_overlaid(im, mask, cats, bg=0, show_bg=False):
     for ax, cls_idx, cat in zip(axs[1:], cls_idxs, cls_labels):
         m = (mask == cls_idx).astype(np.uint8)
         obj_prop = get_obj_proportion(m)[0]
-        im_mask_on_ax(ax, im, m, title=f'{cat} segmentation ({obj_prop:.{3}f}%)')
+        im_mask_on_ax(ax, im, m, title=f'{cat} segm ({obj_prop:.{3}f}%)')
 
 
 def show_im_with_crops_bboxes(im, mask, obj_threshs=[.01], ncols=4, bg=0):

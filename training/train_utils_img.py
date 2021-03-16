@@ -37,6 +37,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
         parser.add_argument('--label-smoothing-loss', action='store_true', help="For unsure labels")
         parser.add_argument('--focal-loss', action='store_true', help="In imbalanced ds, favor hard cases")
         parser.add_argument('--focal-loss-plus-ce-loss', action='store_true', help="Focal loss + cross entropy loss")
+        parser.add_argument('--focal-loss-plus-dice-focal-loss', action='store_true', help="Focal loss + dice focal loss")
         parser.add_argument('--ce-loss', action='store_true', help="cross entropy loss")
         parser.add_argument('--weighted-loss', action='store_true', help="Uses weighted loss based on class distrib")
         return parser
@@ -79,6 +80,8 @@ class ImageTrainer(train_utils.FastaiTrainer):
             loss_func = fmp.FixedFocalLossFlat(weight=class_weights, axis=self.loss_axis)
         elif self.args.focal_loss_plus_ce_loss:
             loss_func = fmp.FocalLossPlusCElossFlat(weight=class_weights, axis=self.loss_axis)
+        elif self.args.focal_loss_plus_dice_focal_loss:
+            loss_func = fmp.FocalLossPlusFocalDiceLoss(weight=class_weights, axis=self.loss_axis)
         elif self.args.ce_loss:
             loss_func = fv.CrossEntropyLossFlat(weight=class_weights, axis=self.loss_axis)
         else:
