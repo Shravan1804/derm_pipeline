@@ -141,7 +141,7 @@ class PatchExtractor:
         for img, patches in grids.items():
             im = self.load_image(os.path.join(source, dirname, img))
             for pm in patches:
-                cv2.imwrite(os.path.join(dest, pm['patch_path']), self.extract_patch(im, pm))
+                common.save_img(self.extract_patch(im, pm), os.path.join(dest, pm['patch_path']))
 
     @staticmethod
     def extract_patch(im, pm):
