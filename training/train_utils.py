@@ -355,7 +355,7 @@ class FastaiTrainer:
         with GPUManager.running_context(learn, self.args.gpu_ids):
             learn.fine_tune(self.args.epochs, base_lr=lr, freeze_epochs=self.args.fepochs, cbs=train_cbs)
         if save_model:
-            model_dir = common.maybe_create(self.args.exp_logdir, learn.model_dir)
+            model_dir = fd.rank0_first(lambda: common.maybe_create(self.args.exp_logdir, learn.model_dir))
             learn.save(os.path.join(model_dir, f'{run}{self.MODEL_SUFFIX}_lr{lr:.2e}'))
 
     def evaluate_and_correct_wl(self, learn, wl_items, run):
