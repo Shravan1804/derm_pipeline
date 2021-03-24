@@ -114,6 +114,21 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='foreground_acc', min_delta=0.01, patience=3)
 
+    @staticmethod
+    def load_pretrained_backbone_weights(weights_path, model):
+        new_state_dict = torch.load(weights_path, map_location=torch.device('cpu'))['model']
+        model_state_dict = model.state_dict()
+        for name, param in model_state_dict.items():
+            new_name = name.replace('layers.', '')
+            if new_name in new_state_dict:
+                input_param = new_state_dict[new_name]
+                if input_param.shape == param.shape:
+                    param.copy_(input_param)
+                else:
+                    print('Shape mismatch at:', name, 'skipping')
+            else:
+                print(f'{name} weight of the model not in pretrained weights')
+        model.load_state_dict(model_state_dict)
 
 def main(args):
     segm = ImageSegmentationTrainer(args)
