@@ -99,6 +99,11 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         blocks = fv.ImageBlock, fv.MaskBlock(self.args.cats)
         return self.create_dls_from_lst(blocks, tr, val, bs, size, get_y=self.load_mask)
 
+    def get_class_weights(self, train_items):
+        masks = np.stack([self.load_mask(mpath) for _, mpath in train_items])
+        _, class_counts = np.unique(masks, return_counts=True)
+        return torch.FloatTensor(class_counts.max() / class_counts)
+
     def create_learner(self, dls):
         learn_kwargs = self.get_learner_kwargs(dls)
         metrics = list(self.cust_metrics.values()) + [fv.foreground_acc]
