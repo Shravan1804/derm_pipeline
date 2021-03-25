@@ -13,7 +13,7 @@ import fastai.callback.tensorboard as fc
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common, crypto
-from training import train_utils
+from training import train_utils, custom_losses as closs
 import training.fastai_monkey_patches as fmp
 
 
@@ -80,9 +80,9 @@ class ImageTrainer(train_utils.FastaiTrainer):
         elif self.args.focal_loss:
             loss_func = fmp.FixedFocalLossFlat(weight=class_weights, axis=self.loss_axis)
         elif self.args.focal_loss_plus_ce_loss:
-            loss_func = fmp.FocalLossPlusCElossFlat(weight=class_weights, axis=self.loss_axis)
+            loss_func = closs.FocalLossPlusCElossFlat(weight=class_weights, axis=self.loss_axis)
         elif self.args.focal_loss_plus_dice_focal_loss:
-            loss_func = fmp.FocalLossPlusFocalDiceLoss(weight=class_weights, axis=self.loss_axis)
+            loss_func = closs.FocalLossPlusFocalDiceLoss(weight=class_weights, axis=self.loss_axis)
         elif self.args.ce_loss:
             loss_func = fv.CrossEntropyLossFlat(weight=class_weights, axis=self.loss_axis)
         else:
