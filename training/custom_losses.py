@@ -3,7 +3,7 @@ import math
 import torch
 import fastai.vision.all as fv
 
-import fastai_monkey_patches as fmp
+import training.fastai_monkey_patches as fmp
 
 
 class FocalLossPlusCElossFlat(fmp.FixedFocalLossFlat):
