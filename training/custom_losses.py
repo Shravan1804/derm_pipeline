@@ -15,6 +15,25 @@ class FocalLossPlusCElossFlat(fmp.FixedFocalLossFlat):
         return super().__call__(inp, targ, **kwargs) + self.CEloss(inp, targ, **kwargs)
 
 
+class GeneralizedDiceLoss(fv.Module):
+    y_int = True
+    def __init__(self, axis=1, eps=1e-7): fv.store_attr()
+
+    def forward(self, out, targs):
+        num_classes = max(out.shape[self.axis], 2)
+        t = torch.nn.functional.one_hot(targs, num_classes).permute(0, 3, 1, 2).float()
+        o = torch.softmax(out, dim=self.axis).clip(self.eps, 1. - self.eps)
+
+        w = 1 / ((torch.einsum("bkwh->bk", t) + self.eps) ** 2)
+        inter = w * torch.einsum("bkwh,bkwh->bk", o, t)
+        union = w * (torch.einsum("bkwh->bk", o) + torch.einsum("bkwh->bk", t))
+
+        loss = 1 - 2 * (torch.einsum("bk->b", inter) + self.eps) / (torch.einsum("bk->b", union) + self.eps)
+        return loss.mean()
+    def activation(self, out): return fv.F.softmax(out, dim=self.axis)
+    def decodes(self, out): return out.argmax(dim=self.axis)
+
+
 class DiceLoss(fv.Module):
     y_int = True
     def __init__(self, axis=1, delta=.5, eps=1e-7, smooth=1e-6):
