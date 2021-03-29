@@ -15,6 +15,12 @@ from segmentation.train_segmentation import ImageSegmentationTrainer
 
 class ImageSegmentationInference(ImageInference):
     @staticmethod
+    def get_argparser(parser):
+        parser = super(ImageSegmentationInference, ImageSegmentationInference).get_argparser(parser)
+        parser.add_argument('--gt-pred-diff', action='store_true', help="Creates Preds != GT graph")
+        return parser
+
+    @staticmethod
     def prepare_inference(args):
         super(ImageSegmentationInference, ImageSegmentationInference).prepare_inference(args)
         ImageSegmentationTrainer.prepare_training(args)
@@ -46,9 +52,11 @@ class ImageSegmentationInference(ImageInference):
         else: pred = PatchExtractor.rebuild_im_from_patches(interp.pms, interp.decoded.numpy(), im.shape[:2])
         save_path = os.path.join(save_dir, os.path.splitext(os.path.basename(img_path))[0] + "_preds.jpg")
         if not self.args.no_plot: self.plot_results(interp, im, gt, pred, with_labels, save_path)
+        return pred
 
     def plot_results(self, interp, im, gt, pred, with_labels, save_path):
-        ncols = 5 if with_labels else 2
+        if with_labels: ncols = 5 if self.args.gt_pred_diff else 4
+        else: ncols = 2
         fig, axs = common.prepare_img_axs(im.shape[0] / im.shape[1], 1, ncols, flatten=True)
         common.img_on_ax(im, axs[0], title='Original image')
         axi = 1
@@ -58,8 +66,9 @@ class ImageSegmentationInference(ImageInference):
         mask_utils.im_mask_on_ax(axs[axi], im, pred, "Predictions")
         axi += 1
         if with_labels:
-            mask_utils.im_mask_on_ax(axs[axi], im, (gt != pred).astype(np.uint8), "Preds != GT")
-            axi += 1
+            if self.args.gt_pred_diff:
+                mask_utils.im_mask_on_ax(axs[axi], im, (gt != pred).astype(np.uint8), "Preds != GT")
+                axi += 1
             agg_perf = self.trainer.aggregate_test_performance([self.trainer.process_test_preds(interp)])
             self.trainer.plot_custom_metrics(axs[axi], agg_perf, show_val=True)
         if save_path is not None: common.plt_save_fig(save_path, fig=fig, dpi=150)
