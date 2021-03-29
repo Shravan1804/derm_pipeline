@@ -55,9 +55,9 @@ class CustomCocoEval(COCOeval):
         max_dets = np.max(dets)
         return tuple(f"x{f}" for f in facts), tuple(int(f*max_dets) for f in facts)
 
-    def __init__(self, *args, all_cats="all", **kwargs):
+    def __init__(self, *args, cats=None, all_cats="all", **kwargs):
         super().__init__(*args, **kwargs)
-        self.cats = [all_cats] + [self.cocoGt.cats[cid]['name'] for cid in self.params.catIds]
+        self.cats = [all_cats] + [self.cocoGt.cats[cid]['name'] for cid in self.params.catIds] if cats is None else cats
         self.ious_summary = [.15, .25, .5, .75]
         self.params.iouThrs = np.linspace(.15, 0.95, np.int(np.round((0.95 - .15) / .05)) + 1, endpoint=True)
         self.params.areaRng = self.computeAreaRng()
