@@ -43,7 +43,8 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def __init__(self, args, stratify=True, full_img_sep=PatchExtractor.SEP, **kwargs):
         super().__init__(args, stratify, full_img_sep, **kwargs)
 
-    def load_items(self, path):
+    def load_items(self, set_dir):
+        path = os.path.join(self.args.data, set_dir)
         images = common.list_files_in_dirs(path, full_path=True, posix_path=True)
         return fv.L(images), fv.L([classif_utils.get_image_cls(img_path) for img_path in images])
 

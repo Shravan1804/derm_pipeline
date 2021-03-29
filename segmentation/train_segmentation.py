@@ -37,7 +37,8 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         super().__init__(args, stratify, full_img_sep, **kwargs)
         self.loss_axis = 1
 
-    def load_items(self, path):
+    def load_items(self, set_dir):
+        path = os.path.join(self.args.data, set_dir)
         images = common.list_images(os.path.join(path, self.args.img_dir), full_path=True, posix_path=True)
         return fv.L(images), fv.L([self.get_image_mask_path(img_path) for img_path in images])
 

@@ -12,6 +12,10 @@ from general import common
 from object_detection import coco_format
 
 
+def merge_coco_annos(anno_paths):
+    pass
+
+
 def segm_dataset_to_coco_format(segm_masks, cats, scores=False, bg=0, ret_json=False):
     segm_masks = segm_masks if type(segm_masks) is np.ndarray else segm_masks.numpy()
     dataset = coco_format.get_default_dataset()
@@ -102,18 +106,25 @@ class CustomCocoEval(COCOeval):
             return mean_sap, mean_sar
 
         self.stats = np.zeros((2, len(self.cats), len(p.areaRng), len(p.maxDets), len(self.ious_summary) + 1), np.float)
+        self.logs = {}
         res_str = ""
         for ci, cat in enumerate(self.cats):
             res_str += f"CATEGORY: {cat}\n"
+            log_key += cat
             for ai, (area, _) in enumerate(zip(p.areaRngLbl, p.areaRng)):
                 res_str += f"\tOBJECT SIZE: {area}\n"
+                log_key += '_' + area
                 for di, det in enumerate(p.maxDets):
                     res_str += f"\t\tMAX DET COUNT: {det}\n"
+                    log_key += '_' + det
                     for ii, iou in enumerate([*self.ious_summary, None]):
                         iouStr = f'{p.iouThrs[0]:0.2f}:{p.iouThrs[-1]:0.2f}' if iou is None else f'{iou:0.2f}'
                         ap, ar = _summarize(iou, area, det, cat)
                         res_str += f"\t\t\tIoU={iouStr:<10}: AP={ap:6.3f}, AR={ar:6.3f}\n"
+                        log_key += '_' + iouStr
                         self.stats[:, ci, ai, di, ii] = ap, ar
+                        self.logs[log_key + '__AP'] = ap
+                        self.logs[log_key + '__AR'] = ar
         if verbose: print(res_str)
 
     @staticmethod
