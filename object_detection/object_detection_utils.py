@@ -4,6 +4,8 @@ import sys
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+
+import icevision.all as ia
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
@@ -12,8 +14,53 @@ from general import common
 from object_detection import coco_format
 
 
-def merge_coco_annos(anno_paths):
-    pass
+class SimpleCocoEvalMetric(COCOeval):
+    def __init__(self, coco_eval, cat_id=0, iou=.15, pre_rec=True):
+        super().__init__(coco_eval.cocoGt, coco_eval.cocoDt, coco_eval.params.iouType)
+        self.cat_id = cat_id
+        self.iou = iou
+        self.pre_rec = pre_rec
+        self.params.iouThrs = np.array([iou])
+        self.params.areaRng = [[0, int(1e10)]]
+        self.params.maxDets = [int(1e3)]
+
+    def summarize(self):
+        p = self.params
+        def _iou_res(iouThr, s): return s if iouThr is None else s[iouThr == p.iouThrs]
+        def _summarize():
+            aind, mind = [0], [0]
+            cind = [i for i, c in enumerate(p.catIds) if self.cat_id == c or self.cat_id == 0]
+            # dimension of precision: [TxRxKxAxM]
+            sap = _iou_res(self.iou, self.eval['precision'])[:, :, cind, aind, mind]
+            mean_sap = -1 if not len(sap[sap > -1]) else np.mean(sap[sap > -1])
+            # dimension of recall: [TxKxAxM]
+            sar = _iou_res(self.iou, self.eval['recall'])[:, cind, aind, mind]
+            mean_sar = -1 if not len(sar[sar > -1]) else np.mean(sar[sar > -1])
+            return mean_sap, mean_sar
+        ap, ar = _summarize()
+        self.logs = {'val': ap if self.pre_rec else ar}
+        return self.logs
+
+
+class CustomCOCOMetric(ia.COCOMetric):
+    def __init__(self, cat_id, iou, metric="precision", metric_type=ia.COCOMetricType.bbox):
+        super().__init__(metric_type)
+        self.cat_id = cat_id
+        self.iou = iou
+        self.pre_rec = metric == "precision"
+
+    def finalize(self):
+        with ia.CaptureStdout():
+            coco_eval = ia.create_coco_eval(records=self._records, preds=self._preds,
+                                            metric_type=self.metric_type.value, show_pbar=self.show_pbar)
+            coco_eval = SimpleCocoEvalMetric(coco_eval, self.cat_id, self.iou, self.pre_rec)
+            coco_eval.evaluate()
+            coco_eval.accumulate()
+        with ia.CaptureStdout(propagate_stdout=self.print_summary):
+            coco_eval.summarize()
+        logs = coco_eval.logs
+        self._reset()
+        return logs
 
 
 def segm_dataset_to_coco_format(segm_masks, cats, scores=False, bg=0, ret_json=False):
@@ -93,7 +140,7 @@ class CustomCocoEval(COCOeval):
             aind = [i for i, aRng in enumerate(p.areaRngLbl) if aRng == areaRng]
             mind = [i for i, mDet in enumerate(p.maxDets) if mDet == maxDets]
             # first cats item is all_cats with id 0 (this id does not exist in self.eval)
-            cind = [i for i, c in enumerate(p.catIds) if self.cats[c] == cat or cat == self.cats[0]]
+            cind = [i for i, c in enumerate(p.catIds) if cat == self.cats[c] or cat == self.cats[0]]
 
             # dimension of precision: [TxRxKxAxM]
             sap = _iou_res(iouThr, self.eval['precision'])[:, :, cind, aind, mind]
