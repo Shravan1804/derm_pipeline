@@ -4,6 +4,7 @@ import sys
 import numpy as np
 
 import icevision.all as ia
+import fastai.vision.all as fv
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common
@@ -31,10 +32,10 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
         super().__init__(args, stratify, full_img_sep, **kwargs)
 
     def load_items(self, anno_file):
-        anno_path = os.path.join(self.args.data, 'annotation', anno_file)
+        anno_path = os.path.join(self.args.data, 'annotations', anno_file)
         img_dir = os.path.join(self.args.data, 'images', os.path.splitext(anno_file)[0])
         no_split = ia.SingleSplitSplitter()
-        records = ia.parsers.coco(annotations_file=anno_path, img_dir=img_dir).parse(data_splitter=no_split)[0]
+        records = fv.L(ia.parsers.coco(annotations_file=anno_path, img_dir=img_dir).parse(data_splitter=no_split)[0])
         return records, np.ones_like(records)
 
     def get_cats_with_all(self):
@@ -52,7 +53,7 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
 
         for mtype in [ia.COCOMetricType.bbox] + ([ia.COCOMetricType.mask] if self.args.with_segm else []):
             for iou in self.args.ious:
-                cls_name = self.get_cat_metric_name(perf_fn, cat, iou)
+                cls_name = self.get_cat_metric_name(perf_fn, cat, iou, mtype)
                 cls = custom_coco_eval_metric(cls_name, cat_id=cat_id, iou=iou, metric_type=mtype)
                 metrics_fn[cls_name] = cls()
 
@@ -109,9 +110,8 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
 
 
 def main(args):
-    segm = ImageObjectDetectionTrainer(args)
-    segm.train_model()
-    if args.inference: segm.inference()
+    od = ImageObjectDetectionTrainer(args)
+    od.train_model()
 
 
 if __name__ == '__main__':
