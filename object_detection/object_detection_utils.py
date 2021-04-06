@@ -157,13 +157,13 @@ class CustomCocoEval(COCOeval):
         res_str = ""
         for ci, cat in enumerate(self.cats):
             res_str += f"CATEGORY: {cat}\n"
-            log_key += cat
+            log_key = cat
             for ai, (area, _) in enumerate(zip(p.areaRngLbl, p.areaRng)):
                 res_str += f"\tOBJECT SIZE: {area}\n"
                 log_key += '_' + area
-                for di, det in enumerate(p.maxDets):
-                    res_str += f"\t\tMAX DET COUNT: {det}\n"
-                    log_key += '_' + det
+                for di, (detLbl, det) in enumerate(zip(p.maxDetsLbl, p.maxDets)):
+                    res_str += f"\t\tMAX DET COUNT {detLbl}: {det}\n"
+                    log_key += '_' + detLbl + '_' + str(det)
                     for ii, iou in enumerate([*self.ious_summary, None]):
                         iouStr = f'{p.iouThrs[0]:0.2f}:{p.iouThrs[-1]:0.2f}' if iou is None else f'{iou:0.2f}'
                         ap, ar = _summarize(iou, area, det, cat)
