@@ -146,7 +146,8 @@ class ImageTrainer(train_utils.FastaiTrainer):
             return items_with_cls if merged else (None, items_with_cls)
         else:
             items_sets = [(cl, self.load_items(cl)) for cl in set_locs]
-            return fv.L([t[1] for t in items_sets]).map_zip(fv.L).map(fv.L.concat) if merged else items_sets
+            # cannot use map_zip since it is the starmap which may break with single lists (in object detec)
+            return fv.L(map(fv.L, fv.L([t[1] for t in items_sets]).zip())).map(fv.L.concat) if merged else items_sets
 
     def get_test_items(self, merged=True): return self.load_multiple_items_sets(self.args.sl_tests, merged)
 

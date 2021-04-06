@@ -36,7 +36,8 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
         img_dir = os.path.join(self.args.data, 'images', os.path.splitext(anno_file)[0])
         no_split = ia.SingleSplitSplitter()
         records = fv.L(ia.parsers.coco(annotations_file=anno_path, img_dir=img_dir).parse(data_splitter=no_split)[0])
-        return records, np.ones_like(records)
+        # dummy cls so that the split_data pipeline works
+        return records, fv.L([1]*len(records))
 
     def get_cats_with_all(self):
         # category at index 0 is the background class, which should be ignored
