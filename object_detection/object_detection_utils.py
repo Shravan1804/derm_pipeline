@@ -15,7 +15,7 @@ from object_detection import coco_format
 
 
 class SimpleCocoEvalMetric(COCOeval):
-    def __init__(self, coco_eval, cat_id=0, iou=.15, pre_rec=True):
+    def __init__(self, coco_eval, cat_id=None, iou=.15, pre_rec=True):
         super().__init__(coco_eval.cocoGt, coco_eval.cocoDt, coco_eval.params.iouType)
         self.cat_id = cat_id
         self.iou = iou
@@ -29,7 +29,7 @@ class SimpleCocoEvalMetric(COCOeval):
         def _iou_res(iouThr, s): return s if iouThr is None else s[iouThr == p.iouThrs]
         def _summarize():
             aind, mind = [0], [0]
-            cind = [i for i, c in enumerate(p.catIds) if self.cat_id == c or self.cat_id == 0]
+            cind = [i for i, c in enumerate(p.catIds) if self.cat_id == c or self.cat_id is None]
             # dimension of precision: [TxRxKxAxM]
             sap = _iou_res(self.iou, self.eval['precision'])[:, :, cind, aind, mind]
             mean_sap = -1 if not len(sap[sap > -1]) else np.mean(sap[sap > -1])
