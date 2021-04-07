@@ -23,6 +23,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def get_argparser(desc="Fastai segmentation image trainer arguments", pdef=dict(), phelp=dict()):
         # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
         parser = super(ImageSegmentationTrainer, ImageSegmentationTrainer).get_argparser(desc, pdef, phelp)
+        parser.add_argument('--coco-metrics', action='store_true', help="Also computes coco metrics")
         parser.add_argument('--rm-small-objs', action='store_true', help="Remove objs smaller than --min-size")
         parser.add_argument('--min-size', default=60, type=int, help="Objs below this size will be discarded")
         return segm_utils.common_segm_args(parser, pdef, phelp)
@@ -77,24 +78,27 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def process_test_preds(self, interp):
         interp.targs = interp.targs.as_subclass(torch.Tensor)   # otherwise issues with fastai PILMask custom class
         interp = super().process_test_preds(interp)
-        to_coco = partial(segm_dataset_to_coco_format, cats=self.args.cats, bg=self.args.bg)
-        with common.elapsed_timer() as elapsed:
-            gt, dt = to_coco(interp.targs), to_coco(interp.decoded, scores=True)
-            print(f"Segmentation dataset converted in {datetime.timedelta(seconds=elapsed())}.")
-        cocoEval = CustomCocoEval(gt, dt, all_cats=self.ALL_CATS)
-        cocoEval.eval_acc_and_summarize(verbose=False)
-        self.coco_param_labels, areaRng, maxDets, stats = cocoEval.get_precision_recall_with_labels()
-        interp.metrics['cocoeval'] = torch.Tensor(stats)
-        interp.metrics['cocoeval_areaRng'] = torch.Tensor(areaRng)
-        interp.metrics['cocoeval_maxDets'] = torch.Tensor(maxDets)
+        if self.args.coco_metrics:
+            to_coco = partial(segm_dataset_to_coco_format, cats=self.args.cats, bg=self.args.bg)
+            with common.elapsed_timer() as elapsed:
+                gt, dt = to_coco(interp.targs), to_coco(interp.decoded, scores=True)
+                print(f"Segmentation dataset converted in {datetime.timedelta(seconds=elapsed())}.")
+            cocoEval = CustomCocoEval(gt, dt, all_cats=self.ALL_CATS)
+            cocoEval.eval_acc_and_summarize(verbose=False)
+            self.coco_param_labels, areaRng, maxDets, stats = cocoEval.get_precision_recall_with_labels()
+            interp.metrics['cocoeval'] = torch.Tensor(stats)
+            interp.metrics['cocoeval_areaRng'] = torch.Tensor(areaRng)
+            interp.metrics['cocoeval_maxDets'] = torch.Tensor(maxDets)
         return interp
 
     def plot_test_performance(self, test_path, run, agg_perf):
         super().plot_test_performance(test_path, run, agg_perf)
-        figsize = self.args.test_figsize
-        for show_val in [False, True]:
-            save_path = os.path.join(test_path, f'{run}_coco{"_show_val" if show_val else ""}.jpg')
-            CustomCocoEval.plot_coco_eval(self.coco_param_labels, agg_perf['cocoeval'], figsize, save_path, show_val)
+        if self.args.coco_metrics:
+            figsize = self.args.test_figsize
+            cocoeval = agg_perf['cocoeval']
+            for show_val in [False, True]:
+                save_path = os.path.join(test_path, f'{run}_coco{"_show_val" if show_val else ""}.jpg')
+                CustomCocoEval.plot_coco_eval(self.coco_param_labels, cocoeval, figsize, save_path, show_val)
 
     def create_dls(self, tr, val, bs, size):
         blocks = fv.ImageBlock, fv.MaskBlock(self.args.cats)
