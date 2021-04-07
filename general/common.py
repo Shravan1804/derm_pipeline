@@ -281,8 +281,9 @@ def elapsed_timer():
 
 def time_method(m, *args, **kwargs):
     with elapsed_timer() as elapsed:
-        m(*args, **kwargs)
+        res = m(*args, **kwargs)
         print(f"Work completed in {datetime.timedelta(seconds=elapsed())}.")
+    return res
 
 
 class PrintPrepender:
