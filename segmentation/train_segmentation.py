@@ -70,6 +70,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         agg = super().aggregate_test_performance(folds_res)
         for perf_fn in self.args.metrics_fns:
             mns = [self.get_cat_metric_name(perf_fn, cat, self.args.bg) for cat in self.get_cats_with_all()]
+            mns = [m for m in mns if m in self.cust_metrics]    # in case we do no compute metrics for all cats
             agg[f'{perf_fn}{self.NO_BG}'] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
         return agg
 
