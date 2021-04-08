@@ -39,6 +39,9 @@ def rm_small_objs_from_bin_mask(binary_mask, min_size):
     return mask_cleaned.astype(np.uint8)
 
 
+def nb_obj_in_binary_mask(binary_mask): return cv2.connectedComponents(binary_mask.astype(np.uint8))[0]
+
+
 def load_mask_array(mask_path): return cv2.imread(str(mask_path), cv2.IMREAD_UNCHANGED)
 
 
