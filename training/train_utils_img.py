@@ -122,7 +122,8 @@ class ImageTrainer(train_utils.FastaiTrainer):
         # for each perf_fn, combine results of each cats
         for perf_fn in self.args.metrics_fns:
             # order metrics results on self.get_cats_with_all()
-            mns = [self.get_cat_metric_name(perf_fn, cat) for cat in self.get_cats_with_all()]
+            mns = [self.get_cat_metric_name(perf_fn, cat) for cat in self.get_cats_with_all()
+                   if self.get_cat_metric_name(perf_fn, cat) in self.cust_metrics]
             agg[perf_fn] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
         return agg
 
