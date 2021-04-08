@@ -39,7 +39,11 @@ def rm_small_objs_from_bin_mask(binary_mask, min_size):
     return mask_cleaned.astype(np.uint8)
 
 
-def nb_obj_in_binary_mask(binary_mask): return cv2.connectedComponents(binary_mask.astype(np.uint8))[0]
+def nb_obj_in_binary_mask(binary_mask):
+    # -1 for background. Even if the mask contains only 1s, there will be 2 objects
+    # even if there are separated 0s zones, they will count only as 1 background object
+    # only the separated 1s zones are counted as separated objects
+    return cv2.connectedComponents(binary_mask.astype(np.uint8))[0] - 1
 
 
 def load_mask_array(mask_path): return cv2.imread(str(mask_path), cv2.IMREAD_UNCHANGED)
