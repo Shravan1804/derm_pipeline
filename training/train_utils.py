@@ -270,7 +270,7 @@ class FastaiTrainer:
 
     def load_items(self, path): raise NotImplementedError   # returns tuple of items array and item labels array
 
-    def get_test_sets_items(self): raise NotImplementedError
+    def get_test_items(self): raise NotImplementedError
 
     def get_train_items(self): raise NotImplementedError
 

@@ -1,6 +1,6 @@
 import os
 import sys
-from collections import defaultdict
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -66,8 +66,8 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
         for test_name, test_items_with_cls in self.get_test_items(merged=False):
             print("Testing model", run, "on", test_name)
             GPUManager.sync_distributed_process()
-            arch = self.get_arch()
-            test_ds = ia.Dataset(test_items_with_cls[0], self.get_tfms()[0])
+            arch, _ = self.get_arch()
+            test_ds = ia.Dataset(test_items_with_cls[0], self.get_tfms()[1])
             test_dl = arch.infer_dl(test_ds, batch_size=learn.dls.bs)
             with GPUManager.running_context(learn, self.args.gpu_ids):
                 interp = SimpleNamespace()
