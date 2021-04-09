@@ -31,8 +31,8 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
         super(ImageObjectDetectionTrainer, ImageObjectDetectionTrainer).prepare_training(args)
 
     def __init__(self, args, stratify=False, full_img_sep=CROP_SEP, **kwargs):
-        super().__init__(args, stratify, full_img_sep, **kwargs)
         self.metrics_types = [ia.COCOMetricType.bbox] + ([ia.COCOMetricType.mask] if self.args.with_segm else [])
+        super().__init__(args, stratify, full_img_sep, **kwargs)
 
     def load_items(self, anno_file):
         anno_path = os.path.join(self.args.data, 'annotations', anno_file)
