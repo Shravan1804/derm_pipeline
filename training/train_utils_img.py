@@ -160,13 +160,15 @@ class ImageTrainer(train_utils.FastaiTrainer):
         if self.stratify: raise NotImplementedError
         else: return 1  # when stratified splits are not needed, consider all images have the same cls
 
+    def get_patch_full_img(self, patch):
+        file, ext = os.path.splitext(os.path.basename(patch))
+        return f'{file.split(self.full_img_sep)[0] if self.full_img_sep in file else file}{ext}'
+
     def get_full_img_dict(self, images, targets):
         """Returns a dict with keys (full images, tgt) and values the lst of corresponding images."""
         full_images_dict = defaultdict(fv.L)
         for img, tgt in zip(images, targets):
-            file, ext = os.path.splitext(os.path.basename(img))
-            fi = f'{file.split(self.full_img_sep)[0] if self.full_img_sep in file else file}{ext}'
-            full_images_dict[(fi, self.get_full_img_cls(img))].append((img, tgt))
+            full_images_dict[(self.get_patch_full_img(img), self.get_full_img_cls(img))].append((img, tgt))
         return full_images_dict
 
     def split_data(self, items, items_cls):

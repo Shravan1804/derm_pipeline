@@ -1,5 +1,6 @@
 import os
 import sys
+from collections import defaultdict
 
 import numpy as np
 
@@ -38,6 +39,8 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
         records = fv.L(ia.parsers.coco(annotations_file=anno_path, img_dir=img_dir).parse(data_splitter=no_split)[0])
         # dummy cls so that the split_data pipeline works
         return records, fv.L([1]*len(records))
+
+    def get_patch_full_img(self, patch): return super().get_patch_full_img(str(patch.filepath))
 
     def get_cats_with_all(self):
         # category at index 0 is the background class, which should be ignored
