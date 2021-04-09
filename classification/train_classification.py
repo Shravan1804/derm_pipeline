@@ -59,8 +59,7 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def ordered_test_perfs_per_cats(self):
         return [([self.get_cat_metric_name(f, c) for c in self.get_cats_with_all()], f) for f in self.args.metrics_fns]
 
-
-def compute_conf_mat(self, targs, preds): return classif_utils.conf_mat(targs, preds, self.args.cats)
+    def compute_conf_mat(self, targs, preds): return classif_utils.conf_mat(targs, preds, self.args.cats)
 
     def create_dls(self, tr, val, bs, size):
         blocks = fv.ImageBlock, fv.CategoryBlock(vocab=self.args.cats)

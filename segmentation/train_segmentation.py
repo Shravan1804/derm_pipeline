@@ -65,17 +65,6 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
             code = f"def {signature}: return cat_perf(train_utils.{perf_fn}, inp, targ).to(inp.device)"
             exec(code, {"cat_perf": cat_perf, 'train_utils': train_utils}, metrics_fn)
 
-    def aggregate_test_performance(self, folds_res):
-        """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
-        agg = super().aggregate_test_performance(folds_res)
-        for bg in [None, self.args.bg]:
-            for perf_fn in self.args.metrics_fns:
-                mns = [self.get_cat_metric_name(perf_fn, cat, bg) for cat in self.get_cats_with_all()]
-                mns = [m for m in mns if m in self.cust_metrics]    # in case we do no compute metrics for all cats
-                agg_key = perf_fn + ("" if bg else self.NO_BG)
-                agg[agg_key] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
-        return agg
-
     def ordered_test_perfs_per_cats(self):
         ordered = []
         for perf_fn in self.args.metrics_fns:
