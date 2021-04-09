@@ -315,10 +315,10 @@ def stdout_prepend(f, pre_msg, *args):
 
 def plt_save_fig(path, fig=None, close=True, **kwargs):
     if fig is None:
-        plt.savefig(path, **kwargs)
+        plt.savefig(path, bbox_inches='tight', **kwargs)
         if close: plt.close(plt.gcf())
     else:
-        fig.savefig(path, **kwargs)
+        fig.savefig(path, bbox_inches='tight', **kwargs)
         if close: plt.close(fig)
 
 
