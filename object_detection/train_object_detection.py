@@ -98,6 +98,20 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
         ])
         return train_tfms, valid_tfms
 
+    @staticmethod
+    def convert_ia_dls_to_fastai_dls(ia_dls):
+        fastai_dls = []
+        for dl in ia_dls:
+            if isinstance(dl, ia.DataLoader):
+                fastai_dl = ia.engines.fastai.adapters.convert_dataloader_to_fastai(dl)
+            elif isinstance(dl, ia.fastai.DataLoader):
+                fastai_dl = dl
+            else:
+                raise ValueError(f"dl type {type(dl)} not supported")
+
+            fastai_dls.append(fastai_dl)
+        return ia.fastai.DataLoaders(*fastai_dls).to(ia.fastai.default_device())
+
     def create_dls(self, tr, val, bs, size):
         train_tfms, valid_tfms = self.get_tfms()
         train_ds = ia.Dataset(tr[0], train_tfms)
@@ -105,7 +119,7 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
         arch, _ = self.get_arch()
         train_dl = arch.train_dl(train_ds, batch_size=bs, num_workers=4, shuffle=True)
         valid_dl = arch.valid_dl(valid_ds, batch_size=bs, num_workers=4, shuffle=False)
-        return [train_dl, valid_dl]
+        return ImageObjectDetectionTrainer.convert_ia_dls_to_fastai_dls([train_dl, valid_dl])
 
     def create_learner(self, dls):
         arch, arch_params = self.get_arch()
