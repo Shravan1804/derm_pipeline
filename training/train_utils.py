@@ -340,6 +340,7 @@ class FastaiTrainer:
         elif GPUManager.in_distributed_mode():  # auto_lr find causes deadlock in distrib mode
             lr = .002
         else:
+            learn.freeze()
             with GPUManager.running_context(learn, self.args.gpu_ids):
                 lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
             lr = lr_min / 10

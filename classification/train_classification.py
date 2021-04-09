@@ -56,7 +56,11 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
         code = f"def {signature}: return cat_perf(train_utils.{perf_fn}, inp, targ, {cat_id}).to(inp.device)"
         exec(code, {"cat_perf": cat_perf, 'train_utils': train_utils}, metrics_fn)
 
-    def compute_conf_mat(self, targs, preds): return classif_utils.conf_mat(targs, preds, self.args.cats)
+    def ordered_test_perfs_per_cats(self):
+        return [([self.get_cat_metric_name(f, c) for c in self.get_cats_with_all()], f) for f in self.args.metrics_fns]
+
+
+def compute_conf_mat(self, targs, preds): return classif_utils.conf_mat(targs, preds, self.args.cats)
 
     def create_dls(self, tr, val, bs, size):
         blocks = fv.ImageBlock, fv.CategoryBlock(vocab=self.args.cats)

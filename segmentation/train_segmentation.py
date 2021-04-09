@@ -55,7 +55,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
             mask = mask_utils.rm_small_objs_from_non_bin_mask(mask, self.args.min_size, self.args.cats, self.args.bg)
         return mask
 
-    def get_cat_metric_name(self, perf_fn, cat, bg=None):
+    def get_cat_metric_name(self, perf_fn, cat, bg):
         return f'{super().get_cat_metric_name(perf_fn, cat)}{"" if bg is None else self.NO_BG}'
 
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn):
@@ -68,11 +68,21 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
     def aggregate_test_performance(self, folds_res):
         """Returns a dict with perf_fn as keys and values a tuple of lsts of categories mean/std"""
         agg = super().aggregate_test_performance(folds_res)
-        for perf_fn in self.args.metrics_fns:
-            mns = [self.get_cat_metric_name(perf_fn, cat, self.args.bg) for cat in self.get_cats_with_all()]
-            mns = [m for m in mns if m in self.cust_metrics]    # in case we do no compute metrics for all cats
-            agg[f'{perf_fn}{self.NO_BG}'] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
+        for bg in [None, self.args.bg]:
+            for perf_fn in self.args.metrics_fns:
+                mns = [self.get_cat_metric_name(perf_fn, cat, bg) for cat in self.get_cats_with_all()]
+                mns = [m for m in mns if m in self.cust_metrics]    # in case we do no compute metrics for all cats
+                agg_key = perf_fn + ("" if bg else self.NO_BG)
+                agg[agg_key] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
         return agg
+
+    def ordered_test_perfs_per_cats(self):
+        ordered = []
+        for perf_fn in self.args.metrics_fns:
+            for bg in [None, self.args.bg]:
+                mns = [self.get_cat_metric_name(perf_fn, cat, bg) for cat in self.get_cats_with_all()]
+                ordered.append((mns, perf_fn + ("" if bg is not None else self.NO_BG)))
+        return ordered
 
     def compute_conf_mat(self, targs, preds): return segm_utils.pixel_conf_mat(targs, preds, self.args.cats)
 

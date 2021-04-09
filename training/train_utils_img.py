@@ -119,10 +119,18 @@ class ImageTrainer(train_utils.FastaiTrainer):
 
     def aggregate_test_performance(self, folds_res):
         agg = super().aggregate_test_performance(folds_res)
+        for mns, agg_key in self.ordered_test_perfs_per_cats():
+            mns = [m for m in mns if m in self.cust_metrics]  # in case we did no compute metrics for all cats
+            agg[agg_key] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
+        return agg
+
+    def ordered_test_perfs_per_cats(self): raise NotImplementedError
+
+    def reorder_aggregated_test_perfs_as_cats(self, agg, **kwargs):
         # for each perf_fn, combine results of each cats
         for perf_fn in self.args.metrics_fns:
             # order metrics results on self.get_cats_with_all()
-            mns = [self.get_cat_metric_name(perf_fn, cat) for cat in self.get_cats_with_all()]
+            mns = [self.get_cat_metric_name(perf_fn, cat, **kwargs) for cat in self.get_cats_with_all()]
             mns = [m for m in mns if m in self.cust_metrics]    # in case we do no compute metrics for all cats
             agg[perf_fn] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
         return agg

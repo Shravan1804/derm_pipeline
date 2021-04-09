@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
+import torch
 import icevision.all as ia
 import fastai.vision.all as fv
 
@@ -31,6 +32,7 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
 
     def __init__(self, args, stratify=False, full_img_sep=CROP_SEP, **kwargs):
         super().__init__(args, stratify, full_img_sep, **kwargs)
+        self.metrics_types = [ia.COCOMetricType.bbox] + ([ia.COCOMetricType.mask] if self.args.with_segm else [])
 
     def load_items(self, anno_file):
         anno_path = os.path.join(self.args.data, 'annotations', anno_file)
@@ -55,11 +57,20 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
                 def __init__(self): super().__init__(**kwargs)
             return type(name, (CocoEvalTemplate,), {})
 
-        for mtype in [ia.COCOMetricType.bbox] + ([ia.COCOMetricType.mask] if self.args.with_segm else []):
+        for mtype in self.metrics_types:
             for iou in self.args.ious:
                 cls_name = self.get_cat_metric_name(perf_fn, cat, iou, mtype)
                 cls = custom_coco_eval_metric(cls_name, cat_id=cat_id, iou=iou, metric_type=mtype)
                 metrics_fn[cls_name] = cls()
+
+    def ordered_test_perfs_per_cats(self):
+        ordered = []
+        for perf_fn in self.args.metrics_fns:
+            for mtype in self.metrics_types:
+                for iou in self.args.ious:
+                    mns = [self.get_cat_metric_name(perf_fn, cat, iou, mtype) for cat in self.get_cats_with_all()]
+                    ordered.append((mns, f'{perf_fn}_iou{iou}_{mtype.name}'))
+        return ordered
 
     def evaluate_on_test_sets(self, learn, run):
         """Evaluate test sets, clears GPU memory held by test dl(s)"""
@@ -81,7 +92,7 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
         interp.metrics = {}
         for mn, mfn in self.cust_metrics.items():
             mfn.accumulate(interp.targs, interp.preds)
-            interp.metrics[mn] = next(iter(mfn.finalize().values()))
+            interp.metrics[mn] = torch.tensor(next(iter(mfn.finalize().values()))).float()
         return interp
 
     def get_arch(self):
