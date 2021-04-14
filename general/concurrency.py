@@ -12,6 +12,7 @@ from general import common
 def add_multi_proc_args(parser):
     parser.add_argument('--workers', type=int, default=8, help="Number of workers to use")
     parser.add_argument('--bs', type=int, help="Batch size per worker")
+    return parser
 
 
 def batch_lst(files, bs=None, workers=None):

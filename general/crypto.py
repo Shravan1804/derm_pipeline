@@ -27,15 +27,16 @@ def decrypt_img(img_path, fkey):
     #return common.img_bgr_to_rgb(im) if len(im.shape) > 2 else im
 
 
-def request_key(key_dir, user_key=None):
+def request_key(key_dir, user_key=None, test_key=True):
     if user_key is None:
         print("Please provide dataset encryption key")
         user_key = input().encode()
     try:
         user_fkey = load_user_provided_key(user_key)
-        crypted_key = [kf for kf in common.list_files(key_dir, full_path=True) if kf.endswith('.key')][0]
-        with open(crypted_key, "rb") as kf:
-            assert user_key == user_fkey.decrypt(kf.read()), f"Error with provided key, checked with {crypted_key}"
+        if test_key:
+            crypted_key = [kf for kf in common.list_files(key_dir, full_path=True) if kf.endswith('.key')][0]
+            with open(crypted_key, "rb") as kf:
+                assert user_key == user_fkey.decrypt(kf.read()), f"Error with provided key, checked with {crypted_key}"
     except Exception:
         raise Exception("Provided key invalid.")
     return user_fkey

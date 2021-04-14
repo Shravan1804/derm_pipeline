@@ -3,6 +3,7 @@ import sys
 import json
 import random
 
+import cv2
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -83,17 +84,24 @@ def convert_masks_to_poly(masks):
 
 def get_obj_anno(img_id, ann_id, cat_id, bbox, area, seg, is_crowd=0, scores=False):
     anno = {
-        'image_id': img_id,
-        'bbox': bbox,
-        'category_id': cat_id,
-        'area': area,
-        'iscrowd': is_crowd,
-        'id': ann_id,
+        'image_id': int(img_id),
+        'bbox': list(bbox),
+        'category_id': int(cat_id),
+        'area': int(area),
+        'iscrowd': int(is_crowd),
+        'id': int(ann_id),
         'segmentation': seg
     }
     if scores:
         anno['score'] = 1.0
     return anno
+
+
+def separate_objs_in_mask(mask, bg=0):
+    obj_cats = np.array([t for t in np.unique(mask) if t != bg])
+    if obj_cats.size == 1 and obj_cats[0] == bg: return None
+    cat_masks = (mask == obj_cats[:, None, None]).astype(np.uint8)
+    return obj_cats, tuple(cv2.connectedComponents(cmsk) for cmsk in cat_masks)
 
 
 def get_annos_from_objs_mask(img_id, start_ann_id, obj_cats, obj_cats_masks, scores=False):
@@ -157,6 +165,5 @@ def save_sample_coco_data(coco_json_path, sample_size=100, save_path=None):
 
 
 if __name__ == '__main__':
-    path = '/home/shravan/Downloads/temp/'
-    d = '00_patched1024'
-    visualize_dataset(path+'images/'+d, path+'annotations/14_PPP_study_goldberg_00_1024px.json', path+'results')
+    path = '/home/shravan/deep-learning/data/ppp_grading/full_img_segm_test_set'
+    visualize_dataset(path+'/images', path+'/full_img_segm_test_set.json', path+'/results')
