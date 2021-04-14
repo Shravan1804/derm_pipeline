@@ -32,7 +32,7 @@ def extract_annos(proc_id, q_annos, im_mask, args):
         obj_cats_with_masks = coco_format.separate_objs_in_mask(convert_segm_mask_to_obj_det_cats(mask, args))
         if obj_cats_with_masks is None: continue
         else: obj_cats, obj_cats_masks = obj_cats_with_masks
-        _, img_annos = coco_format.get_annos_from_objs_mask(im_id, 0, obj_cats, obj_cats_masks)
+        _, img_annos = coco_format.get_annos_from_objs_mask(im_id, 0, obj_cats, obj_cats_masks, to_poly=args.polygon)
         q_annos.put([(img_dict, img_annos)])
         if i % max(15, (10*(len(im_mask)//30))) == 0:     # prints status at every third of whole task
             print(f"Process {proc_id}: processed {i}/{len(im_mask)} images")
@@ -84,7 +84,7 @@ if __name__ == '__main__':
     parser.add_argument('--od-cats', type=str, nargs='+', help="Obj det categories")
     parser.add_argument('--ckey', type=str, help="Data encryption key, if left none assumes no encryption")
     parser = segm_utils.common_segm_args(parser)
-    parser.add_argument('--to-polygon', action='store_true', help="converts bitmask to polygon")    # TODO
+    parser.add_argument('--polygon', action='store_true', help="converts bitmask to polygon")
     parser = concurrency.add_multi_proc_args(parser)
     args = parser.parse_args()
 
