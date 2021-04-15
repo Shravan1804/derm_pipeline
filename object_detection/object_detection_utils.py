@@ -11,6 +11,7 @@ from pycocotools.cocoeval import COCOeval
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common
+from segmentation import mask_utils
 from object_detection import coco_format
 
 
@@ -72,7 +73,7 @@ def segm_dataset_to_coco_format(segm_masks, cats, scores=False, bg=0, ret_json=F
     for img_id, non_binary_mask in enumerate(segm_masks):
         img_id += 1  # to be on the safe side (same idea as ann_id)
         dataset['images'].append(coco_format.get_img_record(img_id, f'{img_id}.jpg', non_binary_mask.shape))
-        obj_cats_with_masks = coco_format.separate_objs_in_mask(non_binary_mask, bg=bg)
+        obj_cats_with_masks = mask_utils.separate_objs_in_mask(non_binary_mask, bg=bg)
         if obj_cats_with_masks is None: continue
         else: obj_cats, obj_cats_masks = obj_cats_with_masks
         ann_id, img_annos = coco_format.get_annos_from_objs_mask(img_id, ann_id, obj_cats, obj_cats_masks, scores)

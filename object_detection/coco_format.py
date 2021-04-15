@@ -3,18 +3,15 @@ import sys
 import json
 import random
 
-import cv2
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-
-from skimage import measure
-from shapely.geometry import Polygon
 from pycocotools import mask as coco_mask
 from pycocotools.coco import COCO
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common
+from segmentation import mask_utils
 
 
 def get_default_dataset(description='coco format data'):
@@ -41,45 +38,23 @@ def get_img_record(idx, img_path, im_shape=None, license_id=1):
 
 def convert_obj_mask_to_rle(mask):
     """Converts input to fortran contiguous array if needed"""
-    rle = coco_mask.encode(mask if mask.flags['F_CONTIGUOUS'] else np.asfortranarray(mask))
+    rle = mask_utils.binary_mask_to_rle(mask)
     rle['counts'] = str(rle['counts'], 'utf-8')
     return rle
 
 
-def convert_torch_masks_to_rle(masks):
-    masks = masks.permute(0, 2, 1).contiguous().permute(0, 2, 1)
-    return [convert_obj_mask_to_rle(mask.numpy()) for mask in masks]
-
-
-def maybe_simplify_poly(poly):
-    simpler_poly = poly.simplify(1.0, preserve_topology=False)
-    if type(simpler_poly) is not Polygon:   # Multipolygon case
-        return poly
-    segmentation = np.array(simpler_poly.exterior.coords).ravel().tolist()
-    # CVAT requirements
-    return simpler_poly if len(segmentation) % 2 == 0 and 3 <= len(segmentation) // 2 else poly
-
-
 def convert_obj_mask_to_poly(mask):
-    # https://www.immersivelimit.com/create-coco-annotations-from-scratch
-    contours = measure.find_contours(mask, 0.5, positive_orientation='low')
     segmentations = []
-    for contour in contours:
-        # Flip from (row, col) representation to (x, y)
-        # and subtract the padding pixel
-        for i in range(len(contour)):
-            row, col = contour[i]
-            contour[i] = (col - 1, row - 1)
-        poly = Polygon(contour)
-        poly = maybe_simplify_poly(poly)
+    for poly in mask_utils.convert_binary_mask_to_polys(mask):
         segmentation = np.array(poly.exterior.coords).ravel().tolist()
         assert len(segmentation) % 2 == 0 and 3 <= len(segmentation) // 2, "Wrong polygon points: %s" % segmentation
         segmentations.append(segmentation)
     return segmentations
 
 
-def convert_masks_to_poly(masks):
-    return [convert_obj_mask_to_poly(mask.numpy()) for mask in masks]
+def convert_torch_masks_to_rle(masks):
+    masks = masks.permute(0, 2, 1).contiguous().permute(0, 2, 1)
+    return [convert_obj_mask_to_rle(mask.numpy()) for mask in masks]
 
 
 def get_obj_anno(img_id, ann_id, cat_id, bbox, area, seg, is_crowd=0, scores=False):
@@ -95,13 +70,6 @@ def get_obj_anno(img_id, ann_id, cat_id, bbox, area, seg, is_crowd=0, scores=Fal
     if scores:
         anno['score'] = 1.0
     return anno
-
-
-def separate_objs_in_mask(mask, bg=0):
-    obj_cats = np.array([t for t in np.unique(mask) if t != bg])
-    if obj_cats.size == 1 and obj_cats[0] == bg: return None
-    cat_masks = (mask == obj_cats[:, None, None]).astype(np.uint8)
-    return obj_cats, tuple(cv2.connectedComponents(cmsk) for cmsk in cat_masks)
 
 
 def get_annos_from_objs_mask(img_id, start_ann_id, obj_cats, obj_cats_masks, scores=False, to_poly=False):

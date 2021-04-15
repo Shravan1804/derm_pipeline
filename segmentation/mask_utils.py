@@ -4,18 +4,63 @@ import math
 
 import cv2
 import numpy as np
+from skimage import measure
+from shapely.geometry import Polygon
 from pycocotools import mask as pycoco_mask
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common
 
 
+def binary_mask_to_rle(bmask):
+    bmask = bmask.astype(np.uint8)
+    return pycoco_mask.encode(bmask if bmask.flags['F_CONTIGUOUS'] else np.asfortranarray(bmask))
+
+
 def non_binary_mask_to_rles(mask):
-    return [(k, pycoco_mask.encode(np.asfortranarray(mask == k, dtype=np.uint8))) for k in np.unique(mask)]
+    return [(k, binary_mask_to_rle(mask == k)) for k in np.unique(mask)]
 
 
 def rles_to_non_binary_mask(rles):
     return sum([k*pycoco_mask.decode(rle) for k, rle in rles])
+
+
+def maybe_simplify_poly(poly):
+    simpler_poly = poly.simplify(1.0, preserve_topology=False)
+    if type(simpler_poly) is not Polygon:   # Multipolygon case
+        return poly
+    segmentation = np.array(simpler_poly.exterior.coords).ravel().tolist()
+    # CVAT requirements
+    return simpler_poly if len(segmentation) % 2 == 0 and 3 <= len(segmentation) // 2 else poly
+
+
+def convert_binary_mask_to_polys(mask):
+    # https://www.immersivelimit.com/create-coco-annotations-from-scratch
+    contours = measure.find_contours(mask, 0.5, positive_orientation='low')
+    polys = []
+    for contour in contours:
+        # Flip from (row, col) representation to (x, y)
+        # and subtract the padding pixel
+        for i in range(len(contour)):
+            row, col = contour[i]
+            contour[i] = (col - 1, row - 1)
+        poly = Polygon(contour)
+        poly = maybe_simplify_poly(poly)
+        polys.append(poly)
+    return polys
+
+
+def merge_obj_masks(obj_masks, obj_labels):
+    mres = np.zeros_like(obj_masks[0])
+    for ia_mask, label in zip(obj_masks, obj_labels): mres[ia_mask > 0] = label
+    return mres
+
+
+def separate_objs_in_mask(mask, bg=0):
+    obj_cats = np.array([t for t in np.unique(mask) if t != bg])
+    if obj_cats.size == 1 and obj_cats[0] == bg: return None
+    cat_masks = (mask == obj_cats[:, None, None]).astype(np.uint8)
+    return obj_cats, tuple(cv2.connectedComponents(cmsk) for cmsk in cat_masks)
 
 
 def rm_small_objs_from_non_bin_mask(non_binary_mask, min_size, cats_with_bg, bg=0):

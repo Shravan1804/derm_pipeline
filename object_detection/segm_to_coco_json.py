@@ -8,6 +8,7 @@ from functools import partial
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common, crypto, concurrency
+from segmentation import mask_utils
 import segmentation.segmentation_utils as segm_utils
 from object_detection import coco_format
 
@@ -29,7 +30,7 @@ def extract_annos(proc_id, q_annos, im_mask, args):
     for i, (im_id, impath, mpath) in enumerate(im_mask):
         img_dict = coco_format.get_img_record(im_id, impath, im_shape=get_img_shape(impath, args.ckey))
         mask = common.load_img(mpath) if args.ckey is None else crypto.decrypt_img(mpath, args.ckey)
-        obj_cats_with_masks = coco_format.separate_objs_in_mask(convert_segm_mask_to_obj_det_cats(mask, args))
+        obj_cats_with_masks = mask_utils.separate_objs_in_mask(convert_segm_mask_to_obj_det_cats(mask, args))
         if obj_cats_with_masks is None: continue
         else: obj_cats, obj_cats_masks = obj_cats_with_masks
         _, img_annos = coco_format.get_annos_from_objs_mask(im_id, 0, obj_cats, obj_cats_masks, to_poly=args.polygon)
