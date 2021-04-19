@@ -83,7 +83,7 @@ if __name__ == '__main__':
     parser.add_argument('--data', type=str, required=True, help="dataset root directory absolute path")
     parser.add_argument('--segm-cats', type=str, required=True, nargs='+', help="Segm categories")
     parser.add_argument('--od-cats', type=str, nargs='+', help="Obj det categories")
-    parser.add_argument('--ckey', type=str, help="Data encryption key, if left none assumes no encryption")
+    crypto.add_encrypted_args(parser)
     parser = segm_utils.common_segm_args(parser)
     parser.add_argument('--polygon', action='store_true', help="converts bitmask to polygon")
     parser = concurrency.add_multi_proc_args(parser)
@@ -94,7 +94,7 @@ if __name__ == '__main__':
     else:
         for c in args.od_cats:
             assert c in args.segm_cats, f"found OD cat {c} which is not present in segm cats ({args.segm_cats})"
-    if args.ckey is not None: args.ckey = crypto.request_key(args.data, args.ckey, test_key=False)
+    if args.ckey is not None: args.ckey = crypto.request_key(None, args.ckey)
 
     common.time_method(main, args)
 
