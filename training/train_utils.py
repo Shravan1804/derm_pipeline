@@ -206,6 +206,7 @@ class FastaiTrainer:
         parser.add_argument('--no-norm', action='store_true', help="Do not normalizes data")
         parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
         parser.add_argument('--early-stop', action='store_true', help="Early stopping during training")
+        parser.add_argument('--reduce-lr-delta', type=float, default=.01, help="delta for reduce lr on plateau cb")
         parser.add_argument('--no-plot', action='store_true', help="Will not plot test results (e.g. too many classes)")
         parser.add_argument("--metrics-fns", type=str, nargs='+', default=['precision', 'recall'], help="metrics")
 
@@ -321,7 +322,7 @@ class FastaiTrainer:
             yield fold, (items[train_idx], items_cls[train_idx]), (items[valid_idx], items_cls[valid_idx])
 
     def get_train_cbs(self, run):
-        cbs = []
+        cbs = [fv.ReduceLROnPlateau(monitor='valid_loss', min_delta=self.args.reduce_lr_delta, patience=3)]
         if GPUManager.is_master_process():  # otherwise creates deadlock
             cbs.append(self.tensorboard_cb(run))
         if self.args.early_stop:
