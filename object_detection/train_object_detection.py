@@ -50,6 +50,10 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
 
     def get_patch_full_img(self, patch): return super().get_patch_full_img(str(patch.filepath))
 
+    def get_cats_idxs(self):
+        # index 0 is the bg class which is ignored by COCO metrics
+        return list(range(1, len(self.args.cats)+1))
+
     def get_cats_with_all(self):
         # category at index 0 is the background class, which should be ignored
         return [self.ALL_CATS, *self.args.cats[1:]]

@@ -94,6 +94,9 @@ class ImageTrainer(train_utils.FastaiTrainer):
         kwargs['loss_func'] = self.get_loss_fn(dls)
         return kwargs
 
+    def get_cats_idxs(self):
+        return list(range(len(self.args.cats)))
+
     def get_cats_with_all(self):
         return [self.ALL_CATS, *self.args.cats]
 
@@ -102,7 +105,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
     def prepare_custom_metrics(self):
         metrics_fn = {}
         for perf_fn in self.args.metrics_fns:
-            for cat_id, cat in zip([None, *range(len(self.args.cats))], self.get_cats_with_all()):
+            for cat_id, cat in zip([None, *self.get_cats_idxs()], self.get_cats_with_all()):
                 self.create_cats_metrics(perf_fn, cat_id, cat, metrics_fn)
         return metrics_fn
 
