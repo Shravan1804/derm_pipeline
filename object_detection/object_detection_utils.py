@@ -14,6 +14,12 @@ from segmentation import mask_utils
 from object_detection import coco_format
 
 
+class COCOMaskParserEncrypted(ia.parsers.COCOMaskParser):
+    def image_width_height(self, o):
+        im_dict = self._imageid2info[o['image_id']]
+        return im_dict["width"], im_dict["height"]
+
+
 class SimpleCocoEvalMetric(COCOeval):
     def __init__(self, coco_eval, cat_id=None, iou=.15, pre_rec=True):
         super().__init__(coco_eval.cocoGt, coco_eval.cocoDt, coco_eval.params.iouType)

@@ -2,8 +2,6 @@ import os
 import sys
 from types import SimpleNamespace
 
-import numpy as np
-
 import torch
 import icevision.all as ia
 import fastai.vision.all as fv
@@ -33,12 +31,20 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
     def __init__(self, args, stratify=False, full_img_sep=CROP_SEP, **kwargs):
         self.metrics_types = [ia.COCOMetricType.bbox] + ([ia.COCOMetricType.mask] if args.with_segm else [])
         super().__init__(args, stratify, full_img_sep, **kwargs)
+        if self.args.encrypted:
+            def _crypted_load(mixin_self):
+                mixin_self.img = self.load_image_item(mixin_self.filepath)
+                mixin_self.height, mixin_self.width, _ = mixin_self.img.shape
+                super(ia.core.FilepathRecordMixin, mixin_self)._load()
+            ia.core.FilepathRecordMixin._load = _crypted_load
+            # TODO: hack, solve this better
 
     def load_items(self, anno_file):
         anno_path = os.path.join(self.args.data, 'annotations', anno_file)
         img_dir = os.path.join(self.args.data, 'images', os.path.splitext(anno_file)[0])
         no_split = ia.SingleSplitSplitter()
-        records = fv.L(ia.parsers.coco(annotations_file=anno_path, img_dir=img_dir).parse(data_splitter=no_split)[0])
+        coco_parser = obj_utils.COCOMaskParserEncrypted if self.args.encrypted else ia.parsers.COCOMaskParser
+        records = fv.L(coco_parser(annotations_filepath=anno_path, img_dir=img_dir).parse(data_splitter=no_split)[0])
         # dummy cls so that the split_data pipeline works
         return records, fv.L([1]*len(records))
 
