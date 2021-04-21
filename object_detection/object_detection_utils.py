@@ -14,6 +14,12 @@ from segmentation import mask_utils
 from object_detection import coco_format
 
 
+def get_obj_det_ds_paths(root, anno_file):
+    anno_path = os.path.join(root, 'annotations', anno_file)
+    img_dir = os.path.join(root, 'images', os.path.splitext(anno_file)[0])
+    return anno_path, img_dir
+
+
 class COCOMaskParserEncrypted(ia.parsers.COCOMaskParser):
     def image_width_height(self, o):
         im_dict = self._imageid2info[o['image_id']]

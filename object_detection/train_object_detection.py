@@ -32,19 +32,24 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
         self.metrics_types = [ia.COCOMetricType.bbox] + ([ia.COCOMetricType.mask] if args.with_segm else [])
         super().__init__(args, stratify, full_img_sep, **kwargs)
         if self.args.encrypted:
+            self.coco_parser_cls = obj_utils.COCOMaskParserEncrypted
             def _crypted_load(mixin_self):
                 mixin_self.img = self.load_image_item(mixin_self.filepath)
                 mixin_self.height, mixin_self.width, _ = mixin_self.img.shape
                 super(ia.core.FilepathRecordMixin, mixin_self)._load()
             ia.core.FilepathRecordMixin._load = _crypted_load
             # TODO: hack, solve this better
+        self.coco_parser_cls = obj_utils.COCOMaskParserEncrypted if self.args.encrypted else ia.parsers.COCOMaskParser
+
+    def load_coco_anno_file(self, anno_file):
+        anno_path, img_dir = obj_utils.get_obj_det_ds_paths(self.args.data, anno_file)
+        coco_parser = self.coco_parser_cls(annotations_filepath=anno_path, img_dir=img_dir)
+        idmap = ia.IDMap()
+        records = fv.L(coco_parser.parse(data_splitter=ia.SingleSplitSplitter())[0], idmap=idmap, show_pbar=False)
+        return coco_parser, idmap, records
 
     def load_items(self, anno_file):
-        anno_path = os.path.join(self.args.data, 'annotations', anno_file)
-        img_dir = os.path.join(self.args.data, 'images', os.path.splitext(anno_file)[0])
-        no_split = ia.SingleSplitSplitter()
-        coco_parser = obj_utils.COCOMaskParserEncrypted if self.args.encrypted else ia.parsers.COCOMaskParser
-        records = fv.L(coco_parser(annotations_filepath=anno_path, img_dir=img_dir).parse(data_splitter=no_split)[0])
+        _, _, records = self.load_coco_anno_file(anno_file)
         # dummy cls so that the split_data pipeline works
         return records, fv.L([1]*len(records))
 
@@ -89,10 +94,16 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
             GPUManager.sync_distributed_process()
             arch, _ = self.get_arch()
             test_ds = ia.Dataset(test_items_with_cls[0], self.get_tfms()[1])
+            # OD preds for OD perfs, IGNORE test items without objects
             test_dl = arch.infer_dl(test_ds, batch_size=learn.dls.bs)
             with GPUManager.running_context(learn, self.args.gpu_ids):
                 interp = SimpleNamespace()
                 interp.targs, interp.preds = arch.predict_dl(model=learn.model, infer_dl=test_dl)
+
+            if self.args.with_segm:
+                # OD preds for SEGM perfs, INCLUDE test items without objects
+                coco_parser, idmap, records = self.load_coco_anno_file(test_name)
+
             interp = self.process_test_preds(interp)
             del interp.preds, interp.targs
             GPUManager.clean_gpu_memory(test_dl)
