@@ -176,13 +176,13 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
             for s, preds in interp.segm_decoded.items():
                 interp.metrics[f'{self.SEGM_PERF}cm_score{s}'] = self.compute_conf_mat(interp.segm_targs, preds)
             for fname, pfn in [(fname, getattr(train_utils, fname)) for fname in self.args.metrics_fns]:
-                all_score_res = []
-                for s in self.scores_steps:
-                    for cid, cat in zip([None, 0, *self.get_cats_idxs()], self.get_segm_cats_with_all()):
+                for cid, cat in zip([None, 0, *self.get_cats_idxs()], self.get_segm_cats_with_all()):
+                    all_scores_res = []
+                    for s in self.scores_steps:
                         mn = self.get_cat_segm_metric_name(fname, cat, s)
                         interp.metrics[mn] = segm_perf(pfn, interp.segm_decoded[s], interp.segm_targs, cid)
-                        all_score_res.append(interp.metrics[mn])
-                interp.metrics[self.get_cat_segm_metric_name(fname, cat, None)] = torch.stack(all_score_res)
+                        all_scores_res.append(interp.metrics[mn])
+                    interp.metrics[self.get_cat_segm_metric_name(fname, cat, None)] = torch.stack(all_scores_res)
         return interp
 
     def plot_test_performance(self, test_path, run, agg_perf):
