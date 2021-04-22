@@ -28,7 +28,7 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
 
     @staticmethod
     def prepare_training(args):
-        if args.with_segm: assert args.model ==
+        if args.with_segm: assert args.model == 'mask_rcnn', f"Used --with-segm but requested model is {args.model}"
         args.exp_name = "img_obj_detec_" + args.exp_name
         super(ImageObjectDetectionTrainer, ImageObjectDetectionTrainer).prepare_training(args)
 
@@ -91,53 +91,55 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
                     ordered.append((mns, f'{perf_fn}_iou{iou}_{mtype.name}'))
         return ordered
 
+    def compute_test_predictions(self, learn, test_name, test_items_with_cls):
+        GPUManager.sync_distributed_process()
+        (arch, _), vtfms = self.get_arch(), self.get_tfms()[1]
+        test_ds = ia.Dataset(test_items_with_cls[0], vtfms)
+
+        # OD preds for OD perfs, IGNORE test items without objects
+        test_dl = arch.infer_dl(test_ds, batch_size=learn.dls.bs)
+        with GPUManager.running_context(learn, self.args.gpu_ids):
+            interp = SimpleNamespace()
+            interp.od_targs, interp.od_preds = arch.predict_dl(model=learn.model, infer_dl=test_dl)
+
+        if self.args.with_segm:
+            # OD preds for SEGM perfs, INCLUDE test items without objects
+            _, imdir = obj_utils.get_obj_det_ds_paths(self.args.data, test_name)
+            parser, idmap, records = self.load_coco_anno_file(test_name)
+            im_no_gt = [(i, imd['file_name']) for i, imd in parser._imageid2info.items() if i not in idmap.name2id]
+            with GPUManager.running_context(learn, self.args.gpu_ids):
+                od_preds_no_gt, empty_gt = [], None
+                for batch in common.batch_list(im_no_gt, bs=learn.dls.bs):
+                    ims = [self.load_image_item(os.path.join(imdir, im_name)) for _, im_name in batch]
+                    batch_dl, samples = arch.build_infer_batch(ia.Dataset.from_images(ims, vtfms))
+                    if empty_gt is None: empty_gt = np.zeros((samples[0]['height'], samples[0]['width']))
+                    od_preds_no_gt.append(arch.predict(model=learn.model, batch=batch_dl))
+                od_preds_no_gt = {i: p for (i, _), p in zip(im_no_gt, [x for b in od_preds_no_gt for x in b])}
+
+            gt_masks, pred_masks = [], {s: [] for s in np.array(range(10)) / 10}
+            for imid, imdict in parser._imageid2info.items():
+                if imid in idmap.name2id:
+                    r = idmap.name2id[imid]
+                    gtm = mask_utils.merge_obj_masks(interp.od_targs[r]['masks'].data, interp.od_targs[r]['labels'])
+                    gt_masks.append(gtm)
+                    im_pred = interp.od_preds[r]
+                else:
+                    gt_masks.append(empty_gt.copy())
+                    im_pred = od_preds_no_gt[imid]
+                for s, p in pred_masks.items():
+                    om, ol, oidx = im_pred['masks'].data, im_pred['labels'], im_pred['scores'] >= s
+                    p.append(mask_utils.merge_obj_masks(om[oidx], ol[oidx]) if oidx.any() else empty_gt.copy())
+            interp.segm_targs = torch.stack([torch.tensor(gtm) for gtm in gt_masks])
+            interp.segm_preds = {s: torch.stack([torch.tensor(p) for p in sp]) for s, sp in pred_masks.items()}
+            GPUManager.clean_gpu_memory(test_dl, batch_dl)
+            return interp
+
     def evaluate_on_test_sets(self, learn, run):
         """Evaluate test sets, clears GPU memory held by test dl(s)"""
         for test_name, test_items_with_cls in self.get_test_items(merged=False):
             print("Testing model", run, "on", test_name)
-            GPUManager.sync_distributed_process()
-            (arch, _), vtfms = self.get_arch(), self.get_tfms()[1]
-            test_ds = ia.Dataset(test_items_with_cls[0], vtfms)
-
-            # OD preds for OD perfs, IGNORE test items without objects
-            test_dl = arch.infer_dl(test_ds, batch_size=learn.dls.bs)
-            with GPUManager.running_context(learn, self.args.gpu_ids):
-                interp = SimpleNamespace()
-                interp.od_targs, interp.od_preds = arch.predict_dl(model=learn.model, infer_dl=test_dl)
-
-            if self.args.with_segm:
-                # OD preds for SEGM perfs, INCLUDE test items without objects
-                _, imdir = obj_utils.get_obj_det_ds_paths(self.args.data, test_name)
-                parser, idmap, records = self.load_coco_anno_file(test_name)
-                im_no_gt = [(i, imd['file_name']) for i, imd in parser._imageid2info.items() if i not in idmap.name2id]
-                with GPUManager.running_context(learn, self.args.gpu_ids):
-                    od_preds_no_gt, empty_gt = [], None
-                    for batch in common.batch_list(im_no_gt, bs=learn.dls.bs):
-                        ims = [self.load_image_item(os.path.join(imdir, im_name)) for _, im_name in batch]
-                        batch_dl, samples = arch.build_infer_batch(ia.Dataset.from_images(ims, vtfms))
-                        if empty_gt is None: empty_gt = np.zeros((samples[0]['height'], samples[0]['width']))
-                        od_preds_no_gt.append(arch.predict(model=learn.model, batch=batch_dl))
-                    od_preds_no_gt = {i: p for (i, _), p in zip(im_no_gt, [x for b in od_preds_no_gt for x in b])}
-
-                gt_masks, pred_masks = [], {s: [] for s in np.array(range(10)) / 10}
-                for imid, imdict in parser._imageid2info.items():
-                    if imid in idmap.name2id:
-                        r = idmap.name2id[imid]
-                        gtm = mask_utils.merge_obj_masks(interp.od_targs[r]['masks'].data, interp.od_targs[r]['labels'])
-                        gt_masks.append(gtm)
-                        im_pred = interp.od_preds[r]
-                    else:
-                        gt_masks.append(empty_gt.copy())
-                        im_pred = od_preds_no_gt[imid]
-                    for s, p in pred_masks.items():
-                        om, ol, oidx = im_pred['masks'].data, im_pred['labels'], im_pred['scores'] >= s
-                        p.append(mask_utils.merge_obj_masks(om[oidx], ol[oidx]) if oidx.any() else empty_gt.copy())
-                interp.segm_targs = torch.stack([torch.tensor(gtm) for gtm in gt_masks])
-                interp.segm_preds = {s: torch.stack([torch.tensor(p) for p in sp]) for s, sp in pred_masks.items()}
-
-            interp = self.process_test_preds(interp)
+            interp = self.process_test_preds(self.compute_test_predictions(learn, test_name, test_items_with_cls))
             del interp.od_preds, interp.od_targs, interp.segm_targs, interp.segm_preds
-            GPUManager.clean_gpu_memory(test_dl, batch_dl)
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(interp)
 
     def process_test_preds(self, interp):
