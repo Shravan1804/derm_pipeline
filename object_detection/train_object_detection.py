@@ -71,6 +71,9 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
         # category at index 0 is the background class, which should be ignored
         return [self.ALL_CATS, *self.args.cats[1:]]
 
+    def get_segm_cats_with_all(self):
+        return super().get_cats_with_all()
+
     def get_cat_metric_name(self, perf_fn, cat, iou, mtype):
         return f'{super().get_cat_metric_name(perf_fn, cat)}_iou{iou}_{mtype.name}'
 
@@ -98,10 +101,10 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
                     ordered.append((mns, f'{perf_fn}_iou{iou}_{mtype.name}'))
         if self.args.with_segm:
             for perf_fn in self.args.metrics_fns:
-                mns = [self.get_cat_segm_metric_name(perf_fn, cat, None) for cat in self.get_cats_with_all()]
+                mns = [self.get_cat_segm_metric_name(perf_fn, cat, None) for cat in self.get_segm_cats_with_all()]
                 ordered.append((mns, f'{self.SEGM_PERF}{perf_fn}'))
                 for score in self.scores_steps:
-                    mns = [self.get_cat_segm_metric_name(perf_fn, cat, score) for cat in self.get_cats_with_all()]
+                    mns = [self.get_cat_segm_metric_name(perf_fn, cat, score) for cat in self.get_segm_cats_with_all()]
                     ordered.append((mns, f'{self.SEGM_PERF}{perf_fn}_score{score}'))
         return ordered
 
@@ -175,7 +178,7 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
             for fname, pfn in [(fname, getattr(train_utils, fname)) for fname in self.args.metrics_fns]:
                 all_score_res = []
                 for s in self.scores_steps:
-                    for cid, cat in zip([None, *self.get_cats_idxs()], self.get_cats_with_all()):
+                    for cid, cat in zip([None, 0, *self.get_cats_idxs()], self.get_segm_cats_with_all()):
                         mn = self.get_cat_segm_metric_name(fname, cat, s)
                         interp.metrics[mn] = segm_perf(pfn, interp.segm_decoded[s], interp.segm_targs, cid)
                         all_score_res.append(interp.metrics[mn])
@@ -184,19 +187,19 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
 
     def plot_test_performance(self, test_path, run, agg_perf):
         show_val = not self.args.no_plot_val
-        fig, axs = common.new_fig_with_axs(1, len(self.metrics_types), self.args.test_figsize)
+        fig, axs = common.new_fig_with_axs(1, len(self.metrics_types), self.args.test_figsize, sharey=True)
         od_agg_perf = {k: v for k, v in agg_perf.items() if not k.startswith(self.SEGM_PERF)}
         for ax, mtype in zip([axs] if len(self.metrics_types) < 2 else axs, self.metrics_types):
             mtype_agg_perf = {k: v for k, v in od_agg_perf.items() if k.endswith(f'_{mtype.name}')}
-            self.plot_custom_metrics(ax, mtype_agg_perf, show_val, title=f"{mtype.name} metric")
+            self.plot_custom_metrics(ax, mtype_agg_perf, show_val, title=f"OD {mtype.name} metrics")
         fig.tight_layout(pad=.2)
         save_path = self.plot_save_path(test_path, run, show_val, custom="_od_perf")
         plt.savefig(save_path, dpi=400)
         if self.args.with_segm:
             segm_agg_perf = {k: v for k, v in agg_perf.items() if k.startswith(self.SEGM_PERF)}
             fig, axs = common.new_fig_with_axs(1, 2, self.args.test_figsize)
-            pre_mean, pre_std = zip(*[v for k, v in segm_agg_perf.items() if "precision" in k])
-            rec_mean, rec_std = zip(*[v for k, v in segm_agg_perf.items() if "recall" in k])
+            pre_mean, pre_std = segm_agg_perf[f"{self.SEGM_PERF}precision"]
+            rec_mean, rec_std = segm_agg_perf[f"{self.SEGM_PERF}recall"]
             if show_val: svals = [[f'{(r, p)}'for r, p in zip(rr, pp)] for rr, pp in zip(rec_mean, pre_mean)]
             common.plot_lines_with_err(axs[0], rec_mean, pre_mean, self.args.cats, pre_std, rec_std, svals, err_bounds=(0, 1),
                                 legend_loc="lower center")

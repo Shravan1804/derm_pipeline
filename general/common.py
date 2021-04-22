@@ -322,9 +322,9 @@ def stdout_prepend(f, pre_msg, *args):
         f(*args)
 
 
-def new_fig_with_axs(nrows, ncols, base_fig_with, base_fig_height=None):
-    if base_fig_height is None: base_fig_height = base_fig_with
-    return plt.subplots(nrows, ncols, figsize=(nrows*base_fig_with, ncols*base_fig_height))
+def new_fig_with_axs(nrows, ncols, base_fig_width, base_fig_height=None, **kwargs):
+    if base_fig_height is None: base_fig_height = base_fig_width
+    return plt.subplots(nrows, ncols, figsize=(ncols*base_fig_width, nrows*base_fig_height), **kwargs)
 
 
 def plt_save_fig(path, fig=None, close=True, **kwargs):
