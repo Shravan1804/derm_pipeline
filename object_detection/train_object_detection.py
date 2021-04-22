@@ -186,7 +186,7 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
         return interp
 
     def plot_precision_recall(self, ax, pre_with_err, rec_with_err, show_val):
-        (pre, pstd), rec, rstd = pre_with_err, rec_with_err
+        (pre, pstd), (rec, rstd) = pre_with_err, rec_with_err
         svals = [[f'{(r, p)}' for r, p in zip(rr, pp)] for rr, pp in zip(rec, pre)] if show_val else None
         common.plot_lines_with_err(ax, rec, pre, self.get_segm_cats_with_all(), pstd, rstd, svals)
         score_steps = np.repeat(self.scores_steps[None, ], len(self.get_segm_cats_with_all()), 0)

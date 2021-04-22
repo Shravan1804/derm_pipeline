@@ -42,7 +42,7 @@ def show_graph_values(ax, values, pos_x, pos_y=None, yerr=None, kwargs={"fontsiz
     pos_y = values if pos_y is None else pos_y
     yerr = np.zeros(values.shape) if yerr is None else yerr
     for x, y, v, ye in zip(pos_x, pos_y, values, yerr):
-        ax.text(x, y + ye, f'{v:.2f}', **kwargs)
+        ax.text(x, y + ye, v, **kwargs)
 
 
 def zero_error_bars(vals):
@@ -74,7 +74,7 @@ def grouped_barplot_with_err(ax, stats, groupLabels, xlabel=None, ylabel=None, t
     for offset, (key, (vals, err)), c in zip(offsets, stats.items(), [cmap(i) for i in range(nbars_per_group)]):
         err = clip_err(vals, err, err_bounds)
         ax.bar(positions + offset, vals, color=c, width=barwidth, yerr=err, label=key, error_kw=ekw, edgecolor='white')
-        if show_val: show_graph_values(ax, vals, positions + offset - barwidth/2, yerr=err[1])
+        if show_val: show_graph_values(ax, [f'{v:.2f}' for v in vals], positions + offset - barwidth/2, pos_y=vals, yerr=err[1])
 
     ax.set_ylabel("Performance" if ylabel is None else ylabel)
     ax.set_xlabel(xlabel)
