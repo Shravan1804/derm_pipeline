@@ -96,9 +96,9 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         if self.args.coco_metrics:
             figsize = self.args.test_figsize
             cocoeval = agg_perf['cocoeval']
-            for show_val in [False, True]:
-                save_path = os.path.join(test_path, f'{run}_coco{"_show_val" if show_val else ""}.jpg')
-                CustomCocoEval.plot_coco_eval(self.coco_param_labels, cocoeval, figsize, save_path, show_val)
+            show_val = not self.args.no_plot_val
+            save_path = os.path.join(test_path, f'{run}_coco{"_show_val" if show_val else ""}.jpg')
+            CustomCocoEval.plot_coco_eval(self.coco_param_labels, cocoeval, figsize, save_path, show_val)
 
     def create_dls(self, tr, val, bs, size):
         blocks = fv.ImageBlock, fv.MaskBlock(self.args.cats)

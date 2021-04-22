@@ -1,8 +1,10 @@
 import os
 import sys
+from functools import partial
 from types import SimpleNamespace
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 import torch
 import icevision.all as ia
@@ -10,9 +12,9 @@ import fastai.vision.all as fv
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common
-from training import train_utils_img
+from training import train_utils, train_utils_img
 from training.train_utils import GPUManager
-from segmentation import mask_utils
+from segmentation import mask_utils, segmentation_utils as segm_utils
 from segmentation.crop_to_thresh import SEP as CROP_SEP
 from object_detection import object_detection_utils as obj_utils
 
@@ -22,7 +24,7 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
     def get_argparser(desc="Fastai image obj detec trainer arguments", pdef=dict(), phelp=dict()):
         parser = super(ImageObjectDetectionTrainer, ImageObjectDetectionTrainer).get_argparser(desc, pdef, phelp)
         parser.add_argument("--backbone", type=str, help="backbone")
-        parser.add_argument('--ious', default=[.15, .25], nargs='+', type=float, help="Metrics IoUs")
+        parser.add_argument('--ious', default=[.1, .3, .5], nargs='+', type=float, help="Metrics IoUs")
         parser.add_argument('--with-segm', action='store_true', help="Metrics will be also computed on segmentation")
         return parser
 
@@ -33,7 +35,9 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
         super(ImageObjectDetectionTrainer, ImageObjectDetectionTrainer).prepare_training(args)
 
     def __init__(self, args, stratify=False, full_img_sep=CROP_SEP, **kwargs):
+        self.SEGM_PERF = 'segm_'
         self.metrics_types = [ia.COCOMetricType.bbox] + ([ia.COCOMetricType.mask] if args.with_segm else [])
+        self.scores_steps = np.array(range(10)) / 10
         super().__init__(args, stratify, full_img_sep, **kwargs)
         if self.args.encrypted:
             self.coco_parser_cls = obj_utils.COCOMaskParserEncrypted
@@ -70,6 +74,9 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
     def get_cat_metric_name(self, perf_fn, cat, iou, mtype):
         return f'{super().get_cat_metric_name(perf_fn, cat)}_iou{iou}_{mtype.name}'
 
+    def get_cat_segm_metric_name(self, perf_fn, cat, score):
+        return f'{self.SEGM_PERF}{super().get_cat_metric_name(perf_fn, cat)}{"" if score is None else f"_score{score}"}'
+
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn):
         def custom_coco_eval_metric(name, **kwargs):
             class CocoEvalTemplate(obj_utils.CustomCOCOMetric):
@@ -89,7 +96,20 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
                 for iou in self.args.ious:
                     mns = [self.get_cat_metric_name(perf_fn, cat, iou, mtype) for cat in self.get_cats_with_all()]
                     ordered.append((mns, f'{perf_fn}_iou{iou}_{mtype.name}'))
+        if self.arg.with_segm:
+            for perf_fn in self.args.metrics_fns:
+                mns = [self.get_cat_segm_metric_name(perf_fn, cat, None) for cat in self.get_cats_with_all()]
+                ordered.append((mns, f'{self.SEGM_PERF}{perf_fn}'))
+                for score in self.scores_steps:
+                    mns = [self.get_cat_segm_metric_name(perf_fn, cat, score) for cat in self.get_cats_with_all()]
+                    ordered.append((mns, f'{self.SEGM_PERF}{perf_fn}_score{score}'))
         return ordered
+
+    def compute_conf_mat(self, targs, preds):
+        if self.args.with_segm:
+            return segm_utils.pixel_conf_mat(targs, preds, self.args.cats)
+        else:
+            raise NotImplementedError
 
     def compute_test_predictions(self, learn, test_name, test_items_with_cls):
         GPUManager.sync_distributed_process()
@@ -103,6 +123,7 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
             interp.od_targs, interp.od_preds = arch.predict_dl(model=learn.model, infer_dl=test_dl)
 
         if self.args.with_segm:
+            print(f"Applying model on {test_name} pictures without annotations")
             # OD preds for SEGM perfs, INCLUDE test items without objects
             _, imdir = obj_utils.get_obj_det_ds_paths(self.args.data, test_name)
             parser, idmap, records = self.load_coco_anno_file(test_name)
@@ -116,7 +137,7 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
                     od_preds_no_gt.append(arch.predict(model=learn.model, batch=batch_dl))
                 od_preds_no_gt = {i: p for (i, _), p in zip(im_no_gt, [x for b in od_preds_no_gt for x in b])}
 
-            gt_masks, pred_masks = [], {s: [] for s in np.array(range(10)) / 10}
+            gt_masks, pred_masks = [], {s: [] for s in self.scores_steps}
             for imid, imdict in parser._imageid2info.items():
                 if imid in idmap.name2id:
                     r = idmap.name2id[imid]
@@ -130,7 +151,7 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
                     om, ol, oidx = im_pred['masks'].data, im_pred['labels'], im_pred['scores'] >= s
                     p.append(mask_utils.merge_obj_masks(om[oidx], ol[oidx]) if oidx.any() else empty_gt.copy())
             interp.segm_targs = torch.stack([torch.tensor(gtm) for gtm in gt_masks])
-            interp.segm_preds = {s: torch.stack([torch.tensor(p) for p in sp]) for s, sp in pred_masks.items()}
+            interp.segm_decoded = {s: torch.stack([torch.tensor(p) for p in sp]) for s, sp in pred_masks.items()}
             GPUManager.clean_gpu_memory(test_dl, batch_dl)
             return interp
 
@@ -138,16 +159,50 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
         """Evaluate test sets, clears GPU memory held by test dl(s)"""
         for test_name, test_items_with_cls in self.get_test_items(merged=False):
             print("Testing model", run, "on", test_name)
-            interp = self.process_test_preds(self.compute_test_predictions(learn, test_name, test_items_with_cls))
-            del interp.od_preds, interp.od_targs, interp.segm_targs, interp.segm_preds
+            interp = self.compute_metrics(self.compute_test_predictions(learn, test_name, test_items_with_cls))
+            del interp.od_preds, interp.od_targs, interp.segm_targs, interp.segm_decoded
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(interp)
 
-    def process_test_preds(self, interp):
+    def compute_metrics(self, interp):
         interp.metrics = {}
         for mn, mfn in self.cust_metrics.items():
             mfn.accumulate(interp.od_targs, interp.od_preds)
             interp.metrics[mn] = torch.tensor(next(iter(mfn.finalize().values()))).float()
+        if self.args.with_segm:
+            segm_perf = partial(segm_utils.cls_perf, cats=self.args.cats, bg=None, axis=None)
+            for s, preds in interp.segm_decoded.items():
+                interp.metrics[f'{self.SEGM_PERF}cm_score{s}'] = self.compute_conf_mat(interp.segm_targs, preds)
+            for fname, pfn in [(fname, getattr(train_utils, fname)) for fname in self.args.metrics_fns]:
+                all_score_res = []
+                for s in self.scores_steps:
+                    for cid, cat in zip([None, *self.get_cats_idxs()], self.get_cats_with_all()):
+                        mn = self.get_cat_segm_metric_name(fname, cat, s)
+                        interp.metrics[mn] = segm_perf(pfn, interp.segm_decoded[s], interp.segm_targs, cid)
+                        all_score_res.append(interp.metrics[mn])
+                interp.metrics[self.get_cat_segm_metric_name(fname, cat, None)] = torch.stack(all_score_res)
         return interp
+
+    def plot_test_performance(self, test_path, run, agg_perf):
+        show_val = not self.args.no_plot_val
+        fig, axs = common.new_fig_with_axs(1, len(self.metrics_types), self.args.test_figsize)
+        od_agg_perf = {k: v for k, v in agg_perf.items() if not k.startswith(self.SEGM_PERF)}
+        for ax, mtype in zip([axs] if len(self.metrics_types) < 2 else axs, self.metrics_types):
+            mtype_agg_perf = {k: v for k, v in od_agg_perf.items() if k.endswith(f'_{mtype.name}')}
+            self.plot_custom_metrics(ax, mtype_agg_perf, show_val, title=f"{mtype.name} metric")
+        fig.tight_layout(pad=.2)
+        save_path = os.path.join(test_path, f'{run}_od_perf{"_show_val" if show_val else ""}.jpg')
+        plt.savefig(save_path, dpi=400)
+        if self.args.with_segm:
+            segm_agg_perf = {k: v for k, v in agg_perf.items() if k.startswith(self.SEGM_PERF)}
+            fig, axs = common.new_fig_with_axs(1, 2, self.args.test_figsize)
+            rec, pre = [v for k, v in segm_agg_perf.items() if "recall" in k]
+            common.plot_lines_with_err(axs[0], xs, ys, labels, yerrs=None, xerrs=None, show_val=None, err_bounds=(0, 1),
+                                legend_loc="lower center")
+            self.plot_custom_metrics(axs[0], agg_perf, show_val)
+            common.plot_confusion_matrix(axs[1], agg_perf['cm'], self.args.cats)
+            fig.tight_layout(pad=.2)
+            save_path = os.path.join(test_path, f'{run}_segm_perf{"_show_val" if show_val else ""}.jpg')
+            plt.savefig(save_path, dpi=400)
 
     def get_arch(self):
         return getattr(ia, self.args.model), {}

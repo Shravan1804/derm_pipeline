@@ -28,9 +28,10 @@ def get_cmap(n, name='Dark2'):
 
 
 def clip_err(vals, err, bounds=(0, 1)):
-    """If err not None, will return 2D err array (low_err and up_err) clipped between specified bounds"""
-    if err is None: return np.zeros((2, *vals.shape), dtype=vals.dtype)
-    return (np.vstack([vals - err, vals + err]).clip(*bounds) - np.vstack([vals, vals])) * np.array([[-1], [1]])
+    """Return 2D err array (low_err and up_err) clipped between specified bounds"""
+    if err is None: err = zero_error_bars(vals)
+    if len(vals.shape) > 1 and vals.shape[0] == 2: return err.clip(*bounds)
+    else: return np.abs(np.vstack([vals - err, vals + err]).clip(*bounds) - np.vstack([vals, vals]))
 
 
 def get_error_display_params():
@@ -44,11 +45,18 @@ def show_graph_values(ax, values, pos_x, pos_y=None, yerr=None, kwargs={"fontsiz
         ax.text(x, y + ye, f'{v:.2f}', **kwargs)
 
 
-def plot_lines_with_err(ax, xs, ys, errs, labels, show_val=False, err_bounds=(0, 1), legend_loc="lower center"):
-    for x, y, err, label in zip(xs, ys, errs, labels):
-        err = clip_err(y, err, err_bounds)
-        ax.errorbar(x, y, yerr=err, label=label, **get_error_display_params())
-        if show_val: show_graph_values(ax, y, x, yerr=err[1])
+def zero_error_bars(vals):
+    return np.zeros((2, *vals.shape), dtype=vals.dtype)
+
+
+def plot_lines_with_err(ax, xs, ys, labels, yerrs=None, xerrs=None, show_val=None, err_bounds=(0, 1), legend_loc="lower center"):
+    if yerrs is None: [zero_error_bars(y) for y in ys]
+    if xerrs is None: [zero_error_bars(x) for x in xs]
+    for x, y, label, yerr, xerr in zip(xs, ys, labels, yerrs, xerrs):
+        yerr = clip_err(y, yerr, err_bounds)
+        xerr = clip_err(x, xerr, err_bounds)
+        ax.errorbar(x, y, yerr=yerr, xerr=xerr, label=label, **get_error_display_params())
+        if show_val is not None: show_graph_values(ax, show_val, x, pos_y=y, yerr=yerr[1])
     ax.legend(loc=legend_loc)
 
 
@@ -279,10 +287,10 @@ def elapsed_timer():
     elapser = lambda: end-start
 
 
-def time_method(m, *args, **kwargs):
+def time_method(m, *args, text="Work", **kwargs):
     with elapsed_timer() as elapsed:
         res = m(*args, **kwargs)
-        print(f"Work completed in {datetime.timedelta(seconds=elapsed())}.")
+        print(f"{text} completed in {datetime.timedelta(seconds=elapsed())}.")
     return res
 
 
@@ -311,6 +319,11 @@ class PrintPrepender:
 def stdout_prepend(f, pre_msg, *args):
     with contextlib.redirect_stdout(PrintPrepender(pre_msg)):
         f(*args)
+
+
+def new_fig_with_axs(nrows, ncols, base_fig_with, base_fig_height=None):
+    if base_fig_height is None: base_fig_height = base_fig_with
+    return plt.subplots(nrows, ncols, figsize=(nrows*base_fig_with, ncols*base_fig_height))
 
 
 def plt_save_fig(path, fig=None, close=True, **kwargs):

@@ -193,7 +193,7 @@ class FastaiTrainer:
         parser.add_argument('--logdir', type=str, default=pdef.get('--logdir', os.path.join(str(Path.home()), 'logs')),
                             help=phelp.get('--logdir', "Root dir where logs will be saved, default to $HOME/logs"))
         parser.add_argument('--exp-logdir', type=str, help="Experiment logdir, will be created in root log dir")
-        parser.add_argument('--test-figsize', type=float, nargs='+', default=pdef.get('--test-figsize', [7, 3.4]),
+        parser.add_argument('--test-figsize', type=float, default=pdef.get('--test-figsize', 3.4),
                             help=phelp.get('--test-figsize', "figsize of test performance plots"))
 
         parser.add_argument('--model', type=str, default=pdef.get('--model', None), help="Model name")
@@ -208,6 +208,7 @@ class FastaiTrainer:
         parser.add_argument('--early-stop', action='store_true', help="Early stopping during training")
         parser.add_argument('--reduce-lr-delta', type=float, default=.01, help="delta for reduce lr on plateau cb")
         parser.add_argument('--no-plot', action='store_true', help="Will not plot test results (e.g. too many classes)")
+        parser.add_argument('--no-plot-val', action='store_true', help="Will not print vals inside plot area")
         parser.add_argument("--metrics-fns", type=str, nargs='+', default=['precision', 'recall'], help="metrics")
 
         parser.add_argument('--proc-gpu', type=int, default=0, help="Id of gpu to be used by process")
@@ -401,7 +402,7 @@ class FastaiTrainer:
         for test_name in self.args.sl_tests:
             test_path = common.maybe_create(self.args.exp_logdir, f'{test_name}_{self.args.exp_name}')
             for run, folds_results in self.test_set_results[test_name].items():
-                agg = self.aggregate_test_performance(folds_results)
+                agg = common.time_method(self.aggregate_test_performance, folds_results, text="Test perfs aggregation")
                 if not self.args.no_plot: self.plot_test_performance(test_path, run, agg)
                 with open(os.path.join(test_path, f'{run}_test_results.p'), 'wb') as f: pickle.dump(agg, f)
 

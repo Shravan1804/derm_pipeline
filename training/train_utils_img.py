@@ -123,29 +123,22 @@ class ImageTrainer(train_utils.FastaiTrainer):
     def aggregate_test_performance(self, folds_res):
         agg = super().aggregate_test_performance(folds_res)
         for mns, agg_key in self.ordered_test_perfs_per_cats():
-            mns = [m for m in mns if m in self.cust_metrics]  # in case we did no compute metrics for all cats
+            mns = [mn for mn in mns if mn in agg]  # in case we did no compute all metrics fns
             agg[agg_key] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
         return agg
 
-    def ordered_test_perfs_per_cats(self): raise NotImplementedError
-
-    def reorder_aggregated_test_perfs_as_cats(self, agg, **kwargs):
-        # for each perf_fn, combine results of each cats
-        for perf_fn in self.args.metrics_fns:
-            # order metrics results on self.get_cats_with_all()
-            mns = [self.get_cat_metric_name(perf_fn, cat, **kwargs) for cat in self.get_cats_with_all()]
-            mns = [m for m in mns if m in self.cust_metrics]    # in case we do no compute metrics for all cats
-            agg[perf_fn] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
-        return agg
+    def ordered_test_perfs_per_cats(self):
+        """Returns list of tuples of list of metrics names (following cat order) with corresponding aggregated key"""
+        raise NotImplementedError
 
     def plot_test_performance(self, test_path, run, agg_perf):
-        for show_val in [False, True]:
-            save_path = os.path.join(test_path, f'{run}{"_show_val" if show_val else ""}.jpg')
-            fig, axs = plt.subplots(1, 2, figsize=self.args.test_figsize)
-            self.plot_custom_metrics(axs[0], agg_perf, show_val)
-            common.plot_confusion_matrix(axs[1], agg_perf['cm'], self.args.cats)
-            fig.tight_layout(pad=.2)
-            plt.savefig(save_path, dpi=400)
+        show_val = not self.args.no_plot_val
+        save_path = os.path.join(test_path, f'{run}{"_show_val" if show_val else ""}.jpg')
+        fig, axs = common.new_fig_with_axs(1, 2, self.args.test_figsize)
+        self.plot_custom_metrics(axs[0], agg_perf, show_val)
+        common.plot_confusion_matrix(axs[1], agg_perf['cm'], self.args.cats)
+        fig.tight_layout(pad=.2)
+        plt.savefig(save_path, dpi=400)
 
     def tensorboard_cb(self, run_info):
         tbdir = common.maybe_create(self.args.exp_logdir, 'tb_logs')
@@ -231,8 +224,8 @@ class ImageTrainer(train_utils.FastaiTrainer):
         for it, run, dls in self.maybe_progressive_resizing(tr, val, fold_suffix):
             run = f'{run_prefix}{run}'
             if it == 0 and learn is None: learn = fd.rank0_first(lambda: self.create_learner(dls))
-            self.basic_train(run, learn, dls)
-            self.evaluate_on_test_sets(learn, run)
+            common.time_method(self.basic_train, run, learn, dls, text="Training model")
+            common.time_method(self.evaluate_on_test_sets, learn, run, text="Test sets evaluation")
             train_utils.GPUManager.clean_gpu_memory(learn.dls)
         return learn, run
 

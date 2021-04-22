@@ -209,7 +209,7 @@ class CustomCocoEval(COCOeval):
             xiou = ious[None].repeat(labels.size, axis=0)
             for ax, vname, values, err in zip(axs, pre_rec_labels, pre_rec[idxs], pre_rec_err[idxs]):
                 values, err = np.moveaxis(values, 0, -1), np.moveaxis(err, 0, -1)   # ious dim is before the others
-                common.plot_lines_with_err(ax, xiou, values, err, labels, show_val, legend_loc="upper right")
+                common.plot_lines_with_err(ax, xiou, values, labels, err, values if show_val else None, legend_loc="upper right")
                 ax.set_title(f'{vname} for {title}')
                 ax.set_xlabel("IoU thresholds")
                 ax.set_ylabel("Percentage")
