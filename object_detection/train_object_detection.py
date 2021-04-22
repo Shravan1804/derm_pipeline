@@ -185,10 +185,20 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
                     interp.metrics[self.get_cat_segm_metric_name(fname, cat, None)] = torch.stack(all_scores_res)
         return interp
 
+    def plot_precision_recall(self, ax, pre_with_err, rec_with_err, show_val):
+        (pre, pstd), rec, rstd = pre_with_err, rec_with_err
+        svals = [[f'{(r, p)}' for r, p in zip(rr, pp)] for rr, pp in zip(rec, pre)] if show_val else None
+        common.plot_lines_with_err(ax, rec, pre, self.get_segm_cats_with_all(), pstd, rstd, svals)
+        score_steps = np.repeat(self.scores_steps[None, ], len(self.get_segm_cats_with_all()), 0)
+        best_scores = [sorted(zip(*x))[-1][-1] for x in zip(pre + rec, pre, rec, score_steps)]
+        for r, p, s in zip(rec, pre, best_scores):
+            ax.plot(r[self.scores_steps == s], p[self.scores_steps == s], 'ro')
+        return best_scores[0]   # all cat
+
     def plot_test_performance(self, test_path, run, agg_perf):
         show_val = not self.args.no_plot_val
-        fig, axs = common.new_fig_with_axs(1, len(self.metrics_types), self.args.test_figsize, sharey=True)
         od_agg_perf = {k: v for k, v in agg_perf.items() if not k.startswith(self.SEGM_PERF)}
+        fig, axs = common.new_fig_with_axs(1, len(self.metrics_types), self.args.test_figsize, sharey=True)
         for ax, mtype in zip([axs] if len(self.metrics_types) < 2 else axs, self.metrics_types):
             mtype_agg_perf = {k: v for k, v in od_agg_perf.items() if k.endswith(f'_{mtype.name}')}
             self.plot_custom_metrics(ax, mtype_agg_perf, show_val, title=f"OD {mtype.name} metrics")
@@ -198,12 +208,9 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
         if self.args.with_segm:
             segm_agg_perf = {k: v for k, v in agg_perf.items() if k.startswith(self.SEGM_PERF)}
             fig, axs = common.new_fig_with_axs(1, 2, self.args.test_figsize)
-            pre_mean, pre_std = segm_agg_perf[f"{self.SEGM_PERF}precision"]
-            rec_mean, rec_std = segm_agg_perf[f"{self.SEGM_PERF}recall"]
-            if show_val: svals = [[f'{(r, p)}'for r, p in zip(rr, pp)] for rr, pp in zip(rec_mean, pre_mean)]
-            common.plot_lines_with_err(axs[0], rec_mean, pre_mean, self.args.cats, pre_std, rec_std, svals, err_bounds=(0, 1),
-                                legend_loc="lower center")
-            common.plot_confusion_matrix(axs[1], agg_perf[f'{self.SEGM_PERF}cm_score0.5'], self.args.cats)
+            pre_with_err, rec_with_err = tuple(segm_agg_perf[f"{self.SEGM_PERF}{f}"] for f in ("precision", "recall"))
+            best_score = self.plot_precision_recall(axs[0], pre_with_err, rec_with_err, show_val)
+            common.plot_confusion_matrix(axs[1], agg_perf[f'{self.SEGM_PERF}cm_score{best_score}'], self.args.cats)
             fig.tight_layout(pad=.2)
             save_path = self.plot_save_path(test_path, run, show_val, custom="_segm_perf")
             plt.savefig(save_path, dpi=400)
