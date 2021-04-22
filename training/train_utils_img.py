@@ -131,9 +131,12 @@ class ImageTrainer(train_utils.FastaiTrainer):
         """Returns list of tuples of list of metrics names (following cat order) with corresponding aggregated key"""
         raise NotImplementedError
 
+    def plot_save_path(self, test_path, run, show_val, custom=""):
+        return os.path.join(test_path, f'{run}{custom}{"_show_val" if show_val else ""}.jpg')
+
     def plot_test_performance(self, test_path, run, agg_perf):
         show_val = not self.args.no_plot_val
-        save_path = os.path.join(test_path, f'{run}{"_show_val" if show_val else ""}.jpg')
+        save_path = self.plot_save_path(test_path, run, show_val)
         fig, axs = common.new_fig_with_axs(1, 2, self.args.test_figsize)
         self.plot_custom_metrics(axs[0], agg_perf, show_val)
         common.plot_confusion_matrix(axs[1], agg_perf['cm'], self.args.cats)

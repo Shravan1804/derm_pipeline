@@ -49,14 +49,15 @@ def zero_error_bars(vals):
     return np.zeros((2, *vals.shape), dtype=vals.dtype)
 
 
-def plot_lines_with_err(ax, xs, ys, labels, yerrs=None, xerrs=None, show_val=None, err_bounds=(0, 1), legend_loc="lower center"):
+def plot_lines_with_err(ax, xs, ys, labels, yerrs=None, xerrs=None, show_vals=None, err_bounds=(0, 1),
+                        legend_loc="lower center"):
     if yerrs is None: [zero_error_bars(y) for y in ys]
     if xerrs is None: [zero_error_bars(x) for x in xs]
     for x, y, label, yerr, xerr in zip(xs, ys, labels, yerrs, xerrs):
         yerr = clip_err(y, yerr, err_bounds)
         xerr = clip_err(x, xerr, err_bounds)
         ax.errorbar(x, y, yerr=yerr, xerr=xerr, label=label, **get_error_display_params())
-        if show_val is not None: show_graph_values(ax, show_val, x, pos_y=y, yerr=yerr[1])
+        if show_val is not None: show_graph_values(ax, show_vals, x, pos_y=y, yerr=yerr[1])
     ax.legend(loc=legend_loc)
 
 

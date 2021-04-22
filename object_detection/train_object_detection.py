@@ -96,7 +96,7 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
                 for iou in self.args.ious:
                     mns = [self.get_cat_metric_name(perf_fn, cat, iou, mtype) for cat in self.get_cats_with_all()]
                     ordered.append((mns, f'{perf_fn}_iou{iou}_{mtype.name}'))
-        if self.arg.with_segm:
+        if self.args.with_segm:
             for perf_fn in self.args.metrics_fns:
                 mns = [self.get_cat_segm_metric_name(perf_fn, cat, None) for cat in self.get_cats_with_all()]
                 ordered.append((mns, f'{self.SEGM_PERF}{perf_fn}'))
@@ -190,18 +190,19 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
             mtype_agg_perf = {k: v for k, v in od_agg_perf.items() if k.endswith(f'_{mtype.name}')}
             self.plot_custom_metrics(ax, mtype_agg_perf, show_val, title=f"{mtype.name} metric")
         fig.tight_layout(pad=.2)
-        save_path = os.path.join(test_path, f'{run}_od_perf{"_show_val" if show_val else ""}.jpg')
+        save_path = self.plot_save_path(test_path, run, show_val, custom="_od_perf")
         plt.savefig(save_path, dpi=400)
         if self.args.with_segm:
             segm_agg_perf = {k: v for k, v in agg_perf.items() if k.startswith(self.SEGM_PERF)}
             fig, axs = common.new_fig_with_axs(1, 2, self.args.test_figsize)
-            rec, pre = [v for k, v in segm_agg_perf.items() if "recall" in k]
-            common.plot_lines_with_err(axs[0], xs, ys, labels, yerrs=None, xerrs=None, show_val=None, err_bounds=(0, 1),
+            pre_mean, pre_std = zip(*[v for k, v in segm_agg_perf.items() if "precision" in k])
+            rec_mean, rec_std = zip(*[v for k, v in segm_agg_perf.items() if "recall" in k])
+            if show_val: svals = [[f'{(r, p)}'for r, p in zip(rr, pp)] for rr, pp in zip(rec_mean, pre_mean)]
+            common.plot_lines_with_err(axs[0], rec_mean, pre_mean, self.args.cats, pre_std, rec_std, svals, err_bounds=(0, 1),
                                 legend_loc="lower center")
-            self.plot_custom_metrics(axs[0], agg_perf, show_val)
-            common.plot_confusion_matrix(axs[1], agg_perf['cm'], self.args.cats)
+            common.plot_confusion_matrix(axs[1], agg_perf[f'{self.SEGM_PERF}cm_score0.5'], self.args.cats)
             fig.tight_layout(pad=.2)
-            save_path = os.path.join(test_path, f'{run}_segm_perf{"_show_val" if show_val else ""}.jpg')
+            save_path = self.plot_save_path(test_path, run, show_val, custom="_segm_perf")
             plt.savefig(save_path, dpi=400)
 
     def get_arch(self):

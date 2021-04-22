@@ -97,7 +97,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
             figsize = self.args.test_figsize
             cocoeval = agg_perf['cocoeval']
             show_val = not self.args.no_plot_val
-            save_path = os.path.join(test_path, f'{run}_coco{"_show_val" if show_val else ""}.jpg')
+            save_path = self.plot_save_path(test_path, run, show_val, custom="_coco")
             CustomCocoEval.plot_coco_eval(self.coco_param_labels, cocoeval, figsize, save_path, show_val)
 
     def create_dls(self, tr, val, bs, size):
