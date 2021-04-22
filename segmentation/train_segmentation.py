@@ -75,9 +75,9 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
 
     def compute_conf_mat(self, targs, preds): return segm_utils.pixel_conf_mat(targs, preds, self.args.cats)
 
-    def process_test_preds(self, interp):
+    def compute_metrics(self, interp):
         interp.targs = interp.targs.as_subclass(torch.Tensor)   # otherwise issues with fastai PILMask custom class
-        interp = super().process_test_preds(interp)
+        interp = super().compute_metrics(interp)
         if self.args.coco_metrics:
             to_coco = partial(segm_dataset_to_coco_format, cats=self.args.cats, bg=self.args.bg)
             with common.elapsed_timer() as elapsed:

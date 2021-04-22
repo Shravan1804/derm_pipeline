@@ -103,8 +103,8 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
     def early_stop_cb(self):
         return EarlyStoppingCallback(monitor='accuracy', min_delta=0.01, patience=3)
 
-    def process_test_preds(self, interp):
-        interp = super().process_test_preds(interp)
+    def compute_metrics(self, interp):
+        interp = super().compute_metrics(interp)
         d, t = fv.flatten_check(interp.decoded, interp.targs)
         print(skm.classification_report(t, d, labels=list(interp.dl.vocab.o2i.values()),
                                         target_names=[str(v) for v in interp.dl.vocab]))

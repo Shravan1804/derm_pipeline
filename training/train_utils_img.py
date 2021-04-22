@@ -115,8 +115,8 @@ class ImageTrainer(train_utils.FastaiTrainer):
         bar_cats = self.get_cats_with_all()
         common.grouped_barplot_with_err(ax, bar_perf, bar_cats, xlabel='Classes', show_val=show_val, title=title)
 
-    def process_test_preds(self, interp):
-        interp = super().process_test_preds(interp)
+    def compute_metrics(self, interp):
+        interp = super().compute_metrics(interp)
         interp.metrics['cm'] = self.compute_conf_mat(interp.targs, interp.decoded)
         return interp
 
