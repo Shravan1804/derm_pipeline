@@ -4,6 +4,7 @@ from functools import partial
 from types import SimpleNamespace
 
 import numpy as np
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 import torch
@@ -133,7 +134,7 @@ class ImageObjectDetectionTrainer(train_utils_img.ImageTrainer):
             im_no_gt = [(i, imd['file_name']) for i, imd in parser._imageid2info.items() if i not in idmap.name2id]
             with GPUManager.running_context(learn, self.args.gpu_ids):
                 od_preds_no_gt, empty_gt = [], None
-                for batch in common.batch_list(im_no_gt, bs=learn.dls.bs):
+                for batch in tqdm(common.batch_list(im_no_gt, bs=learn.dls.bs)):
                     ims = [self.load_image_item(os.path.join(imdir, im_name)) for _, im_name in batch]
                     batch_dl, samples = arch.build_infer_batch(ia.Dataset.from_images(ims, vtfms))
                     if empty_gt is None: empty_gt = np.zeros((samples[0]['height'], samples[0]['width']))
