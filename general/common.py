@@ -1,4 +1,5 @@
 import os
+import io
 import sys
 import cv2
 import math
@@ -325,6 +326,18 @@ def stdout_prepend(f, pre_msg, *args):
 def new_fig_with_axs(nrows, ncols, base_fig_width, base_fig_height=None, **kwargs):
     if base_fig_height is None: base_fig_height = base_fig_width
     return plt.subplots(nrows, ncols, figsize=(ncols*base_fig_width, nrows*base_fig_height), **kwargs)
+
+
+def plt_fig_as_np_array(fig):
+    # https://stackoverflow.com/questions/7821518/matplotlib-save-plot-to-numpy-array
+    io_buf = io.BytesIO()
+    fig.savefig(io_buf, format='raw')
+    io_buf.seek(0)
+    img_arr = np.reshape(np.frombuffer(io_buf.getvalue(), dtype=np.uint8),
+                         newshape=(int(fig.bbox.bounds[3]), int(fig.bbox.bounds[2]), -1))
+    io_buf.close()
+    return img_arr
+
 
 
 def plt_save_fig(path, fig=None, close=True, **kwargs):
