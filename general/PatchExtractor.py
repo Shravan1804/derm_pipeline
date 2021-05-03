@@ -120,6 +120,7 @@ class PatchExtractor:
         im_h, im_w = im_arr.shape[:2]
         patches = []
         for ps in self.patch_sizes:
+            ps = self.adjust_ps(ps, im_h * im_w)
             oh, ow = PatchExtractor.compute_side_overlap(im_h, ps), PatchExtractor.compute_side_overlap(im_w, ps)
             step_h, step_w = ps - oh, ps - ow
             # Don't forget + 1 in the stop argument otherwise the upper bound won't be included
