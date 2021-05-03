@@ -349,6 +349,6 @@ if __name__ == '__main__':
 
     if args.dest is None:
         suffix = f'_{"dynamic_" if args.dynamic_ps else ""}patched_{"_".join(map(str, args.patch_sizes))}'
-        args.dest = common.maybe_create(f'{args.data}_patched_{"_".join(map(str, args.patch_sizes))}')
+        args.dest = common.maybe_create(f'{args.data}{suffix}')
 
     common.time_method(main, args)
