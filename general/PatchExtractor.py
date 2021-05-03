@@ -88,7 +88,7 @@ class PatchExtractor:
     def compute_base_resolution(self, rdir):
         common.check_dir_valid(rdir)
         impaths = common.list_images(rdir, full_path=True, recursion=True)
-        resolutions = [h * w for ip in impaths for h, w in common.quick_img_size(ip)]
+        resolutions = [h * w for ip in impaths for h, w in [common.quick_img_size(ip)]]
         self.base_resolution = int(np.median(np.array(resolutions)))
 
     def adjust_ps(self, ps, im_res):
