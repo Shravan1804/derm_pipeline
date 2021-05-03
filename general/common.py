@@ -339,6 +339,21 @@ def plt_fig_as_np_array(fig):
     return img_arr
 
 
+def show_im_with_zoom_region(ax, im, zoom_loc=[.35, .5, .35, .5], inset_loc=[.6, .6, .4, .4]):
+    ax.imshow(im, origin="lower")
+    ax.axis('off')
+    axins = ax.inset_axes(inset_loc)
+    axins.imshow(im, origin="lower")
+    h, w = im.shape[:2]
+    x1, x2, y1, y2 = map(int, np.array(zoom_loc)*np.array([w,w,h,h]))
+    axins.set_xlim(x1, x2)
+    axins.set_ylim(y1, y2)
+    axins.set_xticklabels('')
+    axins.set_xticks([])
+    axins.set_yticklabels('')
+    axins.set_yticks([])
+    ax.indicate_inset_zoom(axins, edgecolor="black")
+
 
 def plt_save_fig(path, fig=None, close=True, **kwargs):
     if fig is None:

@@ -14,6 +14,7 @@ __copyright__ = (
 import os
 import io
 import sys
+import shutil
 import pickle
 import argparse
 import multiprocessing as mp
@@ -163,6 +164,9 @@ if __name__ == '__main__':
             kf.write(key)
     else:
         assert args.key_file is not None, "Error either provide --key-file or --new-key parameters"
+        copied_key = os.path.join(args.data, f'{os.path.basename(args.data)}.key')
+        shutil.copy(args.key_file, copied_key)
+        args.key_file = copied_key
 
     if args.dest is None:
         args.dest = common.maybe_create(os.path.dirname(args.data), f'{os.path.basename(args.data)}_encrypted')

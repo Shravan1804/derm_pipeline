@@ -301,12 +301,12 @@ def crop_img_and_mask_to_objs(im, mask, thresh=.01, rand=True, single=True, only
         return im_crops, mask_crops, cleaned_cropped_bboxes
 
 
-def apply_color_map_to_mask(mask, cmap=cv2.COLORMAP_JET, normalize=True):
+def apply_color_map_to_mask(mask, cmap=cv2.COLORMAP_JET, normalize=True, normax=None):
     assert len(mask.shape) == 2, "Image should be grayscale"
     if normalize:
         mask = mask.astype(np.float)
         mask -= mask.min() # ensure the minimal value is 0.0
-        mask /= mask.max() # maximum value in image is now 1.0
+        mask /= mask.max() if normax is None else normax
         mask *= 255
     mask = mask.astype(np.uint8)
     return cv2.cvtColor(cv2.applyColorMap(mask, cmap), cv2.COLOR_BGR2RGB)
