@@ -133,8 +133,8 @@ class PatchExtractor:
 
     def maybe_resize(self, im_arr):
         """Resize img only if dim smaller than the max patch size otherwise returns img unchanged"""
-        ps = self.patch_sizes[-1]
         h, w = im_arr.shape[:2]
+        ps = self.adjust_ps(self.patch_sizes[-1], h * w)
         smallest = min(h, w)
         if smallest < ps:
             ratio = ps / smallest
