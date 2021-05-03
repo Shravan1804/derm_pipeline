@@ -79,10 +79,20 @@ class PatchExtractor:
     SEP = '__SEP__'
     RAND = '__RAND__'
 
-    def __init__(self, patch_sizes, seed=42):
+    def __init__(self, patch_sizes, seed=42, dynamic_res=False, root_dir=None):
         """Seed used when sampling patches from image"""
         self.patch_sizes = sorted(patch_sizes) if type(patch_sizes) == list else [patch_sizes]
         np.random.seed(seed)
+        self.base_resolution = self.compute_base_resolution(root_dir) if dynamic_res else None
+
+    def compute_base_resolution(self, rdir):
+        common.check_dir_valid(rdir)
+        impaths = common.list_images(rdir, full_path=True, recursion=True)
+        resolutions = [h * w for ip in impaths for h, w in common.quick_img_size(ip)]
+        self.base_resolution = int(np.median(np.array(resolutions)))
+
+    def adjust_ps(self, ps, im_res):
+        return ps if self.base_resolution is None else int(pow(im_res * ps * ps / self.base_resolution, .5))
 
     def dir_images_to_patches(self, dirname):
         files = common.list_files(dirname, full_path=True)
@@ -98,6 +108,7 @@ class PatchExtractor:
         im_h, im_w = im_arr.shape[:2]
         patches = []
         for ps in self.patch_sizes:
+            ps = self.adjust_ps(ps, im_h * im_w)
             idx_h, idx_w = (np.random.randint(low=0, high=1 + im_h - ps, size=nb),
                             np.random.randint(low=0, high=1 + im_w - ps, size=nb))
             patches.extend([PatchExtractor.create_pm(img_path, ps, 0, 0, h, w, True) for h, w in zip(idx_h, idx_w)])
@@ -303,7 +314,7 @@ def main(args):
     if not all_dirs:
         all_dirs = ['']
     workers, batch_size, batched_dirs = concurrency.batch_lst(all_dirs)
-    patcher = PatchExtractor(args.patch_sizes)
+    patcher = PatchExtractor(args.patch_sizes, dynamic_res=args.dynamic_ps, root_dir=args.data)
     pmq = mp.Queue()
     jobs = []
     for i, dirs in zip(range(workers), batched_dirs):
@@ -323,6 +334,7 @@ def get_patcher_arg_parser(desc="Creates patch dataset from image dataset"):
     parser.add_argument('-p', '--patch-sizes', nargs='+', default=[512], type=int, help="patch sizes")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
     parser.add_argument('--level', default=0, type=int, help="nested level of class folders compared to args.data")
+    parser.add_argument('--dynamic-ps', action='store_true', help="Adjusts ps for imgs res different from median res")
     return parser
 
 
