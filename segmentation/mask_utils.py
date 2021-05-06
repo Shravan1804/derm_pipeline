@@ -63,9 +63,10 @@ def separate_objs_in_mask(mask, bg=0):
     return obj_cats, tuple(cv2.connectedComponents(cmsk) for cmsk in cat_masks)
 
 
-def rm_small_objs_from_non_bin_mask(non_binary_mask, min_size, cats_with_bg, bg=0):
-    res = np.zeros(non_binary_mask.shape, dtype=np.uint8)
-    for c, _ in enumerate(cats_with_bg):
+def rm_small_objs_from_non_bin_mask(non_binary_mask, min_size, cats_idxs=None, bg=0):
+    res = np.ones(non_binary_mask.shape, dtype=np.uint8)*bg
+    if cats_idxs is None: cats_idxs = np.unique(cats_idxs)
+    for c in cats_idxs:
         if c == bg: continue  # background
         binary_mask = rm_small_objs_from_bin_mask(non_binary_mask == c, min_size)
         res[binary_mask > 0] = c

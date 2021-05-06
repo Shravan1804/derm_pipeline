@@ -123,8 +123,8 @@ class ImageTrainer(train_utils.FastaiTrainer):
     def aggregate_test_performance(self, folds_res):
         agg = super().aggregate_test_performance(folds_res)
         for mns, agg_key in self.ordered_test_perfs_per_cats():
-            mns = [mn for mn in mns if mn in agg]  # in case we did no compute all metrics fns
-            agg[agg_key] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns]))
+            # if mn in agg: in case we did no compute all metrics fns
+            agg[agg_key] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns if mn in agg]))
         return agg
 
     def ordered_test_perfs_per_cats(self):

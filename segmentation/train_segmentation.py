@@ -52,7 +52,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         else: mask = mask_utils.rles_to_non_binary_mask(item)
         if self.args.rm_small_objs:
             if common.is_path(mask): mask = mask_utils.load_mask_array(mask)
-            mask = mask_utils.rm_small_objs_from_non_bin_mask(mask, self.args.min_size, self.args.cats, self.args.bg)
+            mask = mask_utils.rm_small_objs_from_non_bin_mask(mask, self.args.min_size, range(len(self.args.cats)), self.args.bg)
         return mask
 
     def get_cat_metric_name(self, perf_fn, cat, bg):
