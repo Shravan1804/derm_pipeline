@@ -54,7 +54,7 @@ class ImageInference:
 
     def maybe_patch(self, img_path):
         if self.args.ps is None: return [common.load_img(img_path)], None
-        else: return PatchExtractor.image_to_patches(img_path, self.args.ps)
+        else: return PatchExtractor.impath_to_patches(img_path, self.args.ps)
 
     def infer_items(self, learn, items, with_labels):
         dl = learn.dls.test_dl(items, with_labels=with_labels)

@@ -394,6 +394,10 @@ def img_bgr_to_rgb(im):
     return cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
 
 
+def resize(im, new_h, new_w):
+    return cv2.resize(im, (new_w, new_h), interpolation=cv2.INTER_NEAREST if len(im.shape) < 3 else cv2.INTER_LINEAR)
+
+
 def load_img(path, resize=None):
     if is_path(path) and type(path) is not str: path = str(path)
     im = cv2.imread(path, cv2.IMREAD_UNCHANGED)

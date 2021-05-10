@@ -285,10 +285,13 @@ class PatchExtractor:
         return im
 
     @staticmethod
-    def image_to_patches(img_path, ps):
+    def impath_to_patches(img_path, ps):
+        return PatchExtractor.im_to_patches(patcher.load_image(img_path), ps, img_path)
+
+    @staticmethod
+    def im_to_patches(im, ps, imname):
         patcher = PatchExtractor([ps])
-        im = patcher.load_image(img_path)
-        pms = patcher.patch_grid(img_path, im)
+        pms = patcher.patch_grid(imname, im)
         return [PatchExtractor.extract_patch(im, pm) for pm in pms], pms
 
 
