@@ -92,6 +92,17 @@ def nb_obj_in_binary_mask(binary_mask):
     return cv2.connectedComponents(binary_mask.astype(np.uint8))[0] - 1
 
 
+def nb_objs(non_binary_mask, cls_id, bg=0):
+    bm = non_binary_mask != bg if cls_id == -1 else non_binary_mask == cls_id
+    return nb_obj_in_binary_mask(bm.astype(np.uint8))
+
+
+def area_obj(nbm, cls_id, bg=0):
+    u, c = np.unique(nbm, return_counts=True)
+    area = c[u != bg].sum(keepdims=True) if cls_id == -1 else c[u == cls_id]
+    return area[0] if area.size > 0 else 0
+
+
 def load_mask_array(mask_path): return cv2.imread(str(mask_path), cv2.IMREAD_UNCHANGED)
 
 

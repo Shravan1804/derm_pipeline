@@ -53,7 +53,7 @@ class ImageInference:
         return common.maybe_create(self.args.exp_logdir, f'preds{save_tag}_{self.args.exp_name}_{model_info}')
 
     def maybe_patch(self, img_path):
-        if self.args.ps is None: return [common.load_img(img_path)], None
+        if self.args.ps is None: return [common.load_img(img_path, resize=self.args.input_size)], None
         else: return PatchExtractor.image_to_patches(img_path, self.args.ps)
 
     def infer_items(self, learn, items, with_labels):
