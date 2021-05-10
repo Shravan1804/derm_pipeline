@@ -201,7 +201,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
                          get_x=fv.Pipeline([fv.ItemGetter(0), self.load_image_item if get_x is None else get_x]),
                          get_y=fv.Pipeline([fv.ItemGetter(1), fv.noop if get_y is None else get_y]),
                          splitter=fv.IndexSplitter(list(range(len(val[0])))),
-                         item_tfms=fv.Resize(int(1.5*self.args.input_size)),
+                         item_tfms=fv.Resize(int(1.5*self.args.input_size), method=fv.ResizeMethod.Squish),
                          batch_tfms=tfms)
         if self.args.debug_dls:
             if train_utils.GPUManager.is_master_process(): d.summary(self.args.data, bs=bs)
