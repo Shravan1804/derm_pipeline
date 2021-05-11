@@ -70,7 +70,7 @@ class ImageSegmentationTrainer(train_utils_img.ImageTrainer):
         for perf_fn in self.args.metrics_fns:
             for bg in [None, self.args.bg]:
                 mns = [self.get_cat_metric_name(perf_fn, cat, bg) for cat in self.get_cats_with_all()]
-                ordered.append((mns, perf_fn + ("" if bg is not None else self.NO_BG)))
+                ordered.append((mns, perf_fn + ("" if bg is None else self.NO_BG)))
         return ordered
 
     def compute_conf_mat(self, targs, preds): return segm_utils.pixel_conf_mat(targs, preds, self.args.cats)
