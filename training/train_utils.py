@@ -7,6 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from collections import defaultdict
 
+import numpy as np
+from tqdm import tqdm
 from sklearn.model_selection import KFold, ShuffleSplit, StratifiedKFold, StratifiedShuffleSplit
 
 import torch
@@ -76,6 +78,13 @@ def tensors_mean_std(tensor_lst):
     mean = tensors.mean(axis=0)
     std = tensors.std(axis=0) if len(tensor_lst) > 1 else torch.zeros_like(mean)
     return mean, std
+
+
+def non_param_ci(tensor_lst, ci_p):
+    # when predicted variable is not necessarily normally distributed
+    alpha = 1 - ci_p
+    low, high = alpha, 1-alpha/2
+    return torch.quantile(torch.stack(tensor_lst).float(), torch.tensor([low, high]), dim=0)
 
 
 def split_model(model, splits):
@@ -391,6 +400,17 @@ class FastaiTrainer:
         """Adds custom metrics results to interp object. Should return interp."""
         interp.metrics = {mn: mfn(interp.preds, interp.targs) for mn, mfn in self.cust_metrics.items()}
         return interp
+
+    def compute_metrics_with_ci(self, interp, ci_p=.95, n=20):
+        bs = interp.preds.shape[0]
+        all_metrics = [self.compute_metrics(interp).metrics]
+        for _ in tqdm(range(n)):
+            idxs = np.random.randint(0, bs, bs)
+            sample = SimpleNamespace()
+            sample.preds, sample.targs, sample.decoded = interp.preds[idxs], interp.targs[idxs], interp.decoded[idxs]
+            all_metrics.append(self.compute_metrics(sample).metrics)
+        with_ci = {mn: (res, non_param_ci([am[mn] for am in all_metrics], ci_p)) for mn, res in interp.metrics.items()}
+        return all_metrics, with_ci
 
     def aggregate_test_performance(self, folds_res):
         merged = [(mn, [fr.metrics[mn] for fr in folds_res]) for mn in folds_res[0].metrics.keys()]
