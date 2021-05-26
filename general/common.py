@@ -28,10 +28,14 @@ def get_cmap(n, name='Dark2'):
     return plt.cm.get_cmap(name, n)
 
 
-def clip_err(vals, err, bounds=(0, 1)):
-    """Return 2D err array (low_err and up_err) clipped between specified bounds"""
+def zero_error_bars(vals):
+    return np.zeros((2, *vals.shape), dtype=vals.dtype)
+
+
+def init_and_clip_err(vals, err, bounds=(0, 1)):
+    """Create 2D err array (low_err and up_err) clipped between specified bounds"""
     if err is None: err = zero_error_bars(vals)
-    if len(vals.shape) > 1 and vals.shape[0] == 2: return err.clip(*bounds)
+    if err.shape == (2, *vals.shape): return err.clip(*bounds)
     else: return np.abs(np.vstack([vals - err, vals + err]).clip(*bounds) - np.vstack([vals, vals]))
 
 
@@ -46,17 +50,13 @@ def show_graph_values(ax, values, pos_x, pos_y=None, yerr=None, kwargs={"fontsiz
         ax.text(x, y + ye, v, **kwargs)
 
 
-def zero_error_bars(vals):
-    return np.zeros((2, *vals.shape), dtype=vals.dtype)
-
-
 def plot_lines_with_err(ax, xs, ys, labels, yerrs=None, xerrs=None, show_vals=None, err_bounds=(0, 1),
                         legend_loc="lower center"):
     if yerrs is None: [zero_error_bars(y) for y in ys]
     if xerrs is None: [zero_error_bars(x) for x in xs]
     for x, y, label, yerr, xerr in zip(xs, ys, labels, yerrs, xerrs):
-        yerr = clip_err(y, yerr, err_bounds)
-        xerr = clip_err(x, xerr, err_bounds)
+        yerr = init_and_clip_err(y, yerr, err_bounds)
+        xerr = init_and_clip_err(x, xerr, err_bounds)
         ax.errorbar(x, y, yerr=yerr, xerr=xerr, label=label, **get_error_display_params())
         if show_vals is not None: show_graph_values(ax, show_vals, x, pos_y=y, yerr=yerr[1])
     ax.legend(loc=legend_loc)
@@ -73,7 +73,7 @@ def grouped_barplot_with_err(ax, stats, groupLabels, xlabel=None, ylabel=None, t
     ekw = get_error_display_params()
     cmap = get_cmap(nbars_per_group)
     for offset, (key, (vals, err)), c in zip(offsets, stats.items(), [cmap(i) for i in range(nbars_per_group)]):
-        err = clip_err(vals, err, err_bounds)
+        err = init_and_clip_err(vals, err, err_bounds)
         ax.bar(positions + offset, vals, color=c, width=barwidth, yerr=err, label=key, error_kw=ekw, edgecolor='white')
         if show_val: show_graph_values(ax, [f'{v:.2f}' for v in vals], positions + offset - barwidth/2, pos_y=vals, yerr=err[1])
 
