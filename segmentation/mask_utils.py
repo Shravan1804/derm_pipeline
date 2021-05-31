@@ -65,7 +65,7 @@ def separate_objs_in_mask(mask, bg=0):
 
 def rm_small_objs_from_non_bin_mask(non_binary_mask, min_size, cats_idxs=None, bg=0):
     res = np.ones(non_binary_mask.shape, dtype=np.uint8)*bg
-    if cats_idxs is None: cats_idxs = np.unique(cats_idxs)
+    if cats_idxs is None: cats_idxs = np.unique(non_binary_mask)
     for c in cats_idxs:
         if c == bg: continue  # background
         binary_mask = rm_small_objs_from_bin_mask(non_binary_mask == c, min_size)
