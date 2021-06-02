@@ -97,7 +97,7 @@ def nb_objs(non_binary_mask, cls_id, bg=0):
     return nb_obj_in_binary_mask(bm.astype(np.uint8))
 
 
-def area_obj(nbm, cls_id, bg=0):
+def area_objs(nbm, cls_id, bg=0):
     u, c = np.unique(nbm, return_counts=True)
     area = c[u != bg].sum(keepdims=True) if cls_id == -1 else c[u == cls_id]
     return area[0] if area.size > 0 else 0
