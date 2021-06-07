@@ -43,7 +43,7 @@ def main(args):
     random.seed(args.seed)
     np.random.seed(args.seed)
 
-    dirs = [d for d in common.list_dirs(args.data) if d not in args.label_dirs]
+    dirs = [d for d in common.list_dirs(args.data) if d not in args.label_dirs and d not in args.ignore]
     if args.coco_json:
         # with coco format, images are in single dir
         splits = dataset_split(args, dirs[0])
@@ -68,6 +68,7 @@ if __name__ == '__main__':
     parser.add_argument('--test-size', default=.2, type=float, help="Proportion of test set")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
     parser.add_argument('--label-dirs', nargs='+', default=[], type=str, help="dirs with labels")
+    parser.add_argument('--ignore', nargs='+', default=[], type=str, help="ignore dirs")
     parser.add_argument('--lext', type=str, default='.png', help="label file extension")
     parser.add_argument('--coco-json', type=str, help="if given will not look for masks")
     args = parser.parse_args()
