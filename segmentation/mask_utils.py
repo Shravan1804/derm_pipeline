@@ -328,6 +328,14 @@ def blend_im_mask(im, mask, alpha=.4):
     return cv2.addWeighted(im, 1-alpha, mask, alpha, 0)
 
 
+def compute_dice(cls, pred, targ):
+    pred = (pred == cls).type(pred.dtype)
+    targ = (targ == cls).type(targ.dtype)
+    inter = (pred * targ).float().sum().item()
+    union = (pred + targ).float().sum().item()
+    return 2. * inter / union if union > 0 else None
+
+
 def im_mask_on_ax(ax, im, mask, title=None):
     common.img_on_ax(im, ax, title=title)
     ax.imshow(mask, cmap='jet', alpha=0.4)

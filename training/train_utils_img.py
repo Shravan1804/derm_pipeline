@@ -199,7 +199,7 @@ class ImageTrainer(train_utils.FastaiTrainer):
         if not self.args.no_norm:
             tfms.append(fv.Normalize.from_stats(*fv.imagenet_stats))
         d = fv.DataBlock(blocks=blocks,
-                         get_items=lambda source: list(zip(val[0] + tr[0], val[1] + tr[1])),
+                         get_items=lambda s: list(zip(*tuple(v+t for v, t in zip(val, tr)))),
                          get_x=fv.Pipeline([fv.ItemGetter(0), self.load_image_item if get_x is None else get_x]),
                          get_y=fv.Pipeline([fv.ItemGetter(1), fv.noop if get_y is None else get_y]),
                          splitter=fv.IndexSplitter(list(range(len(val[0])))),
