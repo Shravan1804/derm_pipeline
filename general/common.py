@@ -80,7 +80,7 @@ def grouped_barplot_with_err(ax, stats, groupLabels, xlabel=None, ylabel=None, t
     ax.set_ylabel("Performance" if ylabel is None else ylabel)
     ax.set_xlabel(xlabel)
     ax.set_xticks(positions)
-    ax.set_xticklabels(groupLabels, rotation=45)
+    ax.set_xticklabels(groupLabels, rotation=35, ha='right')
     ax.legend(loc=legend_loc)
     if title is not None:
         ax.set_title(title, loc=title_loc)
@@ -93,7 +93,7 @@ def plot_confusion_matrix(ax, cm_std, labels, title=None, title_loc=None, ):
 
     tick_marks = np.arange(len(labels))
     ax.set_xticks(tick_marks)
-    ax.set_xticklabels(labels, rotation=45)
+    ax.set_xticklabels(labels, rotation=35, ha='right')
     ax.set_yticks(tick_marks)
     ax.set_yticklabels(labels, rotation=0)
 
