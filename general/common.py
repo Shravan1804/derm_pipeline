@@ -414,7 +414,7 @@ def save_img(im, path):
 def prepare_img_axs(h_w_ratio, nrows, ncols, figsize_fact=8, no_axis=True, flatten=True, title=None):
     fig, axs = new_fig_with_axs(nrows, ncols, figsize_fact)
     base_figsize = (ncols*figsize_fact, nrows*figsize_fact*h_w_ratio)
-    plt.rcParams['font.size'] = max(base_figsize) * .8
+    plt.rcParams['font.size'] = max(base_figsize) * .4
     nd = nrows > 1 or ncols > 1
     if no_axis:
         for ax in axs.flatten() if nd else [axs]:
