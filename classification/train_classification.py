@@ -94,7 +94,7 @@ class ImageClassificationTrainer(train_utils_img.ImageTrainer):
         return self.prepare_learner(learn)
 
     def correct_wl(self, wl_items_with_labels, preds):
-        wl_items, labels = wl_items_with_labels
+        wl_items, labels = wl_items_with_labels[0], np.array(wl_items_with_labels[1])
         preds = np.array(self.args.cats)[preds.numpy()]
         corr = np.array(labels) != preds
         labels[corr] = np.array([p for p in preds[corr]])
