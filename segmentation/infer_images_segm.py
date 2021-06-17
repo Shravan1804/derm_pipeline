@@ -1,6 +1,5 @@
 import os
 import sys
-from pathlib import Path
 
 import numpy as np
 
@@ -25,36 +24,28 @@ class ImageSegmentationInference(ImageInference):
         super(ImageSegmentationInference, ImageSegmentationInference).prepare_inference(args)
         ImageSegmentationTrainer.prepare_training(args)
 
-    def inference_items(self):
-        """Returns list of tuples of images and mask if available"""
-        if self.args.impath is not None: imgs = [self.args.impath]
-        elif os.path.exists(os.path.join(self.args.imdir, self.args.img_dir)):
-            imgs = common.list_images(os.path.join(self.args.imdir, self.args.img_dir), full_path=True)
-        else: imgs = common.list_images(self.args.imdir, full_path=True)
-        return [(Path(img), self.trainer.get_image_mask_path(img)) for img in imgs]
+    def maybe_get_labels(self, impath):
+        return self.trainer.get_image_mask_path(impath)
 
-    def learner_inference(self, learn, save_dir):
-        for img_path, mask_path in self.inference_items():
-            with_labels = mask_path is not None
-            im_patches, pms = self.maybe_patch(img_path)
-            if with_labels:
-                mask_patches, _ = self.maybe_patch(mask_path)
-                items = list(zip(im_patches, mask_patches))
-            else: items = [(p,) for p in im_patches]
-            interp = self.infer_items(learn, items, with_labels)
-            interp.pms = pms
-            self.process_results(img_path, mask_path, interp, with_labels, save_dir)
+    def prepare_learner_input(self, inference_item):
+        img_path, mask_path = inference_item
+        with_labels = mask_path is not None
+        im_patches, pms = self.maybe_patch(img_path)
+        linput = list(zip(im_patches, self.maybe_patch(mask_path)[0])) if with_labels else [(p,) for p in im_patches]
+        return linput, with_labels, pms
 
-    def process_results(self, img_path, mask_path, interp, with_labels, save_dir):
-        if with_labels: im, gt = segm_utils.load_img_and_mask(img_path, mask_path)
-        else: im, gt = common.load_img(img_path), None
+    def process_results(self, inference_item, interp, save_dir):
+        img_path, mask_path = inference_item
+        im = common.trainer.load_image_item(img_path)
+        gt = common.trainer.load_mask(mask_path) if mask_path is not None else None
         if interp.pms is None: pred = mask_utils.resize_mask(interp.decoded[0].numpy(), im.shape[:2])
         else: pred = PatchExtractor.rebuild_im_from_patches(interp.pms, interp.decoded.numpy(), im.shape[:2])
         save_path = os.path.join(save_dir, os.path.splitext(os.path.basename(img_path))[0] + "_preds.jpg")
-        if not self.args.no_plot: self.plot_results(interp, im, gt, pred, with_labels, save_path)
+        if not self.args.no_plot: self.plot_results(interp, im, gt, pred, save_path)
         return pred
 
-    def plot_results(self, interp, im, gt, pred, with_labels, save_path):
+    def plot_results(self, interp, im, gt, pred, save_path):
+        with_labels = gt is not None
         if with_labels: ncols = 5 if self.args.gt_pred_diff else 4
         else: ncols = 2
         fig, axs = common.prepare_img_axs(im.shape[0] / im.shape[1], 1, ncols, flatten=True)

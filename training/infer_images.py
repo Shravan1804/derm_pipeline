@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
@@ -45,8 +46,6 @@ class ImageInference:
         self.trainer = trainer
         self.args = self.trainer.args
 
-    def learner_inference(self, learn, save_dir): raise NotImplementedError
-
     def get_result_save_path(self, model_info):
         save_tag = "_" + os.path.basename(self.args.mdir) if self.args.mdir is not None else ""
         if self.args.ps is not None: save_tag += f'_ps{self.args.ps}px'
@@ -56,13 +55,29 @@ class ImageInference:
         if self.args.ps is None: return [common.load_img(img_path)], None
         else: return PatchExtractor.impath_to_patches(img_path, self.args.ps)
 
-    def infer_items(self, learn, items, with_labels):
-        dl = learn.dls.test_dl(items, with_labels=with_labels)
-        with GPUManager.running_context(learn, self.args.gpu_ids):
-            interp = SimpleNamespace()
-            interp.preds, interp.targs, interp.decoded = learn.get_preds(dl=dl, with_decoded=True)
-        GPUManager.clean_gpu_memory(dl)
-        return interp
+    def maybe_get_labels(self, img_path): raise NotImplementedError
+
+    def inference_items(self):
+        if self.args.impath is not None:
+            return [(Path(self.args.impath), self.maybe_get_labels(self.args.impath))]
+        else:
+            imgs = common.list_images(self.args.imdir, full_path=True, recursion=True, posix_path=True)
+            return [(impath, self.maybe_get_labels(impath)) for impath in imgs]
+
+    def prepare_learner_input(self, inference_item): raise NotImplementedError
+
+    def learner_inference(self, learn, save_dir):
+        for inference_item in self.inference_items():
+            linput, with_labels, pms = self.prepare_learner_input(inference_item)
+            dl = learn.dls.test_dl(linput, with_labels=with_labels)
+            with GPUManager.running_context(learn, self.args.gpu_ids):
+                interp = SimpleNamespace()
+                interp.preds, interp.targs, interp.decoded = learn.get_preds(dl=dl, with_decoded=True)
+            GPUManager.clean_gpu_memory(dl)
+            interp.pms = pms
+            self.process_results(inference_item, interp, with_labels, save_dir)
+
+    def process_results(self, inference_item, interp, save_dir): raise NotImplementedError
 
     def inference(self):
         if self.args.mpath is not None: model_paths = [self.args.mpath]
