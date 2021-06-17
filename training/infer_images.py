@@ -70,12 +70,16 @@ class ImageInference:
         for inference_item in self.inference_items():
             linput, with_labels, pms = self.prepare_learner_input(inference_item)
             dl = learn.dls.test_dl(linput, with_labels=with_labels)
-            with GPUManager.running_context(learn, self.args.gpu_ids):
-                interp = SimpleNamespace()
-                interp.preds, interp.targs, interp.decoded = learn.get_preds(dl=dl, with_decoded=True)
+            interp = self.learner_preds(learn, dl)
             GPUManager.clean_gpu_memory(dl)
             interp.pms = pms
             self.process_results(inference_item, interp, with_labels, save_dir)
+
+    def learner_preds(self, learn, dl):
+        with GPUManager.running_context(learn, self.args.gpu_ids):
+            interp = SimpleNamespace()
+            interp.preds, interp.targs, interp.decoded = learn.get_preds(dl=dl, with_decoded=True)
+        return interp
 
     def process_results(self, inference_item, interp, save_dir): raise NotImplementedError
 

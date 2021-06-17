@@ -272,15 +272,15 @@ class PatchExtractor:
         return PatchExtractor.create_pm(img_path, ps, oh, ow, h, w, randomly_sampled, patch_name)
 
     @staticmethod
-    def rebuild_im_from_patches(pms, patches, full_shape=None):
+    def rebuild_im_from_patches(pms, patches, full_shape=None, interpol=None):
         if full_shape is None: full_shape = cv2.imread(pms[0]['full_img'], cv2.IMREAD_UNCHANGED).shape
         im = np.zeros(full_shape)
         for pm, patch in zip(pms, patches):
             h, w, ps = pm['h'], pm['w'], pm['ps']
             pdim = ps, ps
             if patch.shape[:2] != pdim:
-                interpolation = cv2.INTER_NEAREST if len(patch.shape) < 3 else cv2.INTER_LINEAR
-                patch = cv2.resize(patch, pdim, interpolation=interpolation)
+                if interpol is None: interpol = cv2.INTER_NEAREST if len(patch.shape) < 3 else cv2.INTER_LINEAR
+                patch = cv2.resize(patch, pdim, interpolation=interpol)
             im[h:h + ps, w:w + ps] = patch
         return im
 

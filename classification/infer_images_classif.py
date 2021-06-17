@@ -1,8 +1,17 @@
 import os
 import sys
+from types import SimpleNamespace
+
+import cv2
+
+import torch
+import fastai.vision.all as fv
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common
+from general.PatchExtractor import PatchExtractor
+from segmentation.mask_utils import resize_mask
+from training.train_utils import GPUManager
 from training.infer_images import ImageInference
 from classification.train_classification import ImageClassificationTrainer
 
@@ -12,6 +21,7 @@ class ImageClassificationInference(ImageInference):
     def get_argparser(parser):
         parser = super(ImageClassificationInference, ImageClassificationInference).get_argparser(parser)
         parser.add_argument('--topk', type=int, default=2, help="Top probas to be written on img")
+        parser.add_argument('--gradcam', action='store_true', help="Show gradcam of predictions")
         return parser
 
     @staticmethod
@@ -29,10 +39,38 @@ class ImageClassificationInference(ImageInference):
         linput = [(p,) for p in im_patches]
         return linput, with_labels, pms
 
+    def learner_preds(self, learn, dl):
+        if self.args.gradcam:
+            dl.bs = 1
+            interp = SimpleNamespace()
+            interp.preds, interp.targs, interp.decoded, interp.gradcam = [], [], [], []
+            with GPUManager.running_context(learn, self.args.gpu_ids):
+                for b in dl:
+                    x = b[0]
+                    if len(b) == 1: interp.targs = None
+                    else: interp.targs.append(b[1])
+                    with fv.Hook(learn.model[0], lambda m, i, o: o[0].detach().clone(), is_forward=False) as hookg:
+                        with fv.Hook(learn.model[0], lambda m, i, o: o.detach().clone()) as hook:
+                            output = learn.model.eval()(x.cuda() if torch.cuda.is_available() else x)
+                            act = hook.stored
+                        with torch.no_grad():
+                            p = output.argmax(axis=1)[0]
+                        output[0, p].backward()
+                        interp.preds.append(output.cpu())
+                        interp.decoded.append(p.cpu())
+                        grad = hookg.stored
+                    interp.gradcam.append((grad[0].mean(dim=[1,2], keepdim=True) * act[0]).sum(0).cpu())
+            return interp
+        else: return super().learner_preds(learn, dl)
+
     def process_results(self, inference_item, interp, save_dir):
         img_path, gt = inference_item
         im = common.trainer.load_image_item(img_path)
         pred = interp.preds.topk(self.args.topk, axis=1)
+        hmap = interp.gradcam.numpy()
+        if interp.pms is None: hmap = cv2.resize(hmap, im.shape[:2], interpolation=cv2.INTER_LINEAR)
+        else: hmap = PatchExtractor.rebuild_im_from_patches(interp.pms, hmap, im.shape[:2], interpol=cv2.INTER_LINEAR)
+        interp.gradcam = hmap
         save_path = os.path.join(save_dir, os.path.splitext(os.path.basename(img_path))[0] + "_preds.jpg")
         if not self.args.no_plot: self.plot_results(interp, im, gt, pred, save_path)
         return pred
@@ -41,13 +79,18 @@ class ImageClassificationInference(ImageInference):
         topk_p, topk_idx = pred
         with_labels = gt is not None
         ncols = 2 if with_labels else 1
+        if self.args.gradcam: ncols += 1
         fig, axs = common.prepare_img_axs(im.shape[0] / im.shape[1], 1, ncols, flatten=True)
-        if not with_labels: axs = [axs]
+        if ncols == 1: axs = [axs]
         common.img_on_ax(im, axs[0], title='Original image')
         pred_pos = [(0, 0)] if interp.pms is None else [(pm['h'], pm['w'])for pm in interp.pms]
         for (h, w), p, prob in zip(pred_pos, topk_idx, topk_p):
             axs[0].text(w+50, h + 50, f'{self.args.cats[p]}: {prob:.2f}')
         axi = 1
+        if self.args.gradcam:
+            common.img_on_ax(im, axs[axi], title='GradCAM')
+            axs[axi].imshow(interp.gradcam, alpha=0.6, cmap='magma');
+            axi += 1
         if with_labels:
             agg_perf = self.trainer.aggregate_test_performance([self.trainer.process_test_preds(interp)])
             self.trainer.plot_custom_metrics(axs[axi], agg_perf, show_val=True)
