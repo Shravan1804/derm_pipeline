@@ -1,4 +1,4 @@
-# Dermatology Deep Learning Pipeline (derm_pipeline)
+# Dermatology Deep Learning Pipeline
 The first goal of this pipeline is to simplify DL training procedures and enable dermatologists to ellaborate
 their own models. 
 
@@ -97,19 +97,19 @@ object_detection_data
 ### Classification
 ```
 python derm_pipeline/training/distributed_launch.py derm_pipeline/classification/train_classification.py \
-    --data classification_data --wl-train strong_labels_test --sl-train strong_labels_test
-    --sl-tests strong_labels_test  --input-size 32 --bs 64 --exp-name classif_demo --epochs 1 --fepochs 1 --lr .0002
+    --data classification_data --wl-train wl_train --sl-train sl_train --sl-tests sl_test \
+    --input-size 32 --bs 64 --exp-name classif_demo --epochs 1 --fepochs 1 --lr .0002
 ```
 ### Segmentation
 Images and masks should have the same name. Mask extension should be png.
 ```
 python derm_pipeline/training/distributed_launch.py derm_pipeline/segmentation/train_segmentation.py \
-    --data segmentation_data --wl-train train --sl-train train 
-    --sl-tests test  --input-size 32 --bs 64 --exp-name segm_demo --epochs 1 --fepochs 1 --lr .0002
+    --data segmentation_data --wl-train wl_train --sl-train sl_train --sl-tests sl_test \
+    --input-size 32 --bs 64 --exp-name segm_demo --epochs 1 --fepochs 1 --lr .0002
 ```
 ### Object Detection
 ```
 python derm_pipeline/training/distributed_launch.py derm_pipeline/object_detection/train_object_detection.py \
-    --data object_detection_data --wl-train oliver_test_patched512.json --sl-train oliver_train_patched512.json 
-    --sl-tests oliver_test_patched512.json --input-size 128 --bs 64 --exp-name od_demo --epochs 1 --fepochs 1 --lr .0002
+    --data object_detection_data --wl-train wl_train --sl-train sl_train --sl-tests sl_test \
+    --input-size 128 --bs 64 --exp-name od_demo --epochs 1 --fepochs 1 --lr .0002
 ```
