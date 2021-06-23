@@ -117,7 +117,7 @@ class ImageSegmentationTrainer(ImageTrainer):
         for bg in [None, self.args.bg]:
             cat_perf = partial(segm_utils.cls_perf, cls_idx=cat_id, cats=self.args.cats, bg=bg)
             signature = f'{self.get_cat_metric_name(perf_fn, cat, bg)}(inp, targ)'
-            code = f"def {signature}: return cat_perf(train_utils.{perf_fn}, inp, targ).to(inp.device)"
+            code = f"def {signature}: return cat_perf(metrics.{perf_fn}, inp, targ).to(inp.device)"
             exec(code, {"cat_perf": cat_perf, 'metrics': metrics}, metrics_fn)
 
     def ordered_test_perfs_per_cats(self):
