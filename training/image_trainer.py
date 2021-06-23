@@ -24,7 +24,7 @@ import fastai.vision.all as fv
 import fastai.distributed as fd   # needed for fastai multi gpu
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import common, common_plot as cplot, crypto
+from general import common, common_plot as cplot, common_img as cimg, crypto
 from training import train_utils, custom_losses as closs
 from training.base_trainer import FastaiTrainer
 import training.fastai_monkey_patches as fmp
@@ -315,13 +315,15 @@ class ImageTrainer(FastaiTrainer):
                 val = fv.L([fi_dict[fik] for fik in zip(*val)]).concat().map_zip(fv.L)
             yield fold, tr, val
 
-    def load_image_item(self, item):
+    def load_image_item(self, item, load_im_array=False):
         """Load image item, decrypts if needed
         :param item: str, path of image
+        :param load_im_array: bool, optional, force image array loading in memory
         :return: array of image if data is encrypted else image path
         """
         if type(item) is np.ndarray: return item    # image/mask is already loaded as np array
         elif self.args.encrypted: return crypto.decrypt_img(item, self.args.ckey)
+        elif load_im_array: return cimg.load_img(item)
         else: return item
 
     def create_dls_from_lst(self, blocks, tr, val, bs, size, get_x=None, get_y=None, **kwargs):

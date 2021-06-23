@@ -85,13 +85,14 @@ class ImageSegmentationTrainer(ImageTrainer):
         """
         return segm_utils.get_mask_path(img_path, self.args.img_dir, self.args.mask_dir, self.args.mext)
 
-    def load_mask(self, item):
+    def load_mask(self, item, load_mask_array=False):
         """Loads image mask
         :param item: str, mask path or array
+        :param load_mask_array: bool, optional, force mask array loading in memory
         :return: array mask if encrypted else str mask path
         """
         if type(item) is np.ndarray: mask = item
-        elif common.is_path(item): mask = self.load_image_item(item)
+        elif common.is_path(item): mask = self.load_image_item(item, load_im_array=load_mask_array)
         else: mask = mask_utils.rles_to_non_binary_mask(item)
         if self.args.rm_small_objs:
             if common.is_path(mask): mask = mask_utils.load_mask_array(mask)

@@ -71,8 +71,8 @@ class ImageSegmentationInference(ImageInference):
         :return: reconstructed predictions
         """
         img_path, mask_path = inference_item
-        im = common.trainer.load_image_item(img_path)
-        gt = common.trainer.load_mask(mask_path) if mask_path is not None else None
+        im = self.trainer.load_image_item(img_path, load_im_array=True)
+        gt = self.trainer.load_mask(mask_path, load_mask_array=True) if mask_path is not None else None
         if interp.pms is None: pred = mask_utils.resize_mask(interp.decoded[0].numpy(), im.shape[:2])
         else: pred = PatchExtractor.rebuild_im_from_patches(interp.pms, interp.decoded.numpy(), im.shape[:2])
         save_path = os.path.join(save_dir, os.path.splitext(os.path.basename(img_path))[0] + "_preds.jpg")
