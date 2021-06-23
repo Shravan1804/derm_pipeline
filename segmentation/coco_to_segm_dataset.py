@@ -1,3 +1,16 @@
+#!/usr/bin/env python
+
+"""coco_to_segm_dataset.py: Converts coco json dataset to segmentation dataset."""
+
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
 import os
 import sys
 import argparse
@@ -10,11 +23,17 @@ import numpy as np
 from pycocotools.coco import COCO
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import common, concurrency
+from general import common, common_img as cimg, concurrency
 import segmentation.segmentation_utils as segm_utils
 
 
 def create_segm_masks(args, proc_id, images, coco):
+    """Method called by processes to creates segmentation masks from coco object annotations. Also writes the mask to disk.
+    :param args: command line args
+    :param proc_id: int, process id
+    :param images: list of image paths
+    :param coco: COCO object
+    """
     print(f"Process {proc_id}: creating {len(images)} masks")
     for img in images:
         file, _ = os.path.splitext(os.path.basename(img.file_name))
@@ -27,17 +46,25 @@ def create_segm_masks(args, proc_id, images, coco):
 
 
 def get_images_without_labels(args, img_with_labels):
+    """Somes images may have no object annotations. They should still be gathered to later create an empty mask.
+    :param args: command line arguments
+    :param img_with_labels: list of image paths
+    :return: list of image paths without object annotations
+    """
     has_labels = [os.path.basename(img.file_name) for img in img_with_labels]
     no_labels = []
     for f in common.list_files(os.path.join(os.path.dirname(args.json), args.img_dir), full_path=True):
         filename = os.path.basename(f)
         if filename not in has_labels:
-            h, w = common.quick_img_size(f)
+            h, w = cimg.quick_img_size(f)
             no_labels.append(SimpleNamespace(id=-1337, file_name=filename, height=h, width=w))
     return no_labels
 
 
 def main(args):
+    """Performs the multiprocess coco to segmentation dataset conversion
+    :param args: command line arguments
+    """
     coco = COCO(args.json)
     all_images = [SimpleNamespace(**img) for img in coco.imgs.values()]
     all_images.extend(get_images_without_labels(args, all_images))

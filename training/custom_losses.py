@@ -1,3 +1,16 @@
+#!/usr/bin/env python
+
+"""custom_losses.py: Implementation of custom losses"""
+
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
 import math
 
 import torch

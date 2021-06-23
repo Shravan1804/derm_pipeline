@@ -1,3 +1,16 @@
+#!/usr/bin/env python
+
+"""crypto.py: Encrypts directory structure, also contains methods used for decryption"""
+
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
 import os
 import re
 import sys
@@ -8,93 +21,52 @@ import multiprocessing as mp
 
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import common, concurrency
-
-
-class DrawHelper:
-    """Helper class to draw patches delimitations on images"""
-    def __init__(self, thickness=1, style='dotted', gap=10):
-        self.thickness = thickness
-        self.style = style
-        self.gap = gap
-
-    def drawline(self, im, pt1, pt2, color):
-        dist = ((pt1[0] - pt2[0]) ** 2 + (pt1[1] - pt2[1]) ** 2) ** .5  # pythagoras hypotenuse
-        pts = []
-        for i in np.arange(0, dist, self.gap):
-            r = i / dist
-            x = int((pt1[0] * (1 - r) + pt2[0] * r) + .5)
-            y = int((pt1[1] * (1 - r) + pt2[1] * r) + .5)
-            p = (x, y)
-            pts.append(p)
-
-        if self.style == 'dotted':
-            for p in pts:
-                cv2.circle(im, p, self.thickness, color, -1)
-        else:
-            e = pts[0]
-            for i, p in enumerate(pts):
-                s = e
-                e = p
-                if i % 2 == 1:
-                    cv2.line(im, s, e, color, self.thickness)
-
-    def drawpoly(self, im, pts, color):
-        e = pts[0]
-        pts.append(pts.pop(0))
-        for p in pts:
-            s = e
-            e = p
-            self.drawline(im, s, e, color)
-
-    def drawrect(self, im, pt1, pt2, color):
-        pts = [pt1, (pt2[0], pt1[1]), pt2, (pt1[0], pt2[1])]
-        self.drawpoly(im, pts, color)
-
-    def draw_patches(self, img_arr, pm, patch_size):
-        for p in pm:
-            s = (p['w'], p['h'])
-            e = (p['w'] + patch_size, p['h'] + patch_size)
-            self.drawrect(img_arr, s, e, (255, 255, 255))
-        return img_arr
-
-    def test(self):
-        im = np.zeros((800, 800, 3), dtype='uint8')
-        patcher = PatchExtractor(256)
-        patch_maps = patcher.patch_grid(im, 'test.jpg')
-        self.draw_patches(im, patch_maps, 256)
-        plt.figure()
-        fig, ax = plt.subplots(1, figsize=(12, 9))
-        ax.imshow(im)
-        plt.axis('off')
-        plt.show()
-        plt.close()
-
+from general import common, common_img as cimg, concurrency
 
 class PatchExtractor:
-    """Extracts patches from images either by random sampling or splitting the image as a grid"""
+    """Extracts patches from images either by random sampling or splitting the image as a grid
+    Each patch is represented by a dict, for details check create_pm method"""
+    # SEP separates original image name before file ext with patch information
     SEP = '__SEP__'
+    # RAND separates original image name before file ext with patch information if patch is randomly sampled
     RAND = '__RAND__'
 
     def __init__(self, patch_sizes, seed=42, dynamic_res=False, root_dir=None):
-        """Seed used when sampling patches from image"""
+        """Creation of a PatchExtractor object
+        :param patch_sizes: list of int
+        :param seed: int, random seed
+        :param dynamic_res: bool, should the patch sizes be adjusted to the median image resolution?
+        :param root_dir: str, path of dataset, used for dynamic_res
+        """
         self.patch_sizes = sorted(patch_sizes) if type(patch_sizes) == list else [patch_sizes]
         np.random.seed(seed)
         self.base_resolution = self.compute_base_resolution(root_dir) if dynamic_res else None
 
     def compute_base_resolution(self, rdir):
+        """Calculates median resolution from dir
+        :param rdir: str, dataset directory path
+        :return: int, median total pixel size h*w
+        """
         common.check_dir_valid(rdir)
         impaths = common.list_images(rdir, full_path=True, recursion=True)
-        resolutions = [h * w for ip in impaths for h, w in [common.quick_img_size(ip)]]
+        resolutions = [h * w for ip in impaths for h, w in [cimg.quick_img_size(ip)]]
         return int(np.median(np.array(resolutions)))
 
     def adjust_ps(self, ps, im_res):
+        """Adjust patch size if dynamic resolution was set
+        :param ps: int, patch size
+        :param im_res: int, image total pixel size h*w
+        :return: int, adjusted patch size
+        """
         return ps if self.base_resolution is None else int(pow(im_res * ps * ps / self.base_resolution, .5))
 
     def dir_images_to_patches(self, dirname):
+        """Converts images in directory to patches
+        :param dirname: str, directory path
+        :return: dict, full image basename as keys and list of patches as values
+        """
         files = common.list_files(dirname, full_path=True)
         exclude = [p for p in files if not(p.endswith('.png') or p.endswith('.jpg'))]
         if exclude:
@@ -102,7 +74,12 @@ class PatchExtractor:
         return {os.path.basename(f): self.patch_grid(f) for f in files if f not in exclude}
 
     def sample_patches(self, img_path, nb, im_arr=None):
-        """Samples nb patches from img"""
+        """ Randomly samples patches from image
+        :param img_path: str, image path
+        :param nb: int, number of patches to sample
+        :param im_arr: array, image optional, default will load img_path
+        :return: list of patch maps
+        """
         assert nb > 1, f"Cannot sample nb={nb} patches from {img_path}."
         im_arr = self.load_image(img_path) if im_arr is None else self.maybe_resize(im_arr)
         im_h, im_w = im_arr.shape[:2]
@@ -115,7 +92,11 @@ class PatchExtractor:
         return patches
 
     def patch_grid(self, img_path, im_arr=None):
-        """Converts img into a grid of patches"""
+        """Converts image into a grid of patches
+        :param img_path: str, image path
+        :param im_arr:  array, image optional, default will load img_path
+        :return: list of patch maps
+        """
         im_arr = self.load_image(img_path) if im_arr is None else self.maybe_resize(im_arr)
         im_h, im_w = im_arr.shape[:2]
         patches = []
@@ -132,7 +113,10 @@ class PatchExtractor:
         return patches
 
     def maybe_resize(self, im_arr):
-        """Resize img only if dim smaller than the max patch size otherwise returns img unchanged"""
+        """Resize img only if dim smaller than the max patch size otherwise returns img unchanged
+        :param im_arr: array, image
+        :return: array, maybe resized image
+        """
         h, w = im_arr.shape[:2]
         ps = self.adjust_ps(self.patch_sizes[-1], h * w)
         smallest = min(h, w)
@@ -144,27 +128,46 @@ class PatchExtractor:
             return im_arr
 
     def load_image(self, img_path):
+        """Loads and resize image if needed
+        :param img_path: str, image path
+        :return: array, (resized) image array
+        :raise AssertionError if file invalid
+        """
         if common.is_path(img_path) and type(img_path) is not str: img_path = str(img_path)
         common.check_file_valid(img_path)
-        return self.maybe_resize(common.load_img(img_path))
+        return self.maybe_resize(cimg.load_img(img_path))
 
     def save_patches(self, source, dest, dirname, grids):
+        """Extracts and writes patches to disk
+        :param source: str, root path of source images
+        :param dest: str, destination root folder path
+        :param dirname: str, directory inside root containing images
+        :param grids: dict, full image basename as keys and list of patches as values
+        """
         dest = common.maybe_create(dest, dirname)
         for img, patches in grids.items():
             im = self.load_image(os.path.join(source, dirname, img))
             for pm in patches:
-                common.save_img(self.extract_patch(im, pm), os.path.join(dest, pm['patch_path']))
+                cimg.save_img(self.extract_patch(im, pm), os.path.join(dest, pm['patch_path']))
 
     @staticmethod
     def extract_patch(im, pm):
-        """Extracts patch from im using patch map info"""
+        """Extracts patch from image using patch map info
+        :param im: array, image
+        :param pm: dict, patch map
+        :return: array, image patch
+        """
         ps, id_h, id_w = pm['ps'], pm['h'], pm['w']
         return im[id_h:id_h + ps, id_w:id_w + ps]
 
     @staticmethod
     def are_neighbors(p1, p2, d=1):
-        """p1, p2 the patch filenames, o the overlap (oh, ow) between patches, will use p1 patch size if available
-        Uses parameter ps=512 only if ps not available in patch_name"""
+        """Determines if two patches are neighbors with certain patch-wise distance
+        :param p1: str, patch filename
+        :param p2: str, patch filename
+        :param d: int, allowed distance
+        :return: bool
+        """
         pm1, pm2 = PatchExtractor.patch_name_to_pm(p1), PatchExtractor.patch_name_to_pm(p2)
         if pm1['full_img'] != pm2['full_img']:
             return False
@@ -179,9 +182,13 @@ class PatchExtractor:
 
     @staticmethod
     def get_neighbors_dict(patches, d=1):
-        """Returns dict of patches with neighbors; arr of same but with patch indexes;
+        """Creates dict of neighbors
+        :param patches: list of patches
+        :param d: int, distance
+        :return: tuple, dict of patches (keys) with neighbors list (values), arr of same but with patch indexes,
         arr of arr of index of patches with 0th item arr of patches with 0 neighbors, 1st item 1 neighbor, etc;
-        arr of patch group, index 0 is patch name 0 group id, group id is nb of neighbors"""
+        arr of patch group, index 0 is patch name 0 group id, group id is nb of neighbors
+        """
         pidx = {p: i for i, p in enumerate(patches)}    # patch name to patch index in lst patches
         full_im__p = {}     # full img name to patch name
         neigh = {}      # patch name to neighboring patches names
@@ -212,7 +219,11 @@ class PatchExtractor:
 
     @staticmethod
     def compute_side_overlap(n, ps):
-        """Computes minimum overlap between patches, n is the total size (img height or width), ps is the patch size"""
+        """Computes minimum overlap between patches maximizing the number of patches. Height/width overlap can differ
+        :param n: int, total size (img height or width)
+        :param ps: int, patch size
+        :return: int, patch overlap
+        """
         remainder = n % ps
         quotient = max(1, n // ps)
         overlap = math.ceil((ps - remainder) / quotient)
@@ -220,30 +231,52 @@ class PatchExtractor:
 
     @staticmethod
     def get_overlap(patch_name):
-        """Extracts patch size from its filename"""
+        """Extracts patch size from its filename
+        :param patch_name: dict, patch map
+        :return: tuple, height overlap and width overlap
+        """
         pm = PatchExtractor.patch_name_to_pm(patch_name)
         return pm['oh'], pm['ow']
 
     @staticmethod
     def get_patch_size(patch_name):
-        """Extracts patch size from its filename"""
+        """Extracts patch size from its filename
+        :param patch_name: dict, patch map
+        :return: int, patch size
+        """
         pm = PatchExtractor.patch_name_to_pm(patch_name)
         return pm['ps']
 
     @staticmethod
     def get_position(patch_name):
-        """Extracts patch coordinates from its filename"""
+        """Extracts patch coordinates from its filename
+        :param patch_name: dict, patch map
+        :return: tuple, (y, x)
+        """
         pm = PatchExtractor.patch_name_to_pm(patch_name)
         return pm['h'], pm['w']
 
     @staticmethod
     def get_full_img_from_patch(patch_name):
-        """patch_name is the patch filename"""
+        """Extract full image name from patch filename
+        :param patch_name: str, patch filename
+        :return: str, full image name
+        """
         return PatchExtractor.patch_name_to_pm(patch_name)['full_img']
 
     @staticmethod
     def create_pm(img_path, ps, oh, ow, h, w, randomly_sampled=False, patch_name=None):
-        """Creates patch map"""
+        """Creates patch map from args
+        :param img_path: str, full image path
+        :param ps: int, patch size
+        :param oh: int, height overlap
+        :param ow: int, width overlap
+        :param h: int, top left corner y coordinate
+        :param w: int, top left corner y coordinate
+        :param randomly_sampled: bool, if patch was randomly sampled
+        :param patch_name: str, patch filename
+        :return: dict, patch map
+        """
         file, ext = os.path.splitext(os.path.basename(img_path))
         if patch_name is None:
             sep = PatchExtractor.SEP + PatchExtractor.RAND if randomly_sampled else PatchExtractor.SEP
@@ -252,17 +285,28 @@ class PatchExtractor:
 
     @staticmethod
     def patch_name_re():
+        """REGEX used to extract patch information from patch filename
+        :return: compiled regex
+        """
         sep = fr'(?P<sep>{PatchExtractor.SEP}(?:{PatchExtractor.RAND})?)'
         reg = re.compile(fr'^(?P<img>.+){sep}_ps(?P<ps>\d+)_oh(?P<oh>\d+)_ow(?P<ow>\d+)_h(?P<h>\d+)_w(?P<w>\d+)$')
         return reg
 
     @staticmethod
     def can_extract_pm_from_patch_name(patch_name):
+        """Checks if patch filename contains all necessary patch information
+        :param patch_name: str, patch filename
+        :return: bool
+        """
         file, ext = os.path.splitext(os.path.basename(patch_name))
         return PatchExtractor.patch_name_re().search(file) is not None
 
     @staticmethod
     def patch_name_to_pm(patch_name):
+        """Converts a patch filename to a patch map
+        :param patch_name: str, patch filename
+        :return: dict, patch map
+        """
         file, ext = os.path.splitext(os.path.basename(patch_name))
         results = PatchExtractor.patch_name_re().search(file)
         assert results, f"Cannot extract necessary information from patch name: {patch_name}"
@@ -273,6 +317,13 @@ class PatchExtractor:
 
     @staticmethod
     def rebuild_im_from_patches(pms, patches, full_shape=None, interpol=None):
+        """Rebuild image from patches
+        :param pms: list of dict, all patch maps
+        :param patches: list of array, all patches
+        :param full_shape: tuple of int, (h, w) full image size
+        :param interpol: cv2 interpolation flag, used for resize (masks cannot be resized like images)
+        :return: array, rebuilt image
+        """
         if full_shape is None: full_shape = cv2.imread(pms[0]['full_img'], cv2.IMREAD_UNCHANGED).shape
         im = np.zeros(full_shape)
         for pm, patch in zip(pms, patches):
@@ -286,16 +337,35 @@ class PatchExtractor:
 
     @staticmethod
     def impath_to_patches(img_path, ps):
+        """Tiles full image to patches
+        :param img_path: str, full image path
+        :param ps: int, patch size
+        :return: tuple with list of patches and list of patch maps
+        """
         return PatchExtractor.im_to_patches(PatchExtractor([ps]).load_image(img_path), ps, img_path)
 
     @staticmethod
     def im_to_patches(im, ps, imname="fi_img.jpg"):
+        """Converts full image array to patches
+        :param im: array, image
+        :param ps: int, patch size
+        :param imname: str, full image name for patch map
+        :return: tuple with list of patches and list of patch maps
+        """
         patcher = PatchExtractor([ps])
         pms = patcher.patch_grid(imname, im)
         return [PatchExtractor.extract_patch(im, pm) for pm in pms], pms
 
 
 def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest):
+    """Function used to apply patching in multiprocess mode
+    :param proc_id: int, process id
+    :param pmq: mpqueue, queue where all patches will be stored
+    :param patcher: PatchExtractor, used to extract patches from full images
+    :param data: str, root source dir
+    :param dirs: str, list of image directories in source dir
+    :param dest: str, destination directory path where to save the patches
+    """
     pms = []
     for c in dirs:
         print(f"Process {proc_id}: patching {c} patches")
@@ -307,6 +377,11 @@ def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest):
 
 
 def get_dirs(root, level):
+    """Used to get directories containing images at an arbitrary level in the file hierarchy
+    :param root: str, root dataset dir
+    :param level: int, level to extract subdirectories from
+    :return: list of subdirectories
+    """
     all_dirs = common.list_dirs(root)
     while level > 0:
         all_dirs = [os.path.join(a, b) for a in all_dirs for b in common.list_dirs(os.path.join(root, a))]
@@ -314,6 +389,9 @@ def get_dirs(root, level):
     return all_dirs
 
 def main(args):
+    """Performs the multiprocess patching of dataset according to command line args
+    :param args: command line args
+    """
     all_dirs = get_dirs(args.data, args.level)
     if not all_dirs:
         all_dirs = ['']
@@ -331,8 +409,11 @@ def main(args):
     print("done")
 
 
-def get_patcher_arg_parser(desc="Creates patch dataset from image dataset"):
-    parser = argparse.ArgumentParser(description=desc)
+def get_patcher_arg_parser():
+    """Helper function used to create argparser
+    :return: argparser
+    """
+    parser = argparse.ArgumentParser(description="Creates patch dataset from image dataset")
     parser.add_argument('--data', type=str, required=True, help="source data root directory absolute path")
     parser.add_argument('--dest', type=str, help="directory where the patches should be saved")
     parser.add_argument('-p', '--patch-sizes', nargs='+', default=[512], type=int, help="patch sizes")

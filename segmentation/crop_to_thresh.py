@@ -1,21 +1,41 @@
+#!/usr/bin/env python
+
+"""crop_to_thresh.py: Creates cropped around objects version of dataset. The idea is to rebalance object proportion. """
+
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
 import os
 import sys
 import argparse
 import multiprocessing as mp
 
-import cv2
 import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import common, concurrency
+from general import common, common_img as cimg, concurrency
 import segmentation.segmentation_utils as seg_utils
 from segmentation.mask_utils import crop_img_and_mask_to_objs, crop_im
 
 
-SEP = '__CROP__'
+SEP = '__CROP__'    # used to separate full image filename from crop info
 
 
 def save_crops(args, thresh, img_path, im, mask, crop_bboxes):
+    """Used to save images crops to disk
+    :param args: command line args
+    :param thresh: float, object proportion threshold
+    :param img_path: str, image path
+    :param im: array, image
+    :param mask: array, mask
+    :param crop_bboxes: list of bounding boxes around objects
+    """
     file, ext = os.path.splitext(os.path.basename(img_path))
     imdir = os.path.dirname(img_path).replace(args.data, args.dest)
     mdir = imdir.replace(args.img_dir, args.mask_dir)
@@ -24,11 +44,16 @@ def save_crops(args, thresh, img_path, im, mask, crop_bboxes):
         cropped_imgs, cropped_masks = crop_im(im, bbox), crop_im(mask, bbox)
         crop_id = common.zero_pad(i, len(cropped_imgs))
         crop_fname = f'{file}{SEP}{suf}_{"_".join([str(s) for s in bbox])}__{crop_id}{ext}'
-        common.save_img(cropped_imgs, os.path.join(imdir, crop_fname))
-        common.save_img(cropped_masks, os.path.join(mdir, crop_fname.replace(ext, args.mext)))
+        cimg.save_img(cropped_imgs, os.path.join(imdir, crop_fname))
+        cimg.save_img(cropped_masks, os.path.join(mdir, crop_fname.replace(ext, args.mext)))
 
 
 def multiprocess_cropping(args, proc_id, images):
+    """Method called by process to perform image cropping around objects
+    :param args: command line arguments
+    :param proc_id: int, process id
+    :param images: list of image paths
+    """
     print(f"Process {proc_id}: cropping {len(images)} patches")
     for img_path in images:
         mask_path = seg_utils.get_mask_path(img_path, args.img_dir, args.mask_dir, args.mext)
@@ -44,6 +69,10 @@ def multiprocess_cropping(args, proc_id, images):
 
 
 def main(args, all_dirs):
+    """Runs multi process image cropping to objects
+    :param args: command line arguments
+    :param all_dirs: list of directory paths where images should be cropped around objects
+    """
     all_images = [f for d in all_dirs for f in common.list_files(os.path.join(d, args.img_dir), full_path=True)]
     workers, batch_size, batched_images = concurrency.batch_lst(all_images)
     jobs = []

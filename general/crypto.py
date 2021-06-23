@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 
-"""crypto.py: Encrypts directory structure, contains methods used for decryption"""
+"""crypto.py: Encrypts directory structure, also contains methods used for decryption"""
 
 __author__ = "Ludovic Amruthalingam"
 __maintainer__ = "Ludovic Amruthalingam"
 __email__ = "ludovic.amruthalingam@unibas.ch"
 __status__ = "Development"
 __copyright__ = (
-    "Copyright 2021, University of Basel, Department of Biomedical Engineering"
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
 )
 
 
@@ -29,7 +30,7 @@ from general import common, concurrency
 
 
 def add_encrypted_args(parser):
-    """add_encrypted_args. Adds crypto command line arguments to provided argument parser
+    """Adds crypto command line arguments to provided argument parser
     :param parser: ArgumentParser object
     """
     parser.add_argument('--encrypted', action='store_true', help="Data is encrypted")
@@ -37,7 +38,7 @@ def add_encrypted_args(parser):
 
 
 def decrypt_img(img_path, fkey):
-    """decrypt_img. Decrypts provided image file using Fernet key object and load it as np array
+    """Decrypts provided image file using Fernet key object and load it as np array
     :param img_path: str, path of image to decrypt
     :param fkey: Fernet object, key used to decrypt file
     :return np array with image data
@@ -50,7 +51,7 @@ def decrypt_img(img_path, fkey):
 
 
 def request_key(test_key_dir=None, user_key=None):
-    """request_key. Asks crypto key from user input and converts it to Fernet object key, testing it if requested
+    """Asks crypto key from user input and converts it to Fernet object key, testing it if requested
     :param test_key_dir: str, directory where crypted version of the key can be found to test user key.
     Can be left None if no key testing required.
     :param user_key: str, crypto key, if left None will ask for user input
@@ -73,7 +74,7 @@ def request_key(test_key_dir=None, user_key=None):
 
 
 def load_key(key_file):
-    """load_key. Loads key from provided file path
+    """Loads key from provided file path
     :param key_file: str, path of key file
     returns: Fernet object key
     """
@@ -84,7 +85,7 @@ def load_key(key_file):
 
 
 def decrypt(encrypted_file_path, fkey):
-    """decrypt. Decrypts provided file using provided key
+    """Decrypts provided file using provided key
     :param encrypted_file_path: str, path of encrypted file
     :param fkey: Fernet object, key
     :return decrypted file content
@@ -94,7 +95,7 @@ def decrypt(encrypted_file_path, fkey):
 
 
 def mp_encrypt(proc_id, files, fkey, root, dest, filenames_dict):
-    """mp_encrypt. Method used to multiprocess file encryption of provided files
+    """Method used to multiprocess file encryption of provided files
     :param proc_id: int, id of process
     :param files: list, filepaths to be encrypted by process
     :param fkey: Fernet object, key
@@ -113,7 +114,7 @@ def mp_encrypt(proc_id, files, fkey, root, dest, filenames_dict):
 
 
 def create_filenames_dict(files, save_path):
-    """create_filenames_dict. Creates bidict mapping between encrypted filenames and original filenames
+    """Creates bidict mapping between encrypted filenames and original filenames
     :param files: list, filepaths
     :param save_path: str, path where to save the created mapping
     :return created bidict
@@ -129,7 +130,9 @@ def create_filenames_dict(files, save_path):
 
 
 def main(args):
-    """main. Runs the multiprocess encryption based on the provided command line arguments"""
+    """Runs the multiprocess encryption based on the provided command line arguments
+    :param args: command line args
+    """
     fkey = load_key(args.key_file)
     files = common.list_files(args.data, full_path=True, recursion=True)
     filenames_dict = create_filenames_dict(files, os.path.join(args.data, f'{os.path.basename(args.data)}_filenames.p'))

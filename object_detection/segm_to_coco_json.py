@@ -1,3 +1,16 @@
+#!/usr/bin/env python
+
+"""segm_to_coco_json.py: Converts segmentation dataset to coco json dataset."""
+
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
 import os
 import sys
 import json
@@ -7,18 +20,28 @@ from functools import partial
 
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import common, crypto, concurrency
+from general import common, common_img as cimg, crypto, concurrency
 from segmentation import mask_utils
 import segmentation.segmentation_utils as segm_utils
 from object_detection import coco_format
 
 
 def get_img_shape(impath, crypto_key):
-    if crypto_key is None: return common.quick_img_size(impath)
+    """Get image shape from (maybe encrypted) image
+    :param impath: str, image path
+    :param crypto_key: Fernet key used to decrypt image
+    :return: tuple (h,w)
+    """
+    if crypto_key is None: return cimg.quick_img_size(impath)
     else: return crypto.decrypt_img(impath, crypto_key).shape[:2]
 
 
 def convert_segm_mask_to_obj_det_cats(mask, args):
+    """Converts segmentation mask category codes to object detection category codes
+    :param mask: array, mask
+    :param args: command line arguments
+    :return: array, modified mask
+    """
     for idx, segm_cat in enumerate(args.segm_cats):
         if idx == args.bg: continue
         elif segm_cat not in args.od_cats: mask[mask == idx] = args.bg
@@ -27,9 +50,16 @@ def convert_segm_mask_to_obj_det_cats(mask, args):
 
 
 def extract_annos(proc_id, q_annos, im_mask, args):
+    """Function called by processes to extract annotations from the segmentation mask
+    Places the annotations in the multiprocess queue
+    :param proc_id: int, process id
+    :param q_annos: multiprocess queue, where the annotations will be stored
+    :param im_mask: tuple of image and mask paths
+    :param args: command line arguments
+    """
     for i, (im_id, impath, mpath) in enumerate(im_mask):
         img_dict = coco_format.get_img_record(im_id, impath, im_shape=get_img_shape(impath, args.ckey))
-        mask = common.load_img(mpath) if args.ckey is None else crypto.decrypt_img(mpath, args.ckey)
+        mask = cimg.load_img(mpath) if args.ckey is None else crypto.decrypt_img(mpath, args.ckey)
         obj_cats_with_masks = mask_utils.separate_objs_in_mask(convert_segm_mask_to_obj_det_cats(mask, args))
         if obj_cats_with_masks is None: continue
         else: obj_cats, obj_cats_masks = obj_cats_with_masks
@@ -40,6 +70,11 @@ def extract_annos(proc_id, q_annos, im_mask, args):
 
 
 def to_coco_format(img_dict_with_annos, args):
+    """Converts extracted annotations to coco json format
+    :param img_dict_with_annos: list of tuples with the image dict and image annotations
+    :param args: command line arguments
+    :return: dict, dataset in coco json format
+    """
     dataset = coco_format.get_default_dataset(os.path.basename(args.data))
     cids = set()
     ann_id = 1  # MUST start at 1 since pycocotools.cocoeval uses detId to track matches and checks with > 0
@@ -56,6 +91,9 @@ def to_coco_format(img_dict_with_annos, args):
 
 
 def main(args):
+    """Performs the multiprocess segmentation to coco dataset conversion
+    :param args: command line arguments
+    """
     get_mask_path = partial(segm_utils.get_mask_path, img_dir=args.img_dir, mask_dir=args.mask_dir, mext=args.mext)
     impaths = common.list_files(os.path.join(args.data, args.img_dir), full_path=True)
     img_with_masks = [(im_id+1, impath, get_mask_path(impath)) for im_id, impath in enumerate(impaths)]

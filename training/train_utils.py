@@ -1,79 +1,35 @@
+#!/usr/bin/env python
+
+"""train_utils.py: Helper functions to train model"""
+
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
+
 import os
 import gc
 import sys
-import pickle
-import argparse
-from pathlib import Path
-from types import SimpleNamespace
 from collections import defaultdict
-
-import numpy as np
-from tqdm import tqdm
-from sklearn.model_selection import KFold, ShuffleSplit, StratifiedKFold, StratifiedShuffleSplit
 
 import torch
 import fastai.vision.all as fv
-import fastai.distributed as fd   # needed for fastai multi gpu
+import fastai.distributed as fd
+import fastai.callback.tensorboard as fc
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import common, crypto
-
-
-def get_cls_TP_TN_FP_FN(cls_truth, cls_preds):
-    TP = (cls_preds & cls_truth).sum().item()
-    TN = (~cls_preds & ~cls_truth).sum().item()
-    FP = (cls_preds & ~cls_truth).sum().item()
-    FN = (~cls_preds & cls_truth).sum().item()
-    return TP, TN, FP, FN
-
-
-def accuracy(TP, TN, FP, FN, epsilon=1e-8):
-    # Make sure classes are balanced
-    # Proportion of both Positive and Negative that were correctly classified
-    return (TP + TN) / (TP + TN + FP + FN + epsilon)
-
-
-def precision(TP, TN, FP, FN, epsilon=1e-8):
-    # Proportion of predicted Positives that are truly Positive
-    return TP / (TP + FP + epsilon)
-
-
-def recall(TP, TN, FP, FN, epsilon=1e-8):
-    # Proportion of actual Positives (in ground truth) that are correctly classified
-    return TP / (TP + FN + epsilon)
-
-
-def F1(TP, TN, FP, FN, epsilon=1e-8):
-    # Can be used to compare two classifiers BUT
-    # F1-score gives a larger weight to lower numbers e.g. 100% pre and 0% rec => 0% F1
-    # F1-score gives equal weight to pre/rec which may not what we seek depending on the problem
-    pre, rec = precision(TP, TN, FP, FN, epsilon), recall(TP, TN, FP, FN, epsilon)
-    return 2 * pre * rec / (pre + rec)
-
-
-def specificity(TP, TN, FP, FN, epsilon=1e-8):
-    # Proportion of true negative given gt is false
-    # Proba negative test given patient is not sick
-    return TN / (TN + FP + epsilon)
-
-
-def sensitivity(TP, TN, FP, FN, epsilon=1e-8):
-    # Proportion true positive given gt is true (i.e. RECALL)
-    # Proba positive test given patient is sick
-    return TP / (TP + FN + epsilon)
-
-
-def ppv(TP, TN, FP, FN, epsilon=1e-8):
-    # Positive predictive values: proportion of positive predictions that are true positives (i.e. PRECISION)
-    return TP / (TP + FP + epsilon)
-
-
-def npv(TP, TN, FP, FN, epsilon=1e-8):
-    # Negative predictive values: proportion of negative predictions that are true negatives
-    return TN / (TN + FN + epsilon)
 
 
 def tensors_mean_std(tensor_lst):
+    """Takes mean and std of tensor list
+    :param tensor_lst: list of tensors
+    :return: tuple of tensors, (mean, std)
+    """
     tensors = torch.cat([t.unsqueeze(0) for t in tensor_lst], dim=0)
     mean = tensors.mean(axis=0)
     std = tensors.std(axis=0) if len(tensor_lst) > 1 else torch.zeros_like(mean)
@@ -81,14 +37,24 @@ def tensors_mean_std(tensor_lst):
 
 
 def non_param_ci(tensor_lst, ci_p):
+    """Computes the non-parametric confidence interval
     # when predicted variable is not necessarily normally distributed
+    :param tensor_lst: list of tensors, metrics results
+    :param ci_p: float, e.g. .95 for CI95
+    :return: tuple, lower and higher bound of CI
+    """
     alpha = 1 - ci_p
     low, high = alpha, 1-alpha/2
     return torch.quantile(torch.stack(tensor_lst).float(), torch.tensor([low, high]), dim=0)
 
 
 def split_model(model, splits):
-    """Inspired from fastai 1, splits model on requested top level children"""
+    """Inspired from fastai 1, splits model on requested top level children
+    Used for freezing the model and adaptive learning rates
+    :param model: torch module
+    :param splits: list of top level module children, where split should occur
+    :return: list of children sequence based on requested splits
+    """
     top_children = list(model.children())
     idxs = [top_children.index(split) for split in splits]
     assert idxs == sorted(idxs), f"Provided splits ({splits}) are not sorted."
@@ -99,6 +65,10 @@ def split_model(model, splits):
 
 
 def load_custom_pretrained_weights(model, weights_path):
+    """Load model weights from weight file
+    :param model: torch module
+    :param weights_path: str, path to .pth weights
+    """
     new_state_dict = torch.load(weights_path, map_location=torch.device('cpu'))['model']
     model_state_dict = model.state_dict()
     for name, param in model_state_dict.items():
@@ -114,8 +84,10 @@ def load_custom_pretrained_weights(model, weights_path):
 
 
 def show_tensors_in_memory(gpu_only=True):
-    """Prints a list of the Tensors being tracked by the garbage collector."""
+    """Prints a list of the Tensors being tracked by the garbage collector.
     # inspired from https://forums.fast.ai/t/gpu-memory-not-being-freed-after-training-is-over/10265/7
+    :param gpu_only: bool, show only tensors on gpu
+    """
     def pretty_size(size): return " × ".join(map(str, size)) if isinstance(size, torch.Size) else size
 
     def print_tensor_like_obj_details(obj):
@@ -140,31 +112,55 @@ def show_tensors_in_memory(gpu_only=True):
 
 
 class GPUManager:
+    """Helper class used to interact with gpus"""
     @staticmethod
     def clean_gpu_memory(*items):
+        """Remove all provided items from gpu and call garbage collector
+        :param items: list of item to be cleaned
+        """
         for item in items: del item
         torch.cuda.empty_cache()
         gc.collect()
 
     @staticmethod
     def default_gpu_device_ids():
+        """Returns all gpu device idxs
+        :return: list of gpus indexes
+        """
         assert torch.cuda.is_available(), "Cannot run without CUDA device"
         return list(range(torch.cuda.device_count()))
 
     @staticmethod
-    def in_parallel_mode(): return not GPUManager.in_distributed_mode() and torch.cuda.device_count() > 1
+    def in_parallel_mode():
+        """Checks if running in parallel mode
+        :return: bool, running in parallel mode
+        """
+        return not GPUManager.in_distributed_mode() and torch.cuda.device_count() > 1
 
     @staticmethod
-    def in_distributed_mode(): return os.environ.get('RANK', None) is not None
+    def in_distributed_mode():
+        """Checks if running in distributed mode. True when script was launched with distributed_launch.py
+        :return: bool, running in distributed mode
+        """
+        return os.environ.get('RANK', None) is not None
 
     @staticmethod
-    def distributed_rank(): return int(os.environ.get('RANK', 0))
+    def distributed_rank():
+        """Gives the process gpu rank
+        :return: int, gpu rank
+        """
+        return int(os.environ.get('RANK', 0))
 
     @staticmethod
-    def is_master_process(): return GPUManager.distributed_rank() == 0 if GPUManager.in_distributed_mode() else True
+    def is_master_process():
+        """Checks if process is the master process (gpu rank is 0)
+        :return: bool, is master process
+        """
+        return GPUManager.distributed_rank() == 0 if GPUManager.in_distributed_mode() else True
 
     @staticmethod
     def init_distributed_process():
+        """Starts distributed mode. Should be called before beginning of training."""
         if GPUManager.in_distributed_mode():
             rank = GPUManager.distributed_rank()
             fd.setup_distrib(rank)
@@ -172,279 +168,68 @@ class GPUManager:
 
     @staticmethod
     def sync_distributed_process():
+        """Create barrier so that all process sync"""
         if GPUManager.in_distributed_mode(): fv.distrib_barrier()
 
     @staticmethod
     def running_context(learn, device_ids=None):
+        """Creates appropriate gpu running context (parallel or distributed)
+        :param learn: learner object
+        :param device_ids: available gpu device indices
+        :return: running context manager
+        """
         device_ids = list(range(torch.cuda.device_count())) if device_ids is None else device_ids
         return learn.distrib_ctx() if GPUManager.in_distributed_mode() else learn.parallel_ctx(device_ids)
 
 
-class FastaiTrainer:
-    @staticmethod
-    def get_argparser(desc="Fastai trainer arguments", pdef=dict(), phelp=dict()):
-        parser = argparse.ArgumentParser(description=desc)
-        parser.add_argument('--use-wl', action='store_true', help="Data dir contains wl and sl data")
-        parser.add_argument('--nrepeats', default=3, type=int, help="N repeat: wl pretrain -> sl train -> wl correct")
-        parser.add_argument('--wl-train', type=str, nargs='+', help="weak labels (wl) dirs")
-        parser.add_argument('--sl-train', type=str, nargs='+', help="strong labels (sl) dirs")
-        parser.add_argument('--sl-tests', type=str, nargs='+', help="sl test dirs")
+class ImageTBCb(fc.TensorBoardBaseCallback):
+    """Extension of tensorboard callback ensuring that custom category metrics are also plotted."""
+    def __init__(self, log_dir, run_info, grouped_metrics, all_cats):
+        """Creates tensorboard callback
+        :param log_dir: str, directory path where TB logs can be saved
+        :param run_info: str, run information to label logs
+        :param grouped_metrics: list of metrics names to group together in same graph
+        :param all_cats: list, categories including all cats code
+        """
+        super().__init__()
+        self.log_dir = log_dir
+        self.run_info = run_info
+        self.grouped_metrics = grouped_metrics
+        self.all_cats = all_cats
 
-        parser.add_argument('--encrypted', action='store_true', help="Data is encrypted")
-        parser.add_argument('--ckey', type=str, help="Data encryption key")
+    def can_run(self):
+        """Checks if callback can run. Must be master process"""
+        return not hasattr(self.learn, 'lr_finder') and not hasattr(self, "gather_preds")\
+               and GPUManager.is_master_process()
 
-        parser.add_argument('--inference', action='store_true', help="No train, only inference")
-        parser.add_argument('--cross-val', action='store_true', help="Perform 5-fold cross validation on sl train set")
-        parser.add_argument('--nfolds', default=5, type=int, help="Number of folds for cross val")
-        parser.add_argument('--valid-size', default=.2, type=float, help='If no cv, splits train set with this %')
+    def before_fit(self):
+        """Sets up log writer"""
+        self.run = self.can_run()
+        if self.run: self._setup_writer()
 
-        parser.add_argument('-name', '--exp-name', required=True, help='Custom string to append to experiment log dir')
-        parser.add_argument('--logdir', type=str, default=pdef.get('--logdir', os.path.join(str(Path.home()), 'logs')),
-                            help=phelp.get('--logdir', "Root dir where logs will be saved, default to $HOME/logs"))
-        parser.add_argument('--exp-logdir', type=str, help="Experiment logdir, will be created in root log dir")
-        parser.add_argument('--test-figsize', type=float, default=pdef.get('--test-figsize', 3.4),
-                            help=phelp.get('--test-figsize', "figsize of test performance plots"))
+    def after_batch(self):
+        """Write batch loss metrics and hyperparameters"""
+        if not self.run: return
+        # if no self.smooth_loss then -1: when loss is nan, Recorder does not set smooth loss causing exception else
+        self.writer.add_scalar(f'{self.run_info}_Loss/train_loss', getattr(self, "smooth_loss", -1), self.train_iter)
+        for i, h in enumerate(self.opt.hypers):
+            for k, v in h.items(): self.writer.add_scalar(f'{self.run_info}_Opt_hyper/{k}_{i}', v, self.train_iter)
 
-        parser.add_argument('--model', type=str, default=pdef.get('--model', None), help="Model name")
-        parser.add_argument('--bs', default=pdef.get('--bs', 6), type=int, help="Batch size per GPU device")
-        parser.add_argument('--lr', type=float, help='when None: uses auto_lr in parallel mode else .002')
-        parser.add_argument('--fepochs', type=int, default=4, help='Epochs for frozen model')
-        parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 12), help='Epochs for unfrozen model')
-        parser.add_argument('--RMSProp', action='store_true', help="Use RMSProp optimizer")
-
-        parser.add_argument('--no-norm', action='store_true', help="Do not normalizes data")
-        parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
-        parser.add_argument('--early-stop', action='store_true', help="Early stopping during training")
-        parser.add_argument('--reduce-lr-delta', type=float, default=.01, help="delta for reduce lr on plateau cb")
-        parser.add_argument('--no-plot', action='store_true', help="Will not plot test results (e.g. too many classes)")
-        parser.add_argument('--no-plot-val', action='store_true', help="Will not print vals inside plot area")
-        parser.add_argument("--metrics-fns", type=str, nargs='+', default=['precision', 'recall'], help="metrics")
-
-        parser.add_argument('--proc-gpu', type=int, default=0, help="Id of gpu to be used by process")
-        parser.add_argument("--gpu-ids", type=int, nargs='+', default=GPUManager.default_gpu_device_ids(),
-                            help="Ids of gpus to be used on each machine")
-        parser.add_argument("--num-machines", type=int, default=1, help="number of machines")
-
-        parser.add_argument('--seed', type=int, default=pdef.get('--seed', 42), help="Random seed")
-        parser.add_argument('--debug-dls', action='store_true', help="Summarize dls then exits")
-
-        return parser
-
-    @staticmethod
-    def get_exp_logdir(args, custom=""):
-        d = f'{common.now()}_{args.model}_bs{args.bs}_epo{args.epochs}_seed{args.seed}' \
-            f'_world{args.num_machines * len(args.gpu_ids)}'
-        if not args.no_norm: d += '_normed'
-        d += '_RMSProp' if args.RMSProp else '_Adam'
-        d += '_fp32' if args.full_precision else '_fp16'
-        d += f'_CV{args.nfolds}' if args.cross_val else f'_noCV_valid{args.valid_size}'
-        d += '_WL' if args.use_wl else '_SL'
-        d += f'_{custom}_{args.exp_name}'
-        return d
-
-    @staticmethod
-    def prepare_training(args):
-        common.set_seeds(args.seed)
-        common.check_dir_valid(args.data)
-        data_names = []
-        if args.wl_train is not None: data_names.extend(args.wl_train)
-        if args.sl_train is not None: data_names.extend(args.sl_train)
-        if args.sl_tests is not None: data_names.extend(args.sl_tests)
-        for d in data_names: os.path.exists(os.path.join(args.data, d))
-
-        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, args.gpu_ids))
-        args.gpu_ids = list(range(len(args.gpu_ids)))
-        
-        assert torch.cuda.is_available(), "Cannot run without CUDA device"
-        args.bs = args.bs * len(args.gpu_ids) if GPUManager.in_parallel_mode() else args.bs
-        # required for segmentation otherwise causes a NCCL error in inference distrib running context
-        if GPUManager.in_distributed_mode(): GPUManager.init_distributed_process()
-
-        if args.encrypted:
-            args.ckey = os.environ.get('CRYPTO_KEY').encode() if GPUManager.in_distributed_mode() else args.ckey
-            args.ckey = crypto.request_key(args.data, args.ckey)
-
-        if args.exp_logdir is None:
-            args.exp_logdir = os.path.join(args.logdir, FastaiTrainer.get_exp_logdir(args))
-        args.exp_logdir = fd.rank0_first(lambda: common.maybe_create(args.exp_logdir))
-        print("Log directory: ", args.exp_logdir)
-
-    def __init__(self, args, stratify):
-        self.MODEL_SUFFIX = '_model'
-        self.args = args
-        self.stratify = stratify
-        self.cust_metrics = self.prepare_custom_metrics()
-        self.test_set_results = {test_name: defaultdict(list) for test_name in self.args.sl_tests}
-        print("Inference" if self.args.inference else "Training", "args:", self.args)
-
-    def prepare_custom_metrics(self): raise NotImplementedError
-
-    def load_items(self, path): raise NotImplementedError   # returns tuple of items array and item labels array
-
-    def get_test_items(self): raise NotImplementedError
-
-    def get_train_items(self): raise NotImplementedError
-
-    def create_learner(self): raise NotImplementedError
-
-    def load_learner_from_run_info(self, run_info, mpath, tr, val): raise NotImplementedError
-
-    def create_dls(self): raise NotImplementedError
-
-    def train_procedure(self, tr, val, fold_suffix, run_prefix="", learn=None): raise NotImplementedError
-
-    def correct_wl(self, wl_items, preds): raise NotImplementedError
-
-    def early_stop_cb(self): raise NotImplementedError
-
-    def get_run_params(self, run_info): raise NotImplementedError
-
-    def get_sorting_run_key(self, run_info): raise NotImplementedError
-
-    def plot_test_performance(self, test_path, agg): raise NotImplementedError
-
-    def tensorboard_cb(self, run_info): raise NotImplementedError
-
-    def get_learner_kwargs(self):
-        if self.args.RMSProp:
-            opt_func = fv.RMSProp
-        else:
-            opt_func = fv.Adam
-        return {'opt_func': opt_func}
-
-    def split_data(self, items, items_cls):
-        if self.stratify:
-            cv_splitter, no_cv_splitter = StratifiedKFold, StratifiedShuffleSplit
-        else:
-            cv_splitter, no_cv_splitter = KFold, ShuffleSplit
-
-        if self.args.cross_val:
-            splitter = cv_splitter(n_splits=self.args.nfolds, shuffle=True, random_state=self.args.seed)
-        elif self.args.valid_size <= 0:
-            print("WARNING: --valid-size is 0, will use merged test sets as validation set")
-            yield 0, (items, items_cls), self.get_test_items(merged=True)
-            return
-        else:
-            splitter = no_cv_splitter(n_splits=1, test_size=self.args.valid_size, random_state=self.args.seed)
-
-        for fold, (train_idx, valid_idx) in enumerate(splitter.split(items, items_cls)):
-            if self.args.cross_val and not self.args.inference: print(f"Data fold {fold + 1}/{self.args.nfolds}")
-            yield fold, (items[train_idx], items_cls[train_idx]), (items[valid_idx], items_cls[valid_idx])
-
-    def get_train_cbs(self, run):
-        cbs = [fv.ReduceLROnPlateau(monitor='valid_loss', min_delta=self.args.reduce_lr_delta, patience=3)]
-        if GPUManager.is_master_process():  # otherwise creates deadlock
-            cbs.append(self.tensorboard_cb(run))
-        if self.args.early_stop:
-            cbs.append(self.early_stop_cb())
-        return cbs
-
-    def prepare_learner(self, learn):
-        if not self.args.full_precision:
-            learn.to_fp16()
-        learn.model.cuda()
-        return learn
-
-    def set_lr(self, learn):
-        if self.args.lr is not None:
-            lr = self.args.lr
-        elif GPUManager.in_distributed_mode():  # auto_lr find causes deadlock in distrib mode
-            lr = .002
-        else:
-            learn.freeze()
-            with GPUManager.running_context(learn, self.args.gpu_ids):
-                lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
-            lr = lr_min / 10
-        print("Learning rate is", lr)
-        return lr
-
-    def basic_train(self, run, learn, dls=None, save_model=True):
-        GPUManager.sync_distributed_process()
-        if dls is not None: learn.dls = dls
-        lr = self.set_lr(learn)
-        train_cbs = self.get_train_cbs(run)
-        print("Training model:", run)
-        with GPUManager.running_context(learn, self.args.gpu_ids):
-            learn.fine_tune(self.args.epochs, base_lr=lr, freeze_epochs=self.args.fepochs, cbs=train_cbs)
-        if save_model:
-            model_dir = fd.rank0_first(lambda: common.maybe_create(self.args.exp_logdir, learn.model_dir))
-            learn.save(os.path.join(model_dir, f'{run}{self.MODEL_SUFFIX}_lr{lr:.2e}'))
-
-    def evaluate_and_correct_wl(self, learn, wl_items, run):
-        """Evaluate and correct weak labeled items, clears GPU memory (model and dls)"""
-        GPUManager.sync_distributed_process()
-        print("Evaluating WL data:", run)
-        dl = learn.dls.test_dl(list(zip(*wl_items)), with_labels=True)
-        with GPUManager.running_context(learn, self.args.gpu_ids):
-            _, targs, decoded_preds = learn.get_preds(dl=dl, with_decoded=True)
-        wl_items = self.correct_wl(wl_items, decoded_preds)
-        GPUManager.clean_gpu_memory(dl, learn.dls, learn)
-        return wl_items
-
-    def evaluate_on_test_sets(self, learn, run):
-        """Evaluate test sets, clears GPU memory held by test dl(s)"""
-        for test_name, test_items_with_cls in self.get_test_items(merged=False):
-            print("Testing model", run, "on", test_name)
-            GPUManager.sync_distributed_process()
-            dl = learn.dls.test_dl(list(zip(*test_items_with_cls)), with_labels=True)
-            with GPUManager.running_context(learn, self.args.gpu_ids):
-                interp = SimpleNamespace()
-                interp.preds, interp.targs, interp.decoded = learn.get_preds(dl=dl, with_decoded=True)
-            interp.dl = dl
-            interp = self.compute_metrics(interp)
-            del interp.preds, interp.targs, interp.decoded, interp.dl
-            GPUManager.clean_gpu_memory(dl)
-            self.test_set_results[test_name][self.get_sorting_run_key(run)].append(interp)
-
-    def compute_metrics(self, interp):
-        """Adds custom metrics results to interp object. Should return interp."""
-        interp.metrics = {mn: mfn(interp.preds, interp.targs) for mn, mfn in self.cust_metrics.items()}
-        return interp
-
-    def compute_metrics_with_ci(self, interp, ci_p=.95, n=20):
-        bs = interp.preds.shape[0]
-        all_metrics = [self.compute_metrics(interp).metrics]
-        for _ in tqdm(range(n)):
-            idxs = np.random.randint(0, bs, bs)
-            sample = SimpleNamespace()
-            sample.preds, sample.targs, sample.decoded = interp.preds[idxs], interp.targs[idxs], interp.decoded[idxs]
-            all_metrics.append(self.compute_metrics(sample).metrics)
-        with_ci = {mn: (res, non_param_ci([am[mn] for am in all_metrics], ci_p)) for mn, res in interp.metrics.items()}
-        return all_metrics, with_ci
-
-    def aggregate_test_performance(self, folds_res):
-        merged = [(mn, [fr.metrics[mn] for fr in folds_res]) for mn in folds_res[0].metrics.keys()]
-        return {mn: tuple(s.numpy() for s in tensors_mean_std(mres)) for mn, mres in merged}
-
-    def generate_tests_reports(self):
-        print("Aggregating test predictions ...")
-        if not GPUManager.is_master_process(): return
-        for test_name in self.args.sl_tests:
-            test_path = common.maybe_create(self.args.exp_logdir, f'{test_name}_{self.args.exp_name}')
-            for run, folds_results in self.test_set_results[test_name].items():
-                agg = common.time_method(self.aggregate_test_performance, folds_results, text="Test perfs aggregation")
-                if not self.args.no_plot: self.plot_test_performance(test_path, run, agg)
-                with open(os.path.join(test_path, f'{run}_test_results.p'), 'wb') as f: pickle.dump(agg, f)
-
-    def train_model(self):
-        if self.args.inference:
-            print("Inference only mode set, skipping train.")
-            return
-        sl_data, wl_data = self.get_train_items()
-        for fold, tr, val in self.split_data(*sl_data):
-            fold_suffix = f'__F{common.zero_pad(fold, self.args.nfolds)}__'
-            if fold == 0 or not self.args.use_wl:
-                learn, prev_run = self.train_procedure(tr, val, f'{fold_suffix}sl_only')
-
-            if self.args.use_wl:
-                if fold == 0:
-                    wl_data = self.evaluate_and_correct_wl(learn, wl_data, prev_run)
-                for repeat in range(self.args.nrepeats):
-                    repeat_prefix = f'__R{common.zero_pad(repeat, self.args.nrepeats)}__'
-                    print(f"WL-SL train procedure {repeat + 1}/{self.args.nrepeats}")
-                    learn, _ = self.train_procedure(wl_data, val, f'{fold_suffix}wl_only', repeat_prefix)
-                    learn, prev_run = self.train_procedure(tr, val, f'{fold_suffix}_wl_sl', repeat_prefix, learn)
-                    wl_data = self.evaluate_and_correct_wl(learn, wl_data, prev_run)
-            GPUManager.clean_gpu_memory(learn.dls, learn)
-        self.generate_tests_reports()
+    def after_epoch(self):
+        """Writes epochs metrics"""
+        if not self.run: return
+        grouped, reduced = defaultdict(dict), defaultdict(dict)
+        for n, v in zip(self.recorder.metric_names[2:-1], self.recorder.log[2:-1]):
+            if n in self.grouped_metrics:
+                perf = n.split('_')[0]
+                cat_code = n.replace(f'{perf}_', '')
+                # check if all_cat IN cat_code because there can be different variation (eg all & all_no_bg in segm)
+                if self.all_cats in cat_code: reduced[n] = v
+                else: grouped[perf][cat_code] = v
+            else:
+                log_group = 'Loss' if "loss" in n else 'Metrics'
+                self.writer.add_scalar(f'{self.run_info}_{log_group}/{n}', v, self.train_iter)
+        for perf, v in grouped.items():
+            self.writer.add_scalars(f'{self.run_info}_Metrics/{perf}', v, self.train_iter)
+        self.writer.add_scalars(f'{self.run_info}_Metrics/ALL', reduced, self.train_iter)
 

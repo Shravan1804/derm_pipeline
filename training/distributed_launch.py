@@ -1,3 +1,16 @@
+#!/usr/bin/env python
+
+"""distributed_launch.py: Script used to launch training in distributed mode"""
+
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
 import os
 import sys
 import subprocess

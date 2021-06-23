@@ -1,9 +1,0 @@
-[Plugin]
-Loader=python3
-Module=custom-quicklabel
-IAge=1
-Name=Quick image labeling
-Icon=eog-plugin
-Description=Edit source to change labeling
-Authors=Shravan
-Copyright=Shravan

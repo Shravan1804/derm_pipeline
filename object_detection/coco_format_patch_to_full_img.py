@@ -1,3 +1,17 @@
+#!/usr/bin/env python
+
+"""coco_format_patch_to_full_img.py: Converts patched image coco dataset to full image coco dataset."""
+
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
+
 import os
 import sys
 import copy
@@ -17,18 +31,29 @@ from general.PatchExtractor import PatchExtractor
 
 
 def patch_to_full_image(patch):
+    """Converts patch filename to corresponding full image filename
+    :param patch: str, patch filename
+    :return: str, full image filename
+    """
     if PatchExtractor.can_extract_pm_from_patch_name(patch): return PatchExtractor.get_full_img_from_patch(patch)
     file, ext = os.path.splitext(os.path.basename(patch))
     return f'{file.split(PatchExtractor.SEP)[0]}{ext}'
 
 
 def patch_position(patch):
+    """Extracts patch position (h,w) from its filename
+    :param patch: str, patch filename
+    :return: tuple of int (h,w)
+    """
     if PatchExtractor.can_extract_pm_from_patch_name(patch): return PatchExtractor.get_position(patch)
     h_w = os.path.splitext(os.path.basename(patch))[0].split(f'{PatchExtractor.SEP}_h')[1]
     return tuple(map(int, h_w.split("_w")))
 
 
 def main(args):
+    """Performs patch to full image dataset conversion
+    :param args: command line arguments
+    """
     with open(args.labels, 'r') as f:
         labels = json.load(f)
     id_to_patch_name = {img['id']: img['file_name'] for img in labels['images']}
@@ -100,6 +125,12 @@ def main(args):
 
 
 def poly_to_anno(new_id, poly, old_anno):
+    """Converts polygon objects to annotation dict
+    :param new_id: int, annotation id
+    :param poly: Polygon object
+    :param old_anno: dict, base annotation dict
+    :return: dict, annotation
+    """
     new_anno = copy.deepcopy(old_anno)
     # last two poly coords are starting point
     new_anno['segmentation'] = np.array(poly.exterior.coords).ravel()[:-2].reshape((1, -1)).tolist()

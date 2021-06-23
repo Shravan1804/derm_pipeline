@@ -1,3 +1,16 @@
+#!/usr/bin/env python
+
+"""fastai_monkey_patches.py: Fix issues in Fastai libraries"""
+
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
 import torch
 import fastai.vision.all as fv
 

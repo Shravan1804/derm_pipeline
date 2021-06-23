@@ -1,3 +1,16 @@
+#!/usr/bin/env python
+
+"""split_dataset.py: Train/Test splits and creates a copy of dataset"""
+
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
 import os
 import json
 import random
@@ -10,12 +23,22 @@ import common
 
 
 def dataset_split(args, directory):
+    """Splits directory files in train/test
+    :param args: command line arguments
+    :param directory: str, directory to be splitted
+    :return: dict with str train and test keys and values the corresponding files
+    """
     files = common.list_files(os.path.join(args.data, directory), full_path=True)
     train, test = train_test_split(files, test_size=args.test_size, random_state=args.seed, shuffle=True)
     return {'train': train, 'test': test}
 
 
 def copy_imgs(args, cat, splits):
+    """Copies images from the different splits
+    :param args: command line arguments
+    :param cat: str, directory name to copy image from
+    :param splits: dict with train and test files
+    """
     print(f"Copying {cat} images ...")
     for ds, files in splits.items():
         dest_dir = os.path.join(args.dest, ds, cat)
@@ -30,6 +53,11 @@ def copy_imgs(args, cat, splits):
 
 
 def split_coco_labels(coco_json, files):
+    """Creates coco json file for provided files
+    :param coco_json: str, original coco json file
+    :param files: list, image filepaths
+    :return: dict, new coco json file
+    """
     with open(coco_json, 'r') as f:
         labels = json.load(f)
         files = [os.path.basename(f) for f in files]
@@ -40,6 +68,9 @@ def split_coco_labels(coco_json, files):
 
 
 def main(args):
+    """Splits dataset following command line arguments
+    :param args: command line arguments
+    """
     random.seed(args.seed)
     np.random.seed(args.seed)
 

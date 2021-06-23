@@ -1,3 +1,17 @@
+#!/usr/bin/env python
+
+"""infer_images_classif.py: Applies classification model on new images. Uses classification trainer args"""
+
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
+
 import os
 import sys
 from types import SimpleNamespace
@@ -8,17 +22,22 @@ import torch
 import fastai.vision.all as fv
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import common
+from general import common, common_plot as cplot
 from general.PatchExtractor import PatchExtractor
-from segmentation.mask_utils import resize_mask
 from training.train_utils import GPUManager
 from training.infer_images import ImageInference
 from classification.train_classification import ImageClassificationTrainer
 
 
 class ImageClassificationInference(ImageInference):
+    """Class used to perform inference with classification model
+    Based on classification trainer"""
     @staticmethod
     def get_argparser(parser):
+        """Add classification inference specific args to argparser
+        :param parser: argparser
+        :return: argparser
+        """
         parser = super(ImageClassificationInference, ImageClassificationInference).get_argparser(parser)
         parser.add_argument('--topk', type=int, default=2, help="Top probas to be written on img")
         parser.add_argument('--gradcam', action='store_true', help="Show gradcam of predictions")
@@ -26,12 +45,25 @@ class ImageClassificationInference(ImageInference):
 
     @staticmethod
     def prepare_inference(args):
+        """Calls classification trainer setup
+        :param args: command line arguments
+        """
         super(ImageClassificationInference, ImageClassificationInference).prepare_inference(args)
         ImageClassificationTrainer.prepare_training(args)
 
-    def maybe_get_labels(self, impath): return None
+    def maybe_get_labels(self, impath):
+        """Get label from item
+        :param impath: str, image path
+        :return: label
+        TODO
+        """
+        return None
 
     def prepare_learner_input(self, inference_item):
+        """Prepares learner input from inference item
+        :param inference_item: tuple, image and label, label can be None
+        :return: tuple, learner input, flag set to True if labels available, patch maps (may be None if no patching)
+        """
         img_path, label = inference_item
         with_labels = label is not None
         if with_labels: raise NotImplementedError
@@ -40,6 +72,12 @@ class ImageClassificationInference(ImageInference):
         return linput, with_labels, pms
 
     def learner_preds(self, learn, dl):
+        """Computes learner predictions on inference items. Redefined here to be able to perform gradcam
+        TODO improve, batch backward
+        :param learn: learner
+        :param dl: dataloader
+        :return: namespace object with preds, targs, decoded preds
+        """
         if self.args.gradcam:
             dl.bs = 1
             interp = SimpleNamespace()
@@ -64,6 +102,12 @@ class ImageClassificationInference(ImageInference):
         else: return super().learner_preds(learn, dl)
 
     def process_results(self, inference_item, interp, save_dir):
+        """Prepare inference results: rebuild predictions if patched, resize predictions and targs
+        :param inference_item: tuple with image and its label
+        :param interp: namespace, learner inference results
+        :param save_dir: str, path where to save result plot
+        :return: reconstructed predictions
+        """
         img_path, gt = inference_item
         im = common.trainer.load_image_item(img_path)
         pred = interp.preds.topk(self.args.topk, axis=1)
@@ -76,28 +120,39 @@ class ImageClassificationInference(ImageInference):
         return pred
 
     def plot_results(self, interp, im, gt, pred, save_path):
+        """Plots inference results: original image with predicted labels, eventually heatmap, eventually metrics
+        :param interp: namespace, learner inference results
+        :param im: array, image
+        :param gt: array, ground truth
+        :param pred: array, decoded predictions
+        :param save_path: str, path to save plot
+        """
         topk_p, topk_idx = pred
         with_labels = gt is not None
         ncols = 2 if with_labels else 1
         if self.args.gradcam: ncols += 1
-        fig, axs = common.prepare_img_axs(im.shape[0] / im.shape[1], 1, ncols, flatten=True)
+        fig, axs = cplot.prepare_img_axs(im.shape[0] / im.shape[1], 1, ncols, flatten=True)
         if ncols == 1: axs = [axs]
-        common.img_on_ax(im, axs[0], title='Original image')
+        cplot.img_on_ax(im, axs[0], title='Original image')
         pred_pos = [(0, 0)] if interp.pms is None else [(pm['h'], pm['w'])for pm in interp.pms]
         for (h, w), p, prob in zip(pred_pos, topk_idx, topk_p):
             axs[0].text(w+50, h + 50, f'{self.args.cats[p]}: {prob:.2f}')
         axi = 1
         if self.args.gradcam:
-            common.img_on_ax(im, axs[axi], title='GradCAM')
+            cplot.img_on_ax(im, axs[axi], title='GradCAM')
             axs[axi].imshow(interp.gradcam, alpha=0.6, cmap='magma');
             axi += 1
         if with_labels:
             agg_perf = self.trainer.aggregate_test_performance([self.trainer.process_test_preds(interp)])
             self.trainer.plot_custom_metrics(axs[axi], agg_perf, show_val=True)
-        if save_path is not None: common.plt_save_fig(save_path, fig=fig, dpi=150)
+        if save_path is not None: cplot.plt_save_fig(save_path, fig=fig, dpi=150)
 
 
 def main(args):
+    """Performs classification inference based on provided args
+    :param args: command line arguments
+    :return:
+    """
     classif = ImageClassificationInference(ImageClassificationTrainer(args))
     classif.inference()
 

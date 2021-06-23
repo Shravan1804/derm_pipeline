@@ -1,3 +1,16 @@
+#!/usr/bin/env python
+
+"""dataset_sample.py: Creates sample of dataset, useful for testing purposes"""
+
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
 import os
 import argparse
 import numpy as np
@@ -9,6 +22,9 @@ import common
 
 
 def main(args):
+    """Creates sample of dataset according to provided command line arguments
+    :param args: command line arguments
+    """
     np.random.seed(args.seed)
     common.reproduce_dir_structure(args.data, args.dest)
     dirs = [args.data] + common.list_dirs(args.data, full_path=True, recursion=True)
@@ -24,7 +40,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Create a sample dataset")
     parser.add_argument('--data', type=str, required=True, help="source dataset root directory absolute path")
-    parser.add_argument('--dest', type=str, help="directory where the patches should be saved")
+    parser.add_argument('--dest', type=str, help="directory where the dataset sample should be saved")
     parser.add_argument('--sample', default=5, type=int, help="number of images to retrieve from each categories")
     parser.add_argument('--seed', default=42, type=int, help="random seed")
     args = parser.parse_args()

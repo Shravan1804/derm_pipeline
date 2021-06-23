@@ -1,10 +1,21 @@
+#!/usr/bin/env python
+
+"""common.py: File regrouping useful methods"""
+
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
 import os
-import io
 import sys
 import cv2
 import math
 import datetime
-import itertools
 import contextlib
 from timeit import default_timer
 from string import ascii_uppercase
@@ -14,120 +25,23 @@ from pathlib import Path, PosixPath
 
 import numpy as np
 import PIL.Image as PImage
-import matplotlib.pyplot as plt
 
-
-body_loc_trad = {'arme': 'Arm', 'beine': 'Leg', 'fusse': 'Feet', 'hande': 'Hand', 'kopf': 'Head', 'other': 'Other',
-                 'stamm': 'Trunk', 'mean': 'Mean'}
-
-
-def get_cmap(n, name='Dark2'):
-    ''' source https://stackoverflow.com/questions/14720331/how-to-generate-random-colors-in-matplotlib
-    Returns a function that maps each index in 0, 1, ..., n-1 to a distinct
-    RGB color; the keyword argument name must be a standard mpl colormap name.'''
-    return plt.cm.get_cmap(name, n)
-
-
-def zero_error_bars(vals):
-    return np.zeros((2, *vals.shape), dtype=vals.dtype)
-
-
-def init_and_clip_err(vals, err, bounds=(0, 1)):
-    """Create 2D err array (low_err and up_err) clipped between specified bounds"""
-    if err is None: err = zero_error_bars(vals)
-    if err.shape == (2, *vals.shape): return err.clip(*bounds)
-    else: return np.abs(np.vstack([vals - err, vals + err]).clip(*bounds) - np.vstack([vals, vals]))
-
-
-def get_error_display_params():
-    return {'elinewidth': .8, 'capsize': 2, 'capthick': .5}
-
-
-def show_graph_values(ax, values, pos_x, pos_y=None, yerr=None, kwargs={"fontsize": 6}):
-    pos_y = values if pos_y is None else pos_y
-    yerr = np.zeros(values.shape) if yerr is None else yerr
-    for x, y, v, ye in zip(pos_x, pos_y, values, yerr):
-        ax.text(x, y + ye, v, **kwargs)
-
-
-def plot_lines_with_err(ax, xs, ys, labels, yerrs=None, xerrs=None, show_vals=None, err_bounds=(0, 1),
-                        legend_loc="lower center"):
-    if yerrs is None: [zero_error_bars(y) for y in ys]
-    if xerrs is None: [zero_error_bars(x) for x in xs]
-    for x, y, label, yerr, xerr in zip(xs, ys, labels, yerrs, xerrs):
-        yerr = init_and_clip_err(y, yerr, err_bounds)
-        xerr = init_and_clip_err(x, xerr, err_bounds)
-        ax.errorbar(x, y, yerr=yerr, xerr=xerr, label=label, **get_error_display_params())
-        if show_vals is not None: show_graph_values(ax, show_vals, x, pos_y=y, yerr=yerr[1])
-    ax.legend(loc=legend_loc)
-
-
-def grouped_barplot_with_err(ax, stats, groupLabels, xlabel=None, ylabel=None, title=None, barwidth=.35, show_val=False,
-                             title_loc=None, legend_loc="lower center", err_bounds=(0, 1)):
-    """Stats is a dict with keys the bar name (e.g. accuracy) and values the values for each group (e.g. categories)"""
-    nbars_per_group, ngroups = len(stats.keys()), len(groupLabels)
-    group_width = nbars_per_group * barwidth * 4/3
-    positions = np.arange(0, ngroups * group_width, group_width)
-    offsets = [(i - nbars_per_group / 2) * barwidth + barwidth / 2 for i in range(nbars_per_group)]
-
-    ekw = get_error_display_params()
-    cmap = get_cmap(nbars_per_group)
-    for offset, (key, (vals, err)), c in zip(offsets, stats.items(), [cmap(i) for i in range(nbars_per_group)]):
-        err = init_and_clip_err(vals, err, err_bounds)
-        ax.bar(positions + offset, vals, color=c, width=barwidth, yerr=err, label=key, error_kw=ekw, edgecolor='white')
-        if show_val: show_graph_values(ax, [f'{v:.2f}' for v in vals], positions + offset - barwidth/2, pos_y=vals, yerr=err[1])
-
-    ax.set_ylabel("Performance" if ylabel is None else ylabel)
-    ax.set_xlabel(xlabel)
-    ax.set_xticks(positions)
-    ax.set_xticklabels(groupLabels, rotation=35, ha='right')
-    ax.legend(loc=legend_loc)
-    if title is not None:
-        ax.set_title(title, loc=title_loc)
-    ax.grid(False)
-
-
-def plot_confusion_matrix(ax, cm_std, labels, title=None, title_loc=None, ):
-    cm, std = cm_std
-    ax.imshow(cm, interpolation='nearest', cmap="Blues")
-
-    tick_marks = np.arange(len(labels))
-    ax.set_xticks(tick_marks)
-    ax.set_xticklabels(labels, rotation=35, ha='right')
-    ax.set_yticks(tick_marks)
-    ax.set_yticklabels(labels, rotation=0)
-
-    thresh = cm.max() / 2.
-    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
-        coeff = f'{cm[i, j]:.{2}f} \u00B1 {std[i, j]:.{2}f}'
-        ax.text(j, i-.15, f'{cm[i, j]:.{2}f}', horizontalalignment="center", verticalalignment="center",
-                 color="white" if cm[i, j] > thresh else "black", fontsize=8)
-        ax.text(j, i+.15, f'\u00B1 {std[i, j]:.{2}f}', horizontalalignment="center", verticalalignment="center",
-                 color="white" if cm[i, j] > thresh else "black", fontsize=6)
-
-    ax.set_ylim(len(labels) - .5, -.5)
-    ax.set_xlabel('Predicted')
-    ax.set_ylabel('Actual')
-    if title is not None:
-        ax.set_title(title, loc=title_loc)
-    ax.grid(False)
-
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 
 def recursive_default_dict():
+    """Creates recursive default dict.
+    :return recursive default dict
+    """
     return lambda: defaultdict(recursive_default_dict)
 
 
-def flatten(lst):
-    """Flattens lst of lsts"""
-    return [elem for sublst in lst for elem in sublst]
-
-
-def is_path(item):
-    return type(item) in (str, PosixPath, Path)
-
-
 def merge(lst, cond_fn, merge_fn):
-    """Applies merge_fn on pairs of lst items if cond_fn is satisfied"""
+    """Applies recursively merge fn on pairs of lst items if cond_fn is satisfied
+    :param lst: list, elements to be merged
+    :param conf_fn: function, fn to be called on two elements, should return boolean
+    :param merge_fn: function, fn performing the merge on two elements
+    :return list resulting list after merge
+    """
     for i, item_a in enumerate(lst):
         sub_lst = lst[:i] + lst[i+1:]
         for j, item_b in enumerate(sub_lst):
@@ -138,7 +52,13 @@ def merge(lst, cond_fn, merge_fn):
 
 
 def decimal_to_base(n, base, ndigits=-1):
-    """Converts n from base 10 to specified base"""
+    """Converts n from base 10 to specified base
+    :param n: int, number to be converted
+    :param base: int, base to convert number in
+    :param ndigits_ int, optional number of digits to be used
+    :return list digits of n in provided base
+    :raise AssertionError if ndigits too small compared to n
+    """
     res, count = [], 0
     while(n > 0):
         rem = int(n % base)
@@ -155,6 +75,13 @@ def decimal_to_base(n, base, ndigits=-1):
 
 
 def generate_codes(ncodes, alphabet=ascii_uppercase, size=None):
+    """Generates unique codes based on provided alphabet
+    :param ncodes: int, number of codes to generate
+    :param alphabet: list, alphabet to be used
+    :param size: int, length of codes
+    :return list list of codes
+    :raise AssertionError if size too small compared to ncodes
+    """
     n_symbols = len(set(ascii_uppercase))
     min_symbols = int(math.log(ncodes, len(alphabet))) + 1
     if size is None: size = min_symbols
@@ -166,7 +93,12 @@ def generate_codes(ncodes, alphabet=ascii_uppercase, size=None):
 
 
 def int_to_bins(n, bins, rand=False):
-    """Divides integer into bins. If rand true, random split else equal split"""
+    """Integer division of number into bins. If rand true, random split else equal split
+    :param n: int, number to be integer divided in bins
+    :param bins: int, number of bins (=N)
+    :param rand: bool, random split or equal split
+    :return array, counts in each bins, size N
+    """
     if n <= 0 or bins <= 0:
         return np.array([])
     if rand:
@@ -178,7 +110,13 @@ def int_to_bins(n, bins, rand=False):
 
 
 def most_common(arr, top=3, return_index=False, return_counts=False):
-    """Returns most common elements in array"""
+    """Returns most common elements in array
+    :param arr: array, elements to compare
+    :param top: int, number of elements to return (=N)
+    :param return_index: array, index of elements, size N
+    :param return_counts: array, counts of elements, size N
+    :return single array or tuple of array depending on parameters
+    """
     u, c = np.unique(arr, return_counts=True)
     sorted_c = c.argsort()[::-1]
     res = u[sorted_c[:top]]
@@ -189,8 +127,18 @@ def most_common(arr, top=3, return_index=False, return_counts=False):
     return res
 
 
+def is_path(item):
+    """Checks if input can be path
+    :return bool, item is path
+    """
+    return type(item) in (str, PosixPath, Path)
+
+
 def maybe_create(*d):
-    """Receives arbitrary number of dirnames, joins them and create them if they don't exist. Returns joined path."""
+    """Receives arbitrary number of dirnames, joins them and create them if they don't exist. Returns joined path.
+    :param *d: list, strings to be joined together as path
+    :return str, joined path
+    """
     path = os.path.join(*d)
     if not os.path.exists(path):
         os.makedirs(path)
@@ -198,7 +146,10 @@ def maybe_create(*d):
 
 
 def reproduce_dir_structure(source, dest):
-    """Reproduce dir structure of source in dest. Raise exception if source invalid. Creates dest if needed."""
+    """Reproduce dir structure of source in dest. Raise exception if source invalid. Creates dest if needed.
+    :param source: str, dir to be reproduced
+    :param dest: str, dir where to copy source structure
+    """
     check_dir_valid(source)
     maybe_create(dest)
     for d in list_dirs(source):
@@ -206,11 +157,23 @@ def reproduce_dir_structure(source, dest):
 
 
 def list_images(root, **kwargs):
+    """List images ('.jpg', '.png', '.tiff') in provided dir. Check list_files args for kwargs
+    :param root: str, dir to retrieve file from
+    :param kwargs: Check list_files args for kwargs
+    :return: Check list_files args for kwargs
+    """
     return [f for f in list_files(root, **kwargs) if os.path.splitext(f)[1] in ('.jpg', '.png', '.tiff')]
 
 
 def list_files(root, full_path=False, posix_path=False, recursion=False, max_rec_level=-1):
-    """Return the list of files, if recursion stops at max_rec_level unless negative then goes all levels."""
+    """Return the list of files, if recursion, stops at max_rec_level unless negative then goes all levels
+    :param root: str, dir to retrieve file from
+    :param full_path: bool, whether to return full path
+    :param posix_path: bool, whether to return paths as posix objs
+    :param recursion: bool, whether to look in subdirectories
+    :param max_rec_level: int, max subdirectory level
+    :return: list of files
+    """
     lf = [os.path.join(root, f) if full_path else f for f in os.listdir(root) if os.path.isfile(os.path.join(root, f))]
     if recursion and max_rec_level != 0:
         for d in list_dirs(root, full_path, posix_path, recursion, max_rec_level-1):
@@ -221,7 +184,14 @@ def list_files(root, full_path=False, posix_path=False, recursion=False, max_rec
 
 def list_dirs(root, full_path=False, posix_path=False, recursion=False, max_rec_level=-1, rec_level=0):
     """Return the list of dirs, if recursion stops at max_rec_level unless negative then goes all levels.
-    rec_level is used for the recursion and should not be set"""
+    :param root: str, dir to retrieve file from
+    :param full_path: bool, whether to return full path
+    :param posix_path: bool, whether to return paths as posix objs
+    :param recursion: bool, whether to look in subdirectories
+    :param max_rec_level: int, max subdirectory level
+    :param rec_level: used for recursion, do not be set
+    :return: list of dirs
+    """
     if recursion and rec_level > max_rec_level >= 0:
         return []
     ld = [os.path.join(root, d) if full_path else d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))]
@@ -236,24 +206,63 @@ def list_dirs(root, full_path=False, posix_path=False, recursion=False, max_rec_
 
 
 def list_files_in_dirs(root, full_path=False, posix_path=False):
+    """Return the list of files present in level 1 subdirs. Typicall classification dataset format.
+    :param root: str, dir to retrieve file from
+    :param full_path: bool, whether to return full path
+    :param posix_path: bool, whether to return paths as posix objs
+    :return: list of files
+    """
     lf = [os.path.join(d, f) for d in list_dirs(root, full_path)
           for f in list_files(d if full_path else os.path.join(root, d))]
     return [Path(i) for i in lf] if posix_path else lf
 
 
+def check_file_valid(filepath):
+    """Check if filepath exists and is a file
+    :param filepath: str
+    :raise: AssertionError if filepath not valid
+    """
+    assert os.path.exists(filepath) and os.path.isfile(filepath), f"Provided file {filepath} invalid."
+
+
+def check_dir_valid(dirpath):
+    """Check if dirpath exists and is a dir
+    :param dirpath: str
+    :raise: AssertionError if dirpath not valid
+    """
+    assert os.path.exists(dirpath) and os.path.isdir(dirpath), f"Provided dir {dirpath} invalid."
+
+
 def batch_list(lst, bs):
+    """Batch list in sublist
+    :param lst: list, elements to be batched
+    :param bs: int, batch size
+    :return: list of sublist, sublists are the batches
+    """
     return [lst[i:min(len(lst), i + bs)] for i in range(0, len(lst), bs)]
 
 
 def now():
+    """Get current datetime as str
+    :return: str, formatted datetime
+    """
     return datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
 
 def zero_pad(it, max_it):
+    """Prepend zeros to iteration id so that alphabetic sort corresponds to iteration order
+    :param it: int, iteration id
+    :param max_it: int, total number of iteration
+    :return: str iteration id with zeros prepended
+    """
     return str(it).zfill(len(str(max_it)) + 1)
 
 
 def set_seeds(seed, cuda_seeded=False):
+    """Seed everything
+    :param seed: int
+    :param cuda_seeded: bool, should cuda be seeded as well
+    """
     import random
     import torch
     random.seed(seed)
@@ -266,22 +275,21 @@ def set_seeds(seed, cuda_seeded=False):
         torch.backends.cudnn.benchmark = False
 
 
-def check_file_valid(filepath):
-    assert os.path.exists(filepath) and os.path.isfile(filepath), f"Provided file {filepath} invalid."
-
-
-def check_dir_valid(dirpath):
-    assert os.path.exists(dirpath) and os.path.isdir(dirpath), f"Provided dir {dirpath} invalid."
-
-
 @contextlib.contextmanager
-def mynullcontext(enter_result=None):     # 3.6 alternative to contextlib.nullcontext()
+def mynullcontext(enter_result=None):
+    """Python 3.6 alternative to contextlib.nullcontext() available from 3.8
+    :param enter_result:
+    :return:
+    """
     yield enter_result
 
 
 @contextlib.contextmanager
 def elapsed_timer():
-    # https://stackoverflow.com/questions/7370801/how-to-measure-elapsed-time-in-python?page=2&tab=active#tab-top
+    """Context manager timing whatever executes within
+    source: https://stackoverflow.com/questions/7370801/how-to-measure-elapsed-time-in-python?page=2&tab=active#tab-top
+    :return: int, elapsed time
+    """
     start = default_timer()
     elapser = lambda: default_timer() - start
     yield lambda: elapser()
@@ -290,6 +298,13 @@ def elapsed_timer():
 
 
 def time_method(m, *args, text="Work", **kwargs):
+    """Helper function to use elapsed_timer context manager on function
+    :param m: function, to be executed and timed
+    :param args: list, positional arguments for function m
+    :param text: str, description of method to be printed alongside time information
+    :param kwargs: dict, keywords argument for function m
+    :return: output of m
+    """
     with elapsed_timer() as elapsed:
         res = m(*args, **kwargs)
         print(f"{text} completed in {datetime.timedelta(seconds=elapsed())}.")
@@ -297,7 +312,9 @@ def time_method(m, *args, text="Work", **kwargs):
 
 
 class PrintPrepender:
-    # https://stackoverflow.com/questions/58866481/how-could-i-override-pythons-print-function-to-prepend-some-arbitrary-text-to-e
+    """Prepend text to stdout
+    source: https://stackoverflow.com/questions/58866481/how-could-i-override-pythons-print-function-to-prepend-some-arbitrary-text-to-e
+    """
     stdout = sys.stdout
 
     def __init__(self, text_to_prepend):
@@ -319,122 +336,11 @@ class PrintPrepender:
 
 
 def stdout_prepend(f, pre_msg, *args):
+    """Helper function to execute function f with stdout prepend
+    :param f: function, to execture
+    :param pre_msg: str, message to be prepended
+    :param args: list, positional arguments for function m
+    """
     with contextlib.redirect_stdout(PrintPrepender(pre_msg)):
         f(*args)
-
-
-def new_fig_with_axs(nrows, ncols, base_fig_width, base_fig_height=None, **kwargs):
-    if base_fig_height is None: base_fig_height = base_fig_width
-    return plt.subplots(nrows, ncols, figsize=(ncols*base_fig_width, nrows*base_fig_height), **kwargs)
-
-
-def plt_fig_as_np_array(fig):
-    # https://stackoverflow.com/questions/7821518/matplotlib-save-plot-to-numpy-array
-    io_buf = io.BytesIO()
-    fig.savefig(io_buf, format='raw')
-    io_buf.seek(0)
-    img_arr = np.reshape(np.frombuffer(io_buf.getvalue(), dtype=np.uint8),
-                         newshape=(int(fig.bbox.bounds[3]), int(fig.bbox.bounds[2]), -1))
-    io_buf.close()
-    return img_arr
-
-
-def show_im_with_zoom_region(ax, im, zoom_loc=[.35, .5, .35, .5], inset_loc=[.6, .6, .4, .4]):
-    ax.imshow(im, origin="lower")
-    ax.axis('off')
-    axins = ax.inset_axes(inset_loc)
-    axins.imshow(im, origin="lower")
-    h, w = im.shape[:2]
-    x1, x2, y1, y2 = map(int, np.array(zoom_loc)*np.array([w,w,h,h]))
-    axins.set_xlim(x1, x2)
-    axins.set_ylim(y1, y2)
-    axins.set_xticklabels('')
-    axins.set_xticks([])
-    axins.set_yticklabels('')
-    axins.set_yticks([])
-    ax.indicate_inset_zoom(axins, edgecolor="black")
-
-
-def plt_save_fig(path, fig=None, close=True, **kwargs):
-    if fig is None:
-        plt.savefig(path, bbox_inches='tight', **kwargs)
-        if close: plt.close(plt.gcf())
-    else:
-        fig.savefig(path, bbox_inches='tight', **kwargs)
-        if close: plt.close(fig)
-
-
-def quick_img_size(img_path):
-    """Returns height, width of img, quicker than cv2 since it does not load the image in memory"""
-    width, height = PImage.open(img_path).size
-    return height, width
-
-
-def im_sharpness_score(im):
-    """ im is a numpy array of rgb image
-    Returns sharpness score (float): the lower the score the blurrier the image,
-    the higher the score, the sharper the image
-
-    https://www.pyimagesearch.com/2015/09/07/blur-detection-with-opencv/
-    Laplacian is used to measure the 2nd derivative of an image,
-    it highlights regions of an image containing rapid intensity changes (edges)
-
-    Assumption is that if an image contains high variance then there is a wide spread of responses,
-    both edge-like and non-edge like, representative of a normal, in-focus image.
-    But if there is very low variance, then there is a tiny spread of responses,
-    indicating there are very little edges in the image.
-    As we know, the more an image is blurred, the less edges there are.
-    """
-    return cv2.Laplacian(cv2.cvtColor(im, cv2.COLOR_RGB2GRAY), cv2.CV_64F).var()
-
-
-def img_bgr_to_rgb(im):
-    if len(im.shape) != 3:
-        raise Exception(f"Error cannot convert from bgr to rgb, im shape is {im.shape}")
-    return cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-
-
-def resize(im, new_h, new_w):
-    return cv2.resize(im, (new_w, new_h), interpolation=cv2.INTER_NEAREST if len(im.shape) < 3 else cv2.INTER_LINEAR)
-
-
-def load_img(path, resize=None):
-    if is_path(path) and type(path) is not str: path = str(path)
-    im = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-    im = img_bgr_to_rgb(im) if len(im.shape) > 2 else im
-    if resize is not None: im = cv2.resize(im, resize)
-    return im
-
-
-def save_img(im, path):
-    """If im has more than two channels, assumes it is an rgb image thus will convert it to bgr before using imwrite"""
-    cv2.imwrite(path, cv2.cvtColor(im, cv2.COLOR_RGB2BGR) if len(im.shape) > 2 else im)
-
-
-def prepare_img_axs(h_w_ratio, nrows, ncols, figsize_fact=8, no_axis=True, flatten=True, title=None):
-    fig, axs = new_fig_with_axs(nrows, ncols, figsize_fact)
-    base_figsize = (ncols*figsize_fact, nrows*figsize_fact*h_w_ratio)
-    plt.rcParams['font.size'] = max(base_figsize) * .4
-    nd = nrows > 1 or ncols > 1
-    if no_axis:
-        for ax in axs.flatten() if nd else [axs]:
-            ax.axis('off')
-    if nd and flatten: axs = axs.flatten()
-    if title is not None: fig.suptitle(title, fontsize=base_figsize[0] * 1.4)
-    return fig, axs
-
-
-def img_on_ax(im, ax, title=None):
-    ax.imshow(im)
-    ax.set_title(title)
-    ax.axis('off')
-
-
-def plt_show_img(im, title="", show=True, save_path=None):
-    fig, ax = plt.subplots()
-    img_on_ax(im, ax, title=title)
-    if save_path is not None:
-        plt_save_fig(save_path, close=False)
-    if show:
-        fig.show()
 

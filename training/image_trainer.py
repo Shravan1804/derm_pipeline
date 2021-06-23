@@ -1,3 +1,16 @@
+#!/usr/bin/env python
+
+"""image_trainer.py: Image trainer class. Extendable to any training tasks (classification, segmentation, etc)."""
+
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
 import re
 import os
 import sys
@@ -9,18 +22,24 @@ import matplotlib.pyplot as plt
 
 import fastai.vision.all as fv
 import fastai.distributed as fd   # needed for fastai multi gpu
-import fastai.callback.tensorboard as fc
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
-from general import common, crypto
+from general import common, common_plot as cplot, crypto
 from training import train_utils, custom_losses as closs
+from training.base_trainer import FastaiTrainer
 import training.fastai_monkey_patches as fmp
 
 
-class ImageTrainer(train_utils.FastaiTrainer):
+class ImageTrainer(FastaiTrainer):
+    """Image training class. Should be extended to fulfill task specific requirements."""
     @staticmethod
     def get_argparser(desc="Fastai image trainer arguments", pdef=dict(), phelp=dict()):
-        # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
+        """Creates image trainer argparser
+        :param desc: str, argparser description
+        :param pdef: dict, default arguments values
+        :param phelp: dict, argument help strings
+        :return: argparser
+        """
         parser = super(ImageTrainer, ImageTrainer).get_argparser(desc, pdef, phelp)
         parser.add_argument('--data', type=str, required=True, help="Root dataset dir")
 
@@ -44,6 +63,11 @@ class ImageTrainer(train_utils.FastaiTrainer):
 
     @staticmethod
     def get_exp_logdir(args, custom=""):
+        """Creates experiment log dir
+        :param args: command line arguments
+        :param custom: custom string to be added in experiment log dirname
+        :return: str, experiment log dir
+        """
         d = f'_input{args.input_size}'
         if args.label_smoothing_loss: d += '_smooth-loss'
         elif args.focal_loss: d += '_focal-loss'
@@ -57,23 +81,53 @@ class ImageTrainer(train_utils.FastaiTrainer):
 
     @staticmethod
     def prepare_training(args):
+        """Sets up training, checks if provided args valid, initiates distributed mode if needed
+        :param args: command line args
+        """
         if args.exp_logdir is None:
             args.exp_logdir = os.path.join(args.logdir, ImageTrainer.get_exp_logdir(args))
         super(ImageTrainer, ImageTrainer).prepare_training(args)
 
     def __init__(self, args, stratify, full_img_sep, **kwargs):
-        self.ALL_CATS = 'all'
+        """Creates base trainer
+        :param args: command line args
+        :param stratify: bool, whether to stratify data when splitting
+        :param full_img_sep: str, when splitting the data train/valid, will make sure to split on full images
+        """
+        self.ALL_CATS = 'all'   # for cat macro averaging
         self.full_img_sep = full_img_sep
-        self.loss_axis = -1
+        self.loss_axis = -1     # predictions argmax axis to get decoded preds
         super().__init__(args, stratify)
 
-    def compute_conf_mat(self, targs, preds): raise NotImplementedError
+    def compute_conf_mat(self, targs, preds):
+        """Compute confusion matrix from predictions
+        :param targs: tensor, ground truth, size B
+        :param decoded: tensor, decoded predictions, size B
+        :return: tensor, confusion metrics N x N
+        """
+        raise NotImplementedError
 
-    def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn): raise NotImplementedError
+    def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn):
+        """Generates metrics functions for the individual classes
+        :param perf_fn: function, metrics to apply, e.g. precision
+        :param cat_id: int, category id for which to compute metric
+        :param cat: str, label of category for which to compute metric
+        :param metrics_fn: dict, contains generated metrics function names as keys and metrics functions as values
+        """
+        raise NotImplementedError
 
-    def get_class_weights(self, dls): raise NotImplementedError
+    def get_class_weights(self, dls):
+        """Compute class weights based on train items labels frequency
+        :param train_items: tuple of fastai lists, (items, labels)
+        :return: tensor, weight for each categories
+        """
+        raise NotImplementedError
 
     def get_loss_fn(self, dls):
+        """Select loss function based on command line args
+        :param dls: dataloaders, used to compute class weights
+        :return:
+        """
         class_weights = self.get_class_weights(dls.train_ds.items).to(dls.device) if self.args.weighted_loss else None
         if self.args.label_smoothing_loss:
             loss_func = fmp.FixedLabelSmoothingCrossEntropyFlat(weight=class_weights, axis=self.loss_axis)
@@ -90,37 +144,64 @@ class ImageTrainer(train_utils.FastaiTrainer):
         return loss_func
 
     def get_learner_kwargs(self, dls):
+        """Add custom learner kwargs here. Here adds custom loss function.
+        :return kwargs dict with chosen custom arguments"""
         kwargs = super().get_learner_kwargs()
         kwargs['loss_func'] = self.get_loss_fn(dls)
         return kwargs
 
     def get_cats_idxs(self):
+        """:return category indices"""
         return list(range(len(self.args.cats)))
 
     def get_cats_with_all(self):
+        """:return list with all cats code and categories"""
         return [self.ALL_CATS, *self.args.cats]
 
-    def get_cat_metric_name(self, perf_fn, cat): return f'{perf_fn}_{cat}'
+    def get_cat_metric_name(self, perf_fn, cat):
+        """Gets category specific metric name
+        :param perf_fn: str, base metric name (e.g. precision)
+        :param cat: str, category name
+        :return str, category specific metric function name
+        """
+        return f'{perf_fn}_{cat}'
 
     def prepare_custom_metrics(self):
+        """Creates category specific metrics for all provided base metrics
+        :return dict, keys the function names, values the functions"""
         metrics_fn = {}
-        for perf_fn in self.args.metrics_fns:
+        for perf_fn in self.args.metrics_base_fns:
             for cat_id, cat in zip([None, *self.get_cats_idxs()], self.get_cats_with_all()):
                 self.create_cats_metrics(perf_fn, cat_id, cat, metrics_fn)
         return metrics_fn
 
     def plot_custom_metrics(self, ax, agg_perf, show_val, title=None):
+        """Plots aggregated metrics results.
+        :param ax: axis
+        :param agg_perf: dict, fold aggregated metrics results
+        :param show_val: bool, print values on plot
+        :param title: str, plot title
+        """
         ax.axis('on')
-        bar_perf = {mn: cat_mres for p in self.args.metrics_fns for mn, cat_mres in agg_perf.items() if p in mn}
+        bar_perf = {mn: cat_mres for p in self.args.metrics_base_fns for mn, cat_mres in agg_perf.items() if p in mn}
         bar_cats = self.get_cats_with_all()
-        common.grouped_barplot_with_err(ax, bar_perf, bar_cats, xlabel='Classes', show_val=show_val, title=title)
+        cplot.grouped_barplot_with_err(ax, bar_perf, bar_cats, xlabel='Classes', show_val=show_val, title=title)
 
     def compute_metrics(self, interp):
+        """Computes custom metrics and conf mat and add results to interp object. Should return interp.
+        :param interp: namespace with predictions, targets, decoded predictions
+        :return: same namespace with metrics results
+        """
         interp = super().compute_metrics(interp)
         interp.metrics['cm'] = self.compute_conf_mat(interp.targs, interp.decoded)
         return interp
 
     def aggregate_test_performance(self, folds_res):
+        """Merges metrics over different folds, computes mean and std.
+        Then groups categories metric results per metrics type (e.g. all precision together)
+        :param folds_res: list of metrics results over folds
+        :return: dict with merged metrics results
+        """
         agg = super().aggregate_test_performance(folds_res)
         for mns, agg_key in self.ordered_test_perfs_per_cats():
             # if mn in agg: in case we did no compute all metrics fns
@@ -130,27 +211,47 @@ class ImageTrainer(train_utils.FastaiTrainer):
         return agg
 
     def ordered_test_perfs_per_cats(self):
-        """Returns list of tuples of list of metrics names (following cat order) with corresponding aggregated key"""
+        """:return list of tuples of list of metrics names (following cat order) with corresponding aggregated key"""
         raise NotImplementedError
 
     def plot_save_path(self, test_path, run, show_val, custom=""):
+        """Prepare performance plot save path.
+        :param test_path: str, test identifier
+        :param run: str, run identifier
+        :param show_val: bool, if values were printed on plot
+        :param custom: str, custom string
+        :return str, path of plot
+        """
         return os.path.join(test_path, f'{run}{custom}{"_show_val" if show_val else ""}.jpg')
 
     def plot_test_performance(self, test_path, run, agg_perf):
+        """Plots aggregated performance
+        :param test_path: str, test identifier
+        :param run: str, run identifier
+        :param agg_perf: dict, aggregated performance
+        """
         show_val = not self.args.no_plot_val
         save_path = self.plot_save_path(test_path, run, show_val)
-        fig, axs = common.new_fig_with_axs(1, 2, self.args.test_figsize)
+        fig, axs = cplot.new_fig_with_axs(1, 2, self.args.test_figsize)
         self.plot_custom_metrics(axs[0], agg_perf, show_val)
-        common.plot_confusion_matrix(axs[1], agg_perf['cm'], self.args.cats)
+        cplot.plot_confusion_matrix(axs[1], agg_perf['cm'], self.args.cats)
         fig.tight_layout(pad=.2)
         plt.savefig(save_path, dpi=400)
 
     def tensorboard_cb(self, run_info):
+        """Creates tensorboard (TB) callback
+        :param run_info: str, run identifier for logs
+        :return: TB callback
+        """
         tbdir = common.maybe_create(self.args.exp_logdir, 'tb_logs')
-        return ImageTBCb(tbdir, run_info, self.cust_metrics.keys(), self.ALL_CATS)
+        return train_utils.ImageTBCb(tbdir, run_info, self.cust_metrics.keys(), self.ALL_CATS)
 
     def load_multiple_items_sets(self, set_locs, merged):
-        """Loads all sets of items. Merge them if specified. Returns tuples of item and item_cls lists"""
+        """Loads all sets of items. Merge them if specified. Returns
+        :param set_locs: list of str, directories from which data should be loaded
+        :param merged: bool, whether the different data sets should be merged
+        :return: list of tuples of items and labels lists
+        """
         if set_locs is None:
             items_with_cls = fv.L(), fv.L()
             return items_with_cls if merged else (None, items_with_cls)
@@ -159,29 +260,54 @@ class ImageTrainer(train_utils.FastaiTrainer):
             # cannot use map_zip since it is the starmap which may break with single lists (in object detec)
             return fv.L(map(fv.L, fv.L([t[1] for t in items_sets]).zip())).map(fv.L.concat) if merged else items_sets
 
-    def get_test_items(self, merged=True): return self.load_multiple_items_sets(self.args.sl_tests, merged)
+    def get_test_items(self, merged=True):
+        """Return test items
+        :param merged: bool, whether to merge all test sets together
+        :return: list of tuples of items and labels lists, one for each test set
+        """
+        return self.load_multiple_items_sets(self.args.sl_tests, merged)
 
     def get_train_items(self, merged=True):
+        """Return train items
+        :param merged: bool, whether to merge all train sets together
+        :return: tuple (sl, wl) of list of tuples of items and labels lists, one for each train set
+        """
         sl, wl = self.args.sl_train, self.args.wl_train
         return self.load_multiple_items_sets(sl, merged), self.load_multiple_items_sets(wl, merged)
 
     def get_full_img_cls(self, img_path):
+        """Should be reimplemented if stratification needed. Currently all full images will have same class
+        :param img_path: str, full image path
+        :return: int, label
+        """
         if self.stratify: raise NotImplementedError
         else: return 1  # when stratified splits are not needed, consider all images have the same cls
 
     def get_patch_full_img(self, patch):
+        """Get full image filename from patch path
+        :param patch: str, patch path
+        :return: str, full image filename
+        """
         file, ext = os.path.splitext(os.path.basename(patch))
         return f'{file.split(self.full_img_sep)[0] if self.full_img_sep in file else file}{ext}'
 
     def get_full_img_dict(self, images, targets):
-        """Returns a dict with keys (full images, tgt) and values the lst of corresponding images."""
+        """Match all patches with their full full image
+        :param images: list of patches
+        :param targets: list of corresponding labels
+        :return: dict, key is a tuple (full image, label), value is a list of tuples (patch, label)
+        """
         full_images_dict = defaultdict(fv.L)
         for img, tgt in zip(images, targets):
             full_images_dict[(self.get_patch_full_img(img), self.get_full_img_cls(img))].append((img, tgt))
         return full_images_dict
 
     def split_data(self, items, items_cls):
-        """This version of split data makes sure that patches from the same image do not leak between train/val sets"""
+        """This overloading makes sure that patches from the same image do not leak between train/val sets
+        :param items: list, train items to be splitted
+        :param items_cls: list labels of items
+        :yield: tuple, fold id, train items and labels, valid items and labels
+        """
         fi_dict = self.get_full_img_dict(items, items_cls)
         for fold, tr, val in super().split_data(*fv.L(fi_dict.keys()).map_zip(fv.L)):
             tr = fv.L([fi_dict[fik] for fik in zip(*tr)]).concat().map_zip(fv.L)
@@ -190,11 +316,26 @@ class ImageTrainer(train_utils.FastaiTrainer):
             yield fold, tr, val
 
     def load_image_item(self, item):
+        """Load image item, decrypts if needed
+        :param item: str, path of image
+        :return: array of image if data is encrypted else image path
+        """
         if type(item) is np.ndarray: return item    # image/mask is already loaded as np array
         elif self.args.encrypted: return crypto.decrypt_img(item, self.args.ckey)
         else: return item
 
     def create_dls_from_lst(self, blocks, tr, val, bs, size, get_x=None, get_y=None, **kwargs):
+        """Create train/valid dataloaders
+        :param blocks: Problem specific data blocks
+        :param tr: tuple of train items and labels
+        :param val: tuple of valid items and labels
+        :param bs: int, batch size
+        :param size: int, input side size, will be resized as square
+        :param get_x: function, additional step to get item
+        :param get_y: function, additional step to get target
+        :param kwargs: dict, dataloaders kwargs
+        :return: train/valid dataloaders
+        """
         tfms = fv.aug_transforms(size=size)
         if not self.args.no_norm:
             tfms.append(fv.Normalize.from_stats(*fv.imagenet_stats))
@@ -212,6 +353,12 @@ class ImageTrainer(train_utils.FastaiTrainer):
         return d.dataloaders(self.args.data, path=self.args.exp_logdir, bs=bs, seed=self.args.seed, **kwargs)
 
     def maybe_progressive_resizing(self, tr, val, fold_suffix):
+        """Creates dataloaders with progressive resizing if requested
+        :param tr: tuple of train items and labels
+        :param val: tuple of valid items and labels
+        :param fold_suffix: str, fold identifier for run info
+        :yield: tuple with iteration id, run info, dataloaders
+        """
         if self.args.progr_size:
             input_sizes = [int(self.args.input_size * f) for f in self.args.size_facts]
             batch_sizes = [max(1, min(int(self.args.bs / f / f), len(tr[0])) // 2 * 2) for f in self.args.size_facts]
@@ -226,6 +373,14 @@ class ImageTrainer(train_utils.FastaiTrainer):
             yield it, run, self.create_dls(tr, val, bs, size)
 
     def train_procedure(self, tr, val, fold_suffix, run_prefix="", learn=None):
+        """Training procedure
+        :param tr: tuple of train items and labels
+        :param val: tuple of valid items and labels
+        :param fold_suffix: str, fold identifier for run info
+        :param run_prefix: str, run indentifier for run info
+        :param learn: learner object, optional, if not set creates new one
+        :return: tuple with learn object and run info
+        """
         for it, run, dls in self.maybe_progressive_resizing(tr, val, fold_suffix):
             run = f'{run_prefix}{run}'
             if it == 0 and learn is None: learn = fd.rank0_first(lambda: self.create_learner(dls))
@@ -234,7 +389,11 @@ class ImageTrainer(train_utils.FastaiTrainer):
             train_utils.GPUManager.clean_gpu_memory(learn.dls)
         return learn, run
 
-    def get_run_params(self, run_info):
+    def extract_run_params(self, run_info):
+        """Extracts run parameters from run info: #repeat, progr_size?, size, bs, fold
+        :param run_info: str, run info
+        :return: namespace with all run params
+        """
         regex = r"^(?:__R(?P<repeat>\d+)__)?__S(?P<progr_size>\d+)px_bs(?P<bs>\d+)____F(?P<fold>\d+)__.*$"
         run_params = SimpleNamespace(**re.match(regex, run_info).groupdict())
         run_params.progr_size = int(run_params.progr_size)
@@ -242,53 +401,23 @@ class ImageTrainer(train_utils.FastaiTrainer):
         return run_params
 
     def get_sorting_run_key(self, run_info):
-        return run_info.replace(f'__F{self.get_run_params(run_info).fold}__', '')
+        """Gets key from run info string allowing to aggregate runs results.
+        :param run_info: str, run info string
+        :return str, sorting key
+        """
+        return run_info.replace(f'__F{self.extract_run_params(run_info).fold}__', '')
 
     def load_learner_from_run_info(self, run_info, tr, val, mpath=None):
-        run_params = self.get_run_params(run_info)
+        """Create learner object from run information and items. If mpath set will load saved model weights.
+        :param run_info: str, run information string e.g. bs, size, etc
+        :param tr: tuple of train items and labels
+        :param val: tuple of valid items and labels
+        :param mpath: str, model weights path, optional
+        :return learner object
+        """
+        run_params = self.extract_run_params(run_info)
         dls = self.create_dls(tr, val, run_params.bs, run_params.progr_size)
         learn = fd.rank0_first(lambda: self.create_learner(dls))
         if mpath is not None: train_utils.load_custom_pretrained_weights(learn.model, mpath)
         return learn
-
-
-class ImageTBCb(fc.TensorBoardBaseCallback):
-    def __init__(self, log_dir, run_info, grouped_metrics, all_cats):
-        super().__init__()
-        self.log_dir = log_dir
-        self.run_info = run_info
-        self.grouped_metrics = grouped_metrics
-        self.all_cats = all_cats
-
-    def can_run(self):
-        return not hasattr(self.learn, 'lr_finder') and not hasattr(self, "gather_preds")\
-               and train_utils.GPUManager.is_master_process()
-
-    def before_fit(self):
-        self.run = self.can_run()
-        if self.run: self._setup_writer()
-
-    def after_batch(self):
-        if not self.run: return
-        # if no self.smooth_loss then -1: when loss is nan, Recorder does not set smooth loss causing exception else
-        self.writer.add_scalar(f'{self.run_info}_Loss/train_loss', getattr(self, "smooth_loss", -1), self.train_iter)
-        for i, h in enumerate(self.opt.hypers):
-            for k, v in h.items(): self.writer.add_scalar(f'{self.run_info}_Opt_hyper/{k}_{i}', v, self.train_iter)
-
-    def after_epoch(self):
-        if not self.run: return
-        grouped, reduced = defaultdict(dict), defaultdict(dict)
-        for n, v in zip(self.recorder.metric_names[2:-1], self.recorder.log[2:-1]):
-            if n in self.grouped_metrics:
-                perf = n.split('_')[0]
-                cat_code = n.replace(f'{perf}_', '')
-                # check if all_cat IN cat_code because there can be different variation (eg all & all_no_bg in segm)
-                if self.all_cats in cat_code: reduced[n] = v
-                else: grouped[perf][cat_code] = v
-            else:
-                log_group = 'Loss' if "loss" in n else 'Metrics'
-                self.writer.add_scalar(f'{self.run_info}_{log_group}/{n}', v, self.train_iter)
-        for perf, v in grouped.items():
-            self.writer.add_scalars(f'{self.run_info}_Metrics/{perf}', v, self.train_iter)
-        self.writer.add_scalars(f'{self.run_info}_Metrics/ALL', reduced, self.train_iter)
 

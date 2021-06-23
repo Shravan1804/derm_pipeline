@@ -1,8 +1,22 @@
+#!/usr/bin/env python
+
+"""check_no_leak_train_test.py: Script used to find files present in two directories (also searches subdirectories)"""
+
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
+
+
 import os
 import sys
 import argparse
 from functools import partial
-import multiprocessing as mp
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common, concurrency
@@ -10,13 +24,21 @@ from segmentation.segmentation_utils import common_segm_args
 
 
 def get_image_name(args, path):
+    """Extracts image name from path. If dataset is patched or cropped, will look for full img name
+    :param args: command line args
+    :param path: str, img path
+    :return basename of original image without extension
+    """
     img = os.path.splitext(os.path.basename(path))[0]
-    img = img.split(args.patch_sep)[0] if args.patch else img
     img = '_'.join(img.split('_')[:-1]) if args.crops else img
     return img.split(args.patch_sep)[0] if args.patch else img
 
 
 def get_files_to_search(args):
+    """List files from provided image dataset according to specified dataset type
+    :param args: command line args
+    :return: tuple with two provided dirs files lists
+    """
     if args.classif:
         dir1_files = common.list_files(args.dir1, full_path=True, recursion=True)
         dir2_files = common.list_files(args.dir2, full_path=True, recursion=True)
@@ -40,6 +62,12 @@ def get_files_to_search(args):
 
 
 def search_terms(proc_id, terms, search_in, args):
+    """Searches terms' items in search_in lst, prints number of matches, if verbose also prints the list of matches
+    :param proc_id: int, process id
+    :param terms: list, filepaths
+    :param search_in: list, filepaths
+    :param args: command line args
+    """
     if args.verbose:
         print(f'Proc {proc_id} searching for {len(terms)} terms in a list of {len(search_in)} items.')
     count = 0
@@ -58,6 +86,9 @@ def search_terms(proc_id, terms, search_in, args):
 
 
 def main(args):
+    """Runs the multiprocess search based on the provided command line arguments
+    :param args: command line args
+    """
     terms, search_in = get_files_to_search(args)
     workers, batch_size, batched_dirs = concurrency.batch_lst(terms)
     concurrency.multi_process_fn(workers, batched_dirs, partial(search_terms, search_in=search_in, args=args))

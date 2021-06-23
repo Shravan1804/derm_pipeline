@@ -1,3 +1,16 @@
+#!/usr/bin/env python
+
+"""full_img_label_to_patch_coco_label.py: Converts full image coco dataset to patched image coco dataset."""
+
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
 import os
 import copy
 import json
@@ -8,10 +21,14 @@ import numpy as np
 from tqdm import tqdm
 from shapely.geometry import Polygon, MultiPoint
 
-import common
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
+from general import common
 
 
 def main(args):
+    """Performs full image to patch dataset conversion
+    :param args: command line arguments
+    """
     ps = args.patch_size
     with open(args.labels, 'r') as f:
         labels = json.load(f)
