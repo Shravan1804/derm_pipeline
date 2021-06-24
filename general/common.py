@@ -116,7 +116,7 @@ def equidistant_pts(mini, maxi, inter):
     :param inter: float, distance between pts
     :return: list of floats, equidistant pts
     """
-    return np.linspace(mini, maxi, np.int(np.round(maxi - mini / inter)) + 1, endpoint=True).tolist()
+    return np.linspace(mini, maxi, np.int(np.round(np.abs(maxi - mini) / inter)) + 1, endpoint=True).tolist()
 
 
 def most_common(arr, top=3, return_index=False, return_counts=False):
