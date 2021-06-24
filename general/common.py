@@ -109,6 +109,16 @@ def int_to_bins(n, bins, rand=False):
         return np.arange(n+bins-1, n-1, -1) // bins
 
 
+def equidistant_pts(mini, maxi, inter):
+    """Prepares list of equidistant points between range separated by fixed distance
+    :param mini: float, starting value
+    :param maxi: float, ending value (comprised)
+    :param inter: float, distance between pts
+    :return: list of floats, equidistant pts
+    """
+    return np.linspace(mini, maxi, np.int(np.round(maxi - mini / inter)) + 1, endpoint=True).tolist()
+
+
 def most_common(arr, top=3, return_index=False, return_counts=False):
     """Returns most common elements in array
     :param arr: array, elements to compare
