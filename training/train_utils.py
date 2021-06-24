@@ -44,7 +44,7 @@ def non_param_ci(tensor_lst, ci_p):
     :return: tuple, lower and higher bound of CI
     """
     alpha = 1 - ci_p
-    low, high = alpha, 1-alpha/2
+    low, high = alpha/2, 1-alpha/2
     return torch.quantile(torch.stack(tensor_lst).float(), torch.tensor([low, high]), dim=0)
 
 
