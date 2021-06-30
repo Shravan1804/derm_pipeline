@@ -125,7 +125,7 @@ class ImageInference:
             interp = self.learner_preds(learn, dl)
             GPUManager.clean_gpu_memory(dl)
             interp.pms = pms
-            self.process_results(inference_item, interp, with_labels, save_dir)
+            self.process_results(inference_item, interp, save_dir)
 
     def learner_preds(self, learn, dl):
         """Compute learner predictions
