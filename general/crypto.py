@@ -37,6 +37,23 @@ def add_encrypted_args(parser):
     parser.add_argument('--ckey', type=str, help="Data encryption key")
 
 
+def encrypt_im(im, fkey, im_format='JPEG', save_path=None):
+    """Encrypts image array, save it to disk if requested
+    :param im: array, image
+    :param fkey: Fernet object, key used to encrypt file
+    :param im_format: str, format to save image, e.g. JPEG or PNG
+    :param save_path: str, optional, if provided will save encrypted data
+    :return: bytes array, encrypted data
+    """
+    im_byte_arr = io.BytesIO()
+    PIL.Image.fromarray(im).save(im_byte_arr, format=im_format)
+    encrypted_data = fkey.encrypt(im_byte_arr.getvalue())
+    if save_path is not None:
+        with open(save_path, "wb") as writer:
+            writer.write(encrypted_data)
+    return encrypted_data
+
+
 def decrypt_img(img_path, fkey):
     """Decrypts provided image file using Fernet key object and load it as np array
     :param img_path: str, path of image to decrypt
