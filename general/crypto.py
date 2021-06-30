@@ -48,6 +48,7 @@ def encrypt_im(im, fkey, im_format='JPEG', save_path=None):
     im_byte_arr = io.BytesIO()
     PIL.Image.fromarray(im).save(im_byte_arr, format=im_format)
     encrypted_data = fkey.encrypt(im_byte_arr.getvalue())
+    im_byte_arr.close()
     if save_path is not None:
         with open(save_path, "wb") as writer:
             writer.write(encrypted_data)
