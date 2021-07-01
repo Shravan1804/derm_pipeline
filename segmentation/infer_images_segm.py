@@ -95,8 +95,12 @@ class ImageSegmentationInference(ImageInference):
         cplot.img_on_ax(im, axs[0], title='Original image')
         axi = 1
         if with_labels:
+            # hack: ensure classes have the same colors
+            gt[0, :len(self.args.cats)] = list(range(len(self.args.cats)))
             mask_utils.im_mask_on_ax(axs[axi], im, gt, "Ground truth")
             axi += 1
+        # hack: ensure classes have the same colors
+        pred[0, :len(self.args.cats)] = list(range(len(self.args.cats)))
         mask_utils.im_mask_on_ax(axs[axi], im, pred, "Predictions")
         axi += 1
         if with_labels:
