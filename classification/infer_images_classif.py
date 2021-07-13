@@ -143,7 +143,7 @@ class ImageClassificationInference(ImageInference):
             axs[axi].imshow(interp.gradcam, alpha=0.6, cmap='magma');
             axi += 1
         if with_labels:
-            agg_perf = self.trainer.aggregate_test_performance([self.trainer.process_test_preds(interp)])
+            agg_perf = self.trainer.aggregate_test_performance([self.trainer.compute_metrics(interp)])
             self.trainer.plot_custom_metrics(axs[axi], agg_perf, show_val=True)
         if save_path is not None: cplot.plt_save_fig(save_path, fig=fig, dpi=150)
 

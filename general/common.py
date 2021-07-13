@@ -13,7 +13,6 @@ __copyright__ = (
 
 import os
 import sys
-import cv2
 import math
 import datetime
 import contextlib
@@ -24,7 +23,6 @@ from pathlib import Path, PosixPath
 
 
 import numpy as np
-import PIL.Image as PImage
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 

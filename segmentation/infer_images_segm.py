@@ -107,7 +107,7 @@ class ImageSegmentationInference(ImageInference):
             if self.args.gt_pred_diff:
                 mask_utils.im_mask_on_ax(axs[axi], im, (gt != pred).astype(np.uint8), "Preds != GT")
                 axi += 1
-            agg_perf = self.trainer.aggregate_test_performance([self.trainer.process_test_preds(interp)])
+            agg_perf = self.trainer.aggregate_test_performance([self.trainer.compute_metrics(interp)])
             self.trainer.plot_custom_metrics(axs[axi], agg_perf, show_val=True)
         if save_path is not None: cplot.plt_save_fig(save_path, fig=fig, dpi=150)
 
