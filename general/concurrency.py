@@ -77,6 +77,7 @@ def multi_process_fn(workers, batches, fn):
     for i, batch in zip(range(workers), batches):
         jobs.append(mp.Process(target=fn, args=(i, batch)))
         jobs[i].start()
+        time.sleep(.25)
     for j in jobs:
         j.join()
 
