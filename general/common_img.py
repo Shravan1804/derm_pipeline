@@ -84,6 +84,16 @@ def load_img(path, resize=None):
     return im
 
 
+def h_w_ratio(impath, im=None):
+    """Calculates image heigh/width ratio
+    :param impath: str, image path
+    :param im: array, image optional, if None will look for img shape from impath
+    :return: float, heigh/width ratio
+    """
+    h, w = quick_img_size(impath) if im is None else im.shape[:2]
+    return h/w
+
+
 def save_img(im, path):
     """Saves images to specified path
     If im has more than two channels, assumes it is an rgb image thus will convert it to bgr before using imwrite
