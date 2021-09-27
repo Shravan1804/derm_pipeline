@@ -190,7 +190,8 @@ class ImageSegmentationTrainer(ImageTrainer):
         :param train_items: tuple of fastai lists, (items, labels)
         :return: tensor, weight for each categories
         """
-        masks = np.stack([self.load_mask(mpath) for _, mpath in train_items])
+        common_size = self.args.input_size, self.args.input_size
+        masks = np.stack([mask_utils.resize_mask(self.load_mask(mpath), common_size) for _, mpath in train_items])
         _, class_counts = np.unique(masks, return_counts=True)
         return torch.FloatTensor(class_counts.max() / class_counts)
 
