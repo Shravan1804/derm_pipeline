@@ -62,13 +62,26 @@ def img_bgr_to_rgb(im):
 
 
 def resize(im, new_h, new_w):
-    """Helper to resize function
+    """Helper to resize function (h, w in correct order, cv2 uses w, h)
     :param im: array, image
     :param new_h: int, new height
     :param new_w: int, new width
     :return: array, resized image
     """
     return cv2.resize(im, (new_w, new_h), interpolation=cv2.INTER_NEAREST if len(im.shape) < 3 else cv2.INTER_LINEAR)
+
+
+def resize_keep_aspect_ratio(im, maxh, maxw=None):
+    """Helper to resize function while keeping aspect ratio
+    :param im: array, image
+    :param maxh: int, max possible height
+    :param maxw: int, optional, max possible width, if None same as maxh
+    :return: array, resized image
+    """
+    if maxw is None: maxw = maxh
+    h, w = im.shape[:2]
+    f = min(maxh/h, maxw/w)
+    return resize(im, int(h * f), int(w * f))
 
 
 def load_img(path, resize=None):
