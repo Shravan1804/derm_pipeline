@@ -23,8 +23,10 @@ from pathlib import Path, PosixPath
 
 
 import numpy as np
+import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
+
 
 def recursive_default_dict():
     """Creates recursive default dict.
@@ -352,3 +354,22 @@ def stdout_prepend(f, pre_msg, *args):
     with contextlib.redirect_stdout(PrintPrepender(pre_msg)):
         f(*args)
 
+
+def update_df1_with_df2(df1, df2, on):
+    """Update pandas dataframe with values from other dataframe
+    :param df1: dataframe 1 to be updated
+    :param df2: dataframe 2 to take the values from
+    :param on: str or lst of str, column names to be used to match rows between dataframes
+    :return: df1 updated with values from df2
+    """
+    for c in df2.columns:
+        if c not in df1.columns:
+            df1[c] = ''
+
+    df1.set_index(on, inplace=True)
+    df2.set_index(on, inplace=True)
+
+    df1.update(df2)
+    df1.reset_index(inplace=True)
+    df2.reset_index(inplace=True)
+    return df1
