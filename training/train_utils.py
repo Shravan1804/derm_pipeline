@@ -37,8 +37,7 @@ def tensors_mean_std(tensor_lst):
 
 
 def non_param_ci(tensor_lst, ci_p):
-    """Computes the non-parametric confidence interval
-    # when predicted variable is not necessarily normally distributed
+    """Computes the non-parametric confidence interval when predicted variable is not necessarily normally distributed
     :param tensor_lst: list of tensors, metrics results
     :param ci_p: float, e.g. .95 for CI95
     :return: tuple, lower and higher bound of CI

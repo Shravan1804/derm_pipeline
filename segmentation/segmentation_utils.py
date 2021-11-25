@@ -48,7 +48,7 @@ def get_mask_path(img_path, img_dir='images', mask_dir='masks', mext='.png'):
     :param mext: str, mask extension
     :return: str, mask path if file exists else None
     """
-    if not os.path.exists(img_path) or img_dir not in str(img_path): return None
+    if not os.path.exists(img_path) or f'{img_dir}/' not in str(img_path): return None
     elif type(img_path) is str:
         file, ext = os.path.splitext(os.path.basename(img_path))
         mask_path = img_path.replace(f'{img_dir}/{file}{ext}', f'{mask_dir}/{file}{mext}')
