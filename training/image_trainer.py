@@ -246,6 +246,13 @@ class ImageTrainer(FastaiTrainer):
         tbdir = common.maybe_create(self.args.exp_logdir, 'tb_logs')
         return train_utils.ImageTBCb(tbdir, run_info, self.cust_metrics.keys(), self.ALL_CATS)
 
+    def load_items(self, set_dir):
+        """Loads training items from directory
+        :param set_dir: str, directory containing training items
+        :return: tuple of fastai L lists, first list contain items, second list contains labels
+        """
+        raise NotImplementedError
+
     def load_multiple_items_sets(self, set_locs, merged):
         """Loads all sets of items. Merge them if specified. Returns
         :param set_locs: list of str, directories from which data should be loaded

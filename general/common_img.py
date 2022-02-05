@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""common.py: File regrouping useful methods for images"""
+"""common_img.py: File regrouping useful methods for images"""
 
 __author__ = "Ludovic Amruthalingam"
 __maintainer__ = "Ludovic Amruthalingam"

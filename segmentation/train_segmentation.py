@@ -190,10 +190,17 @@ class ImageSegmentationTrainer(ImageTrainer):
         :param train_items: tuple of fastai lists, (items, labels)
         :return: tensor, weight for each categories
         """
+        from p_tqdm import p_umap
         common_size = self.args.input_size, self.args.input_size
-        masks = np.stack([mask_utils.resize_mask(self.load_mask(mpath), common_size) for _, mpath in train_items])
+        def load_resize(train_item):
+            impath, mpath = train_item
+            return mask_utils.resize_mask(self.load_mask(mpath, load_mask_array=True), common_size)
+        masks = np.stack(p_umap(load_resize, train_items))
         _, class_counts = np.unique(masks, return_counts=True)
-        return torch.FloatTensor(class_counts.max() / class_counts)
+        assert class_counts.size == len(self.args.cats)
+        # this one causes issues if imbalance too high
+        #return torch.FloatTensor(class_counts.max() / class_counts)
+        return torch.FloatTensor(1 / np.log(class_counts))
 
     def create_learner(self, dls):
         """Creates learner with callbacks
