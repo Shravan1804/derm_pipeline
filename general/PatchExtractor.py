@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""crypto.py: Encrypts directory structure, also contains methods used for decryption"""
+"""PatchExtractor.py: Patch images in whole directory structure, also contains methods used to independantly patch images"""
 
 __author__ = "Ludovic Amruthalingam"
 __maintainer__ = "Ludovic Amruthalingam"
@@ -346,15 +346,16 @@ class PatchExtractor:
 
     @staticmethod
     def im_to_patches(im, ps, imname="fi_img.jpg"):
-        """Converts full image array to patches
+        """Converts full image array to patches, resizing the image if it was too small with respect to patch size
         :param im: array, image
         :param ps: int, patch size
         :param imname: str, full image name for patch map
-        :return: tuple with list of patches and list of patch maps
+        :return: tuple with provided image array resized if necessary, list of patches and list of patch maps
         """
         patcher = PatchExtractor([ps])
-        pms = patcher.patch_grid(imname, im)
-        return [PatchExtractor.extract_patch(im, pm) for pm in pms], pms
+        im_resized = patcher.maybe_resize(im)
+        pms = patcher.patch_grid(imname, im_resized)
+        return im_resized, [PatchExtractor.extract_patch(im_resized, pm) for pm in pms], pms
 
 
 def multiprocess_patching(proc_id, pmq, patcher, data, dirs, dest):
