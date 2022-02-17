@@ -70,6 +70,7 @@ class ClassifWithMetadata(nn.Sequential):
         self.embed_dim = embed_dim
         print(f"Metadata (#{metadata_dim}) will be embedded in {self.embed_dim} dimensions")
         self.embed = nn.Embedding(2 ** metadata_dim, self.embed_dim)
+        fv.apply_init(self.embed, nn.init.kaiming_normal_)
         self.head = my_create_head(self.embed_dim, nf, n_out, lin_ftrs=lin_ftrs)
         fv.apply_init(self.head, nn.init.kaiming_normal_)
 
