@@ -64,7 +64,7 @@ class ClassifWithMetadata(nn.Sequential):
     def __init__(self, metadata_dim, arch, n_out, lin_ftrs=None, embed_dim=64):
         super().__init__()
         self.model_meta = fv.model_meta[arch]
-        self.body = fv.create_body(arch, n_in=3, pretrained=True, cut=self.meta['cut'])
+        self.body = fv.create_body(arch, n_in=3, pretrained=True, cut=self.model_meta['cut'])
         nf = fv.num_features_model(nn.Sequential(*self.body.children()))
         self.metadata_dim = metadata_dim
         self.embed_dim = embed_dim
