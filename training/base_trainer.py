@@ -84,6 +84,7 @@ class FastaiTrainer:
         parser.add_argument("--num-machines", type=int, default=1, help="number of machines")
 
         parser.add_argument('--seed', type=int, default=pdef.get('--seed', 42), help="Random seed")
+        parser.add_argument('--reproducible', action='store_true', help="Applies seed to make training reproducible")
         parser.add_argument('--debug-dls', action='store_true', help="Summarize dls then exits")
 
         return parser
@@ -111,6 +112,7 @@ class FastaiTrainer:
         :param args: command line args
         """
         common.set_seeds(args.seed)
+        fv.set_seed(args.seed, reproducible=True)
         common.check_dir_valid(args.data)
         data_names = []
         if args.wl_train is not None: data_names.extend(args.wl_train)
