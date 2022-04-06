@@ -14,6 +14,8 @@ __copyright__ = (
 import os
 import sys
 
+import torch
+
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 
 def get_cls_TP_TN_FP_FN(cls_truth, cls_preds):
@@ -22,11 +24,11 @@ def get_cls_TP_TN_FP_FN(cls_truth, cls_preds):
     :param cls_preds: tensor of bool, decoded predictions matching category
     :return: tuple TP, TN, FP, FN
     """
-    TP = (cls_preds & cls_truth).sum().item()
-    TN = (~cls_preds & ~cls_truth).sum().item()
-    FP = (cls_preds & ~cls_truth).sum().item()
-    FN = (~cls_preds & cls_truth).sum().item()
-    return TP, TN, FP, FN
+    TP = (cls_preds & cls_truth).sum()
+    TN = (~cls_preds & ~cls_truth).sum()
+    FP = (cls_preds & ~cls_truth).sum()
+    FN = (~cls_preds & cls_truth).sum()
+    return tuple(map(torch.Tensor.item, (TP, TN, FP, FN))) if issubclass(type(TP), torch.Tensor) else (TP, TN, FP, FN)
 
 
 def accuracy(TP, TN, FP, FN, epsilon=1e-8):
