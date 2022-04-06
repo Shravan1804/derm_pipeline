@@ -345,7 +345,7 @@ class ImageTrainer(FastaiTrainer):
         :param kwargs: dict, dataloaders kwargs
         :return: train/valid dataloaders
         """
-        tfms = fv.aug_transforms(size=size)
+        tfms = fv.aug_transforms(size=size, flip_vert=True, max_rotate=45)
         if not self.args.no_norm:
             tfms.append(fv.Normalize.from_stats(*fv.imagenet_stats))
         d = fv.DataBlock(blocks=blocks,
