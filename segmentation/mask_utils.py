@@ -200,7 +200,7 @@ def resize_mask(mask, new_size_h_w):
     """
     h, w = new_size_h_w
     # cv2 resize new dim takes first w then h!
-    return cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
+    return cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST_EXACT)
 
 
 def crop_im(im, bbox):

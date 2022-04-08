@@ -68,7 +68,7 @@ def resize(im, new_h, new_w):
     :param new_w: int, new width
     :return: array, resized image
     """
-    return cv2.resize(im, (new_w, new_h), interpolation=cv2.INTER_NEAREST if len(im.shape) < 3 else cv2.INTER_LINEAR)
+    return cv2.resize(im, (new_w, new_h), interpolation=cv2.INTER_NEAREST_EXACT if len(im.shape) < 3 else cv2.INTER_LINEAR)
 
 
 def resize_keep_aspect_ratio(im, maxh, maxw=None):

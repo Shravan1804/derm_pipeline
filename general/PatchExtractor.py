@@ -330,7 +330,7 @@ class PatchExtractor:
             h, w, ps = pm['h'], pm['w'], pm['ps']
             pdim = ps, ps
             if patch.shape[:2] != pdim:
-                if interpol is None: interpol = cv2.INTER_NEAREST if len(patch.shape) < 3 else cv2.INTER_LINEAR
+                if interpol is None: interpol = cv2.INTER_NEAREST_EXACT if len(patch.shape) < 3 else cv2.INTER_LINEAR
                 patch = cv2.resize(patch, pdim, interpolation=interpol)
             im[h:h + ps, w:w + ps] = patch
         return im
