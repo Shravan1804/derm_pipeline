@@ -65,24 +65,31 @@ class ClassifWithMetadata(nn.Sequential):
         super().__init__()
         self.model_meta = fv.model_meta[arch]
         self.body = fv.create_body(arch, n_in=3, pretrained=True, cut=self.model_meta['cut'])
+        self.add_module("body", self.body)
+
         nf = fv.num_features_model(nn.Sequential(*self.body.children()))
         self.metadata_dim = metadata_dim
         self.embed_dim = embed_dim
-        print(f"Metadata (#{metadata_dim}) will be embedded in {self.embed_dim} dimensions")
-        self.embed = nn.Embedding(2 ** metadata_dim, self.embed_dim)
-        fv.apply_init(self.embed, nn.init.kaiming_normal_)
-        self.head = my_create_head(self.embed_dim, nf, n_out, lin_ftrs=lin_ftrs)
-        fv.apply_init(self.head, nn.init.kaiming_normal_)
+        if self.embed_dim > 0:
+            print(f"Metadata (#{metadata_dim}) will be embedded in {self.embed_dim} dimensions")
+            self.embed = nn.Embedding(2 ** metadata_dim, self.embed_dim)
+            fv.apply_init(self.embed, nn.init.kaiming_normal_)
+            self.add_module("embed", self.embed)
 
-        self.add_module("body", self.body)
-        self.add_module("embed", self.embed)
+            self.head = my_create_head(self.embed_dim, nf, n_out, lin_ftrs=lin_ftrs)
+        else:
+            self.head = my_create_head(self.metadata_dim, nf, n_out, lin_ftrs=lin_ftrs)
+        fv.apply_init(self.head, nn.init.kaiming_normal_)
         self.add_module("head", self.head)
 
     def forward(self, imtensor, metadata):
         imfeatures = self.body(imtensor)
         imfeatures = self.head[:2](imfeatures)
-        embed_metadata = self.embed(bin2dec(metadata, self.metadata_dim).long())
-        x = torch.cat([imfeatures, embed_metadata], 1)
+        if self.embed_dim > 0:
+            embed_metadata = self.embed(bin2dec(metadata, self.metadata_dim).long())
+            x = torch.cat([imfeatures, embed_metadata], 1)
+        else:
+            x = torch.cat([imfeatures, metadata], 1)
         out = self.head[2:](x)
         return out
 
