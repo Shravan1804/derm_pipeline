@@ -66,7 +66,8 @@ class FastaiTrainer:
 
         parser.add_argument('--model', type=str, default=pdef.get('--model', None), help="Model name")
         parser.add_argument('--bs', default=pdef.get('--bs', 6), type=int, help="Batch size per GPU device")
-        parser.add_argument('--lr', type=float, help='when None: uses auto_lr in parallel mode else .002')
+        parser.add_argument('--lr', type=float, default=pdef.get('--lr', .0001), help='learning rate')
+        parser.add_argument('--auto-lr', action='store_true', help="Determine optimal lr (only in parallel train)")
         parser.add_argument('--fepochs', type=int, default=pdef.get('--fepochs', 4), help='Epochs for frozen model')
         parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 12), help='Epochs for unfrozen model')
         parser.add_argument('--RMSProp', action='store_true', help="Use RMSProp optimizer")
@@ -294,18 +295,14 @@ class FastaiTrainer:
         """Set learning rate of learner. In ParallelMode can try to find optimal learning rate via lr_find.
         :param learn: learner object
         """
-        if self.args.lr is not None:
-            lr = self.args.lr
-        elif GPUManager.in_distributed_mode():  # auto_lr find causes deadlock in distrib mode
-            lr = .002
-        else:
-            """
+        if self.args.auto_lr and not GPUManager.in_distributed_mode():  # auto_lr causes deadlock in distrib mode
             learn.freeze()
             with GPUManager.running_context(learn, self.args.gpu_ids):
-                lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
-            lr = lr_min / 10
-            """
-            lr = .002
+                lr_min, lr_steep, lr_slide, lr_valley = learn.lr_find(
+                    suggest_funcs=(fv.minimum, fv.steep, fv.slide, fv.valley), show_plot=False)
+                lr = lr_valley
+        else:
+            lr = self.args.lr
         print("Learning rate is", lr)
         return lr
 
