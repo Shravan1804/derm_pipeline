@@ -17,6 +17,7 @@ import datetime
 from functools import partial
 
 import numpy as np
+import sklearn.metrics as skm
 
 import torch
 import fastai.vision.all as fv
@@ -43,6 +44,7 @@ class ImageSegmentationTrainer(ImageTrainer):
         """
         # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
         parser = super(ImageSegmentationTrainer, ImageSegmentationTrainer).get_argparser(desc, pdef, phelp)
+        parser.add_argument('--plot-no-bg', action='store_true', help="Include perfs without bg cat in plots")
         parser.add_argument('--coco-metrics', action='store_true', help="Also computes coco metrics")
         parser.add_argument('--rm-small-objs', action='store_true', help="Remove objs smaller than --min-size")
         parser.add_argument('--min-size', default=60, type=int, help="Objs below this size will be discarded")
@@ -140,6 +142,17 @@ class ImageSegmentationTrainer(ImageTrainer):
         """
         return segm_utils.pixel_conf_mat(targs, preds, self.args.cats)
 
+    def plot_custom_metrics(self, ax, agg_perf, show_val, title=None):
+        """Plots aggregated metrics results.
+        :param ax: axis
+        :param agg_perf: dict, fold aggregated metrics results
+        :param show_val: bool, print values on plot
+        :param title: str, plot title
+        """
+        if not self.args.plot_no_bg:
+            agg_perf = {k: v for k, v in agg_perf.items() if self.NO_BG not in k}
+        super().plot_custom_metrics(ax, agg_perf, show_val, title)
+
     def compute_metrics(self, interp):
         """Apply metrics functions on test set predictions. If requested, will also compute object detection metrics
         :param interp: namespace with predictions, targs, decoded preds, test set predictions
@@ -147,6 +160,9 @@ class ImageSegmentationTrainer(ImageTrainer):
         """
         interp.targs = interp.targs.as_subclass(torch.Tensor)   # otherwise issues with fastai PILMask custom class
         interp = super().compute_metrics(interp)
+        targs, dec = interp.targs.flatten(), interp.decoded.flatten()
+        print(skm.classification_report(targs, dec, target_names=self.args.cats,
+                                        labels=[i for i, v in enumerate(self.args.cats)]))
         if self.args.coco_metrics:
             to_coco = partial(segm_dataset_to_coco_format, cats=self.args.cats, bg=self.args.bg)
             with common.elapsed_timer() as elapsed:
