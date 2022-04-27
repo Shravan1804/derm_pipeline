@@ -12,7 +12,7 @@ __copyright__ = (
 )
 
 # Run on dgx
-# python /workspace/code/derm_pipeline/training/distributed_launch.py --encrypted /workspace/code/derm_pipeline/projects/ppp/ppp.py --data /workspace/data/ppp_grading/PPP_whs_corr_splitted_no_patient_leak_patched_512_encrypted --sl-train train --sl-tests test --exp-name ppp --logdir /workspace/logs --reproducible 2>&1 | tee /workspace/logs/ppp.txt
+# python /workspace/code/derm_pipeline/training/distributed_launch.py --encrypted /workspace/code/derm_pipeline/projects/ppp/ppp.py --data /workspace/data/disease_grading/ppp_grading/PPP_whs_corr_splitted_no_patient_leak_patched_512_encrypted --sl-train train --sl-tests test --exp-name ppp --logdir /workspace/logs --reproducible 2>&1 | tee /workspace/logs/ppp.txt
 
 
 import os
@@ -70,7 +70,7 @@ class PPPTrainer(ImageSegmentationTrainer):
     def get_train_items(self, merged=True):
         sl_data, wl_data = super().get_train_items(merged=merged)
         print("#train items:", len(sl_data[0]))
-        sl_data = fv.L([(i, m) for i, m in sl_data.zip() if self.item_with_lesions(m)]).zip()
+        sl_data = fv.L([train_item for train_item in sl_data.zip() if self.item_with_lesions(train_item)]).zip()
         print("#train items with lesions:", len(sl_data[0]))
         return sl_data, wl_data
 
