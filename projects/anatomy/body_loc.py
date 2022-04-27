@@ -30,6 +30,7 @@ def main(args):
     coarse_loc_trainer = ImageClassificationTrainer(args)
     coarse_loc_trainer.train_model()
 
+
 if __name__ == '__main__':
     defaults = {'--bs': 32, '--model': 'efficientnet-b2', '--input-size': 260, '--fepochs': 10, '--epochs': 30}
     parser = ImageClassificationTrainer.get_argparser(desc="Coarse loc classification", pdef=defaults)

@@ -47,7 +47,7 @@ class PPPTrainer(ImageSegmentationTrainer):
         """Sets up training, check args validity.
         :param args: command line args
         """
-        args.exp_name = "ppp_" + args.exp_name
+        args.exp_name = "ppp_" + ("with_skin_" if args.include_skin else "") + args.exp_name
         args.cats = ["other", "skin", "pustules", "spots"] if args.include_skin else ["other", "pustules", "spots"]
         super(PPPTrainer, PPPTrainer).prepare_training(args)
 

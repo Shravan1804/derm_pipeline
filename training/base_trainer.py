@@ -104,7 +104,12 @@ class FastaiTrainer:
         if not args.no_norm: d += '_normed'
         d += '_RMSProp' if args.RMSProp else '_Adam'
         d += '_fp32' if args.full_precision else '_fp16'
-        d += f'_CV{args.nfolds}' if args.cross_val else f'_noCV_valid{args.valid_size}'
+        if args.full_data:
+            d += f'_fullData'
+        elif args.cross_val:
+            d += f'_CV{args.nfolds}'
+        else:
+            d += f'_noCV_valid{args.valid_size}'
         d += '_WL' if args.use_wl else '_SL'
         d += f'_{custom}_{args.exp_name}'
         return d

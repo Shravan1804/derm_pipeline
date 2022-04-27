@@ -268,6 +268,7 @@ class ImageSegmentationTrainer(ImageTrainer):
                 print(f'{name} weight of the model not in pretrained weights')
         model.load_state_dict(model_state_dict)
 
+
 def main(args):
     """Creates segmentation trainer
     :param args: command line args
