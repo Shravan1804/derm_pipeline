@@ -69,9 +69,10 @@ class PPPTrainer(ImageSegmentationTrainer):
 
     def get_train_items(self, merged=True):
         sl_data, wl_data = super().get_train_items(merged=merged)
-        print("#train items:", len(sl_data[0]))
-        sl_data = fv.L([train_item for train_item in sl_data.zip() if self.item_with_lesions(train_item)]).zip()
-        print("#train items with lesions:", len(sl_data[0]))
+        if self.args.only_with_lesions:
+            print("#train items:", len(sl_data[0]))
+            sl_data = fv.L([train_item for train_item in sl_data.zip() if self.item_with_lesions(train_item)]).zip()
+            print("#train items with lesions:", len(sl_data[0]))
         return sl_data, wl_data
 
 
