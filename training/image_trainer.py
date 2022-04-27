@@ -318,7 +318,7 @@ class ImageTrainer(FastaiTrainer):
         fi_dict = self.get_full_img_dict(items, items_cls)
         for fold, tr, val in super().split_data(*fv.L(fi_dict.keys()).map_zip(fv.L)):
             tr = fv.L([fi_dict[fik] for fik in zip(*tr)]).concat().map_zip(fv.L)
-            if self.args.valid_size > 0:    # if not True, then valid are patches from test set => no possible leaks
+            if not self.args.full_data:    # if not True, then valid are patches from test set => no possible leaks
                 val = fv.L([fi_dict[fik] for fik in zip(*val)]).concat().map_zip(fv.L)
             yield fold, tr, val
 

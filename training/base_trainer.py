@@ -52,6 +52,7 @@ class FastaiTrainer:
         parser.add_argument('--ckey', type=str, help="Data encryption key")
 
         parser.add_argument('--inference', action='store_true', help="No train, only inference")
+        parser.add_argument('--full-data', action='store_true', help="Use full train, no val split")
         parser.add_argument('--cross-val', action='store_true', help="Perform 5-fold cross validation on sl train set")
         parser.add_argument('--nfolds', default=5, type=int, help="Number of folds for cross val")
         parser.add_argument('--valid-size', default=.2, type=float, help='If no cv, splits train set with this %')
@@ -73,6 +74,7 @@ class FastaiTrainer:
         parser.add_argument('--no-norm', action='store_true', help="Do not normalizes data")
         parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
         parser.add_argument('--early-stop', action='store_true', help="Early stopping during training")
+        parser.add_argument('--reduce-lr-on-plateau', action='store_true', help="Reduce lr during training")
         parser.add_argument('--reduce-lr-delta', type=float, default=.01, help="delta for reduce lr on plateau cb")
         parser.add_argument('--no-plot', action='store_true', help="Will not plot test results (e.g. too many classes)")
         parser.add_argument('--no-plot-val', action='store_true', help="Will not print vals inside plot area")
@@ -119,6 +121,12 @@ class FastaiTrainer:
         if args.sl_train is not None: data_names.extend(args.sl_train)
         if args.sl_tests is not None: data_names.extend(args.sl_tests)
         for d in data_names: os.path.exists(os.path.join(args.data, d))
+
+        if args.valid_size < 0 or args.full_data:
+            args.full_data, args.valid_size = True, -1
+            assert not args.cross_val, "Both --full-data and --cross-val are set."
+            assert not args.early_stop, "Both --full-data and --early-stop are set."
+            assert not args.reduce_lr_on_plateau, "Both --full-data and --reduce-lr-on-plateau are set."
 
         assert torch.cuda.is_available(), "Cannot run without CUDA device"
         args.bs = args.bs * len(args.gpu_ids) if GPUManager.in_parallel_mode() else args.bs
@@ -247,8 +255,8 @@ class FastaiTrainer:
 
         if self.args.cross_val:
             splitter = cv_splitter(n_splits=self.args.nfolds, shuffle=True, random_state=self.args.seed)
-        elif self.args.valid_size <= 0:
-            print("WARNING: --valid-size is 0, will use merged test sets as validation set")
+        elif self.args.full_data:
+            print("WARNING: Full data set, will use merged test sets as validation set")
             yield 0, (items, items_cls), self.get_test_items(merged=True)
             return
         else:
@@ -263,9 +271,11 @@ class FastaiTrainer:
         :param run: str, enable callback to know which run learner is performing
         :return: list of callbacks
         """
-        cbs = [fv.ReduceLROnPlateau(monitor='valid_loss', min_delta=self.args.reduce_lr_delta, patience=3)]
+        cbs = []
         if GPUManager.is_master_process():  # otherwise creates deadlock
             cbs.append(self.tensorboard_cb(run))
+        if self.args.reduce_lr_on_plateau:
+            cbs.append(fv.ReduceLROnPlateau(monitor='valid_loss', min_delta=self.args.reduce_lr_delta, patience=3))
         if self.args.early_stop:
             cbs.append(self.early_stop_cb())
         return cbs
