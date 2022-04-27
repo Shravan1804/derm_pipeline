@@ -120,9 +120,6 @@ class FastaiTrainer:
         if args.sl_tests is not None: data_names.extend(args.sl_tests)
         for d in data_names: os.path.exists(os.path.join(args.data, d))
 
-        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, args.gpu_ids))
-        args.gpu_ids = list(range(len(args.gpu_ids)))
-
         assert torch.cuda.is_available(), "Cannot run without CUDA device"
         args.bs = args.bs * len(args.gpu_ids) if GPUManager.in_parallel_mode() else args.bs
         # required for segmentation otherwise causes a NCCL error in inference distrib running context
@@ -292,10 +289,13 @@ class FastaiTrainer:
         elif GPUManager.in_distributed_mode():  # auto_lr find causes deadlock in distrib mode
             lr = .002
         else:
+            """
             learn.freeze()
             with GPUManager.running_context(learn, self.args.gpu_ids):
                 lr_min, lr_steep = learn.lr_find(suggestions=True, show_plot=False)
             lr = lr_min / 10
+            """
+            lr = .002
         print("Learning rate is", lr)
         return lr
 
