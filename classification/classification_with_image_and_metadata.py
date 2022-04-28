@@ -72,13 +72,20 @@ class ImageMetadataClassificationTrainer(ImageClassificationTrainer):
         """
         self.metadata_cats = metadata_cats
         super().__init__(args, **kwargs)
+        self.image_to_metadata_dict = self.create_image_to_metadata_dict()
+
+    def create_image_to_metadata_dict(self, impath):
+        """ Creates image to metadata dict
+        :return: dict with image name as keys and corresponding list of metadata as values
+        """
+        raise NotImplementedError
 
     def image_to_metadata(self, impath):
         """Retrieve metadata of image
         :param impath: str, image path
         :return: list, corresponding metadata
         """
-        raise NotImplementedError
+        raise self.image_to_metadata_dict[os.path.basename(impath)]
 
     def customize_datablock(self):
         """Provides experiment specific kwargs for DataBlock

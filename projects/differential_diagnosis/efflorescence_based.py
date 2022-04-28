@@ -45,9 +45,8 @@ class EffsDDTrainer(ImageMetadataClassificationTrainer):
         # place here as base_trainer init will create custom metrics which need all cats
         args.cats = sorted([self.healthy_cat, *args.cats])
         super().__init__(args, efflorescences, **kwargs)
-        self.image_to_effs = self.create_image_to_effs()
 
-    def create_image_to_effs(self):
+    def create_image_to_metadata_dict(self):
         """ Creates image to efflorescence dict
         :return: dict with image name as keys and corresponding list of efflorescences as values
         """
@@ -58,13 +57,6 @@ class EffsDDTrainer(ImageMetadataClassificationTrainer):
             effs = [e for e in self.metadata_cats if (e in r and r[e]) or (e in merge and r[merge[e]].any())]
             image_to_effs[os.path.basename(r['imname'])] = [self.healthy_cat] if len(effs) == 0 else effs
         return image_to_effs
-
-    def image_to_metadata(self, impath):
-        """Retrieve efflorescence of image
-        :param impath: str, image path
-        :return: list, corresponding metadata
-        """
-        return self.image_to_effs[os.path.basename(impath)]
 
     def load_items(self, set_dir):
         """Loads training items from directory. Checks if no effs in which case diagnosis is healthy.
