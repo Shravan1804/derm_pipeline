@@ -161,7 +161,7 @@ class ImageClassificationTrainer(ImageTrainer):
         """Provides experiment specific kwargs for Learner
         :return: kwargs dict
         """
-        kwargs = super().customize_learner()
+        kwargs = super().customize_learner(dls)
         kwargs['metrics'].extend([fv.Precision(average='micro'), fv.Recall(average='micro'), fv.BalancedAccuracy()])
         return kwargs
 
@@ -176,10 +176,10 @@ class ImageClassificationTrainer(ImageTrainer):
             model = EfficientNet.from_pretrained(self.args.model)
             model._fc = torch.nn.Linear(model._fc.in_features, dls.c)
             msplitter = lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params)
-            learn = fv.Learner(dls, model, metrics=metrics, splitter=msplitter, **learn_kwargs)
+            learn = fv.Learner(dls, model, splitter=msplitter, **learn_kwargs)
         else:
             model = getattr(fv, self.args.model)
-            learn = fv.cnn_learner(dls, model, metrics=metrics, **learn_kwargs)
+            learn = fv.cnn_learner(dls, model, **learn_kwargs)
         return self.prepare_learner(learn)
 
     def correct_wl(self, wl_items_with_labels, decoded):

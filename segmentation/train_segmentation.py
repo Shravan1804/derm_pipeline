@@ -195,7 +195,7 @@ class ImageSegmentationTrainer(ImageTrainer):
         :return: dict with argnames and argvalues
         """
         return {
-            'blocks': (fv.ImageBlock, fv.MaskBlock(vocab=self.args.cats)),
+            'blocks': (fv.ImageBlock, fv.MaskBlock(self.args.cats)),
             'get_y': fv.Pipeline([fv.ItemGetter(1), self.load_mask]),
         }
 
@@ -220,7 +220,7 @@ class ImageSegmentationTrainer(ImageTrainer):
         """Provides experiment specific kwargs for Learner
         :return: kwargs dict
         """
-        kwargs = super().customize_learner()
+        kwargs = super().customize_learner(dls)
         kwargs['metrics'].append(fv.foreground_acc)
         return kwargs
 
