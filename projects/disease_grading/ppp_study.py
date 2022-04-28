@@ -1,6 +1,20 @@
+#!/usr/bin/env python
 
+"""ppp.py: Train ppp model."""
 
-#/workspace/data/ppp_grading/ppp_study_segm_splitted_encrypted
+__author__ = "Ludovic Amruthalingam"
+__maintainer__ = "Ludovic Amruthalingam"
+__email__ = "ludovic.amruthalingam@unibas.ch"
+__status__ = "Development"
+__copyright__ = (
+    "Copyright 2021, University of Basel",
+    "Copyright 2021, Lucerne University of Applied Sciences and Arts"
+)
+
+# DGX
+# parallel single gpu
+# python /workspace/code/derm_pipeline/projects/disease_grading/ppp_study.py --encrypted --data /workspace/data/ppp_grading/ppp_study_segm_splitted_encrypted --sl-train train --sl-tests test --exp-name ppp_study --logdir /workspace/logs --gpu-ids 0 --reproducible 2>&1 | tee /workspace/logs/ppp_study.txt
+
 
 import os
 import sys

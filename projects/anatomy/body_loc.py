@@ -12,7 +12,7 @@ __copyright__ = (
 )
 
 # Run on dgx
-# python /workspace/code/derm_pipeline/training/distributed_launch.py --encrypted /workspace/code/derm_pipeline/projects/anatomy/body_loc.py --data /workspace/data/anatomy_project/body_loc/USZ_pipeline_cropped_images_patched_512_encrypted --sl-train strong_labels_train --sl-tests strong_labels_test_balanced510 --progr-size --exp-name body_loc_progr_size_sl_only --logdir /workspace/logs --reproducible 2>&1 | tee /workspace/logs/body_loc.txt
+# python /workspace/code/derm_pipeline/training/distributed_launch.py --encrypted /workspace/code/derm_pipeline/projects/anatomy/body_loc.py --data /workspace/data/anatomy_project/body_loc/USZ_pipeline_cropped_images_patched_512_encrypted --sl-train strong_labels_train --sl-tests strong_labels_test_balanced510 --progr-size --exp-name body_loc --logdir /workspace/logs --reproducible 2>&1 | tee /workspace/logs/body_loc.txt
 
 
 import os

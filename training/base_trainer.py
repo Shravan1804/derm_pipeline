@@ -76,7 +76,6 @@ class FastaiTrainer:
         parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
         parser.add_argument('--early-stop', action='store_true', help="Early stopping during training")
         parser.add_argument('--reduce-lr-on-plateau', action='store_true', help="Reduce lr during training")
-        parser.add_argument('--reduce-lr-delta', type=float, default=.01, help="delta for reduce lr on plateau cb")
         parser.add_argument('--no-plot', action='store_true', help="Will not plot test results (e.g. too many classes)")
         parser.add_argument('--no-plot-val', action='store_true', help="Will not print vals inside plot area")
         parser.add_argument("--metrics-base-fns", type=str, nargs='+', default=['precision', 'recall'], help="metrics")
@@ -87,7 +86,7 @@ class FastaiTrainer:
         parser.add_argument("--num-machines", type=int, default=1, help="number of machines")
 
         parser.add_argument('--seed', type=int, default=pdef.get('--seed', 42), help="Random seed")
-        parser.add_argument('--reproducible', action='store_true', help="Applies seed to make training reproducible")
+        parser.add_argument('--deterministic', action='store_true', help="Sets cudnn backends to deterministic")
         parser.add_argument('--debug-dls', action='store_true', help="Summarize dls then exits")
 
         return parser
@@ -111,6 +110,10 @@ class FastaiTrainer:
         else:
             d += f'_noCV_valid{args.valid_size}'
         d += '_WL' if args.use_wl else '_SL'
+        if args.reduce_lr_on_plateau:
+            d += '_reduce-lr'
+        if args.deterministic:
+            d += '_deterministic'
         d += f'_{custom}_{args.exp_name}'
         return d
 
@@ -120,7 +123,7 @@ class FastaiTrainer:
         :param args: command line args
         """
         common.set_seeds(args.seed)
-        fv.set_seed(args.seed, reproducible=args.reproducible)
+        fv.set_seed(args.seed, reproducible=args.deterministic)
         common.check_dir_valid(args.data)
         data_names = []
         if args.wl_train is not None: data_names.extend(args.wl_train)
@@ -172,6 +175,12 @@ class FastaiTrainer:
         """Get train items, should be extended"""
         raise NotImplementedError
 
+    def customize_learner(self):
+        """Provides experiment specific kwargs for Learner
+        :return: kwargs dict
+        """
+        return {'opt_func': fv.RMSProp if self.args.RMSProp else fv.Adam}
+
     def create_learner(self):
         """Create learner object, should be extended"""
         raise NotImplementedError
@@ -182,6 +191,12 @@ class FastaiTrainer:
         :param tr: tuple of train items and labels
         :param val: tuple of valid items and labels
         :param mpath: str, model weights path, optional
+        """
+        raise NotImplementedError
+
+    def customize_datablock(self):
+        """Provides experiment specific kwargs for DataBlock
+        :return: dict with argnames and argvalues
         """
         raise NotImplementedError
 
@@ -207,15 +222,6 @@ class FastaiTrainer:
         """
         raise NotImplementedError
 
-    def early_stop_cb(self, monitor, min_delta, patience=3):
-        """Creates early stopping callback. Should be extended.
-        :param monitor: str, which metric to monitor
-        :param min_delta: float, min difference
-        :param patience: int, how many epochs before stopping
-        :return: Early stopping callback
-        """
-        raise NotImplementedError
-
     def extract_run_params(self, run_info):
         """Extract run parameters from run info string. Should be extended.
         :param run_info: str, run info string
@@ -238,15 +244,6 @@ class FastaiTrainer:
     def tensorboard_cb(self, run_info):
         """Creates tensorboard callback for logging. Should be extended."""
         raise NotImplementedError
-
-    def get_learner_kwargs(self):
-        """Add custom learner kwargs here. Currently optimizer selection.
-        :return kwargs dict with chosen custom arguments"""
-        if self.args.RMSProp:
-            opt_func = fv.RMSProp
-        else:
-            opt_func = fv.Adam
-        return {'opt_func': opt_func}
 
     def split_data(self, items, items_cls):
         """Splits train items and labels in fold. Yields split indices.
@@ -281,9 +278,9 @@ class FastaiTrainer:
         if GPUManager.is_master_process():  # otherwise creates deadlock
             cbs.append(self.tensorboard_cb(run))
         if self.args.reduce_lr_on_plateau:
-            cbs.append(fv.ReduceLROnPlateau(monitor='valid_loss', min_delta=self.args.reduce_lr_delta, patience=3))
+            cbs.append(fv.ReduceLROnPlateau(monitor='valid_loss', min_delta=.01, patience=3))
         if self.args.early_stop:
-            cbs.append(self.early_stop_cb())
+            cbs.append(fv.EarlyStoppingCallback(monitor='valid_loss', min_delta=.01, patience=3))
         return cbs
 
     def prepare_learner(self, learn):

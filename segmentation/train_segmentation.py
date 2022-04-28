@@ -190,16 +190,14 @@ class ImageSegmentationTrainer(ImageTrainer):
             save_path = self.plot_save_path(test_path, run, show_val, custom="_coco")
             CustomCocoEval.plot_coco_eval(self.coco_param_labels, cocoeval, figsize, save_path, show_val)
 
-    def create_dls(self, tr, val, bs, size):
-        """Create segmentation dataloaders
-        :param tr: tuple of fastai lists, (items, labels), training split
-        :param val: tuple of fastai lists, (items, labels), validation split
-        :param bs: int, batch size
-        :param size: int, input size
-        :return: train/valid dataloaders
+    def customize_datablock(self):
+        """Provides experiment specific kwargs for DataBlock
+        :return: dict with argnames and argvalues
         """
-        blocks = fv.ImageBlock, fv.MaskBlock(self.args.cats)
-        return self.create_dls_from_lst(blocks, tr, val, bs, size, get_y=self.load_mask)
+        return {
+            'blocks': (fv.ImageBlock, fv.MaskBlock(vocab=self.args.cats)),
+            'get_y': fv.Pipeline([fv.ItemGetter(1), self.load_mask]),
+        }
 
     def get_class_weights(self, train_items):
         """Compute class weights based on train items labels pixel frequency
@@ -218,14 +216,20 @@ class ImageSegmentationTrainer(ImageTrainer):
         #return torch.FloatTensor(class_counts.max() / class_counts)
         return torch.FloatTensor(1 / np.log(class_counts))
 
+    def customize_learner(self, dls):
+        """Provides experiment specific kwargs for Learner
+        :return: kwargs dict
+        """
+        kwargs = super().customize_learner()
+        kwargs['metrics'].append(fv.foreground_acc)
+        return kwargs
+
     def create_learner(self, dls):
         """Creates learner with callbacks
         :param dls: train/valid dataloaders
         :return: learner
         """
-        learn_kwargs = self.get_learner_kwargs(dls)
-        metrics = list(self.cust_metrics.values()) + [fv.foreground_acc]
-        learn = fv.unet_learner(dls, getattr(fv, self.args.model), metrics=metrics, **learn_kwargs)
+        learn = fv.unet_learner(dls, getattr(fv, self.args.model), **self.customize_learner(dls))
         return self.prepare_learner(learn)
 
     def correct_wl(self, wl_items_with_labels, preds):
@@ -238,15 +242,6 @@ class ImageSegmentationTrainer(ImageTrainer):
         labels = [mask_utils.non_binary_mask_to_rles(self.load_image_item(pred.numpy())) for pred in preds]
         # preds size is self.args.input_size but wl_items are orig size => first item_tfms should resize the input
         return wl_items, fv.L(labels)
-
-    def early_stop_cb(self, monitor='foreground_acc', min_delta=0.01, patience=3):
-        """Creates early stopping callback
-        :param monitor: str, which metric to monitor
-        :param min_delta: float, min difference
-        :param patience: int, how many epochs before stopping
-        :return: Early stopping callback
-        """
-        return EarlyStoppingCallback(monitor=monitor, min_delta=min_delta, patience=patience)
 
     @staticmethod
     def load_pretrained_backbone_weights(weights_path, model):

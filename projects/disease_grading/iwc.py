@@ -15,7 +15,7 @@ __copyright__ = (
 # distributed
 # python TODO
 # parallel single gpu
-# python /workspace/code/derm_pipeline/projects/ppp/iwc.py --encrypted --data /workspace/data/disease_grading/iwc/segm_iwc_with_objs_splitted_patched_512_encrypted --sl-train train --sl-tests test --exp-name iwc --logdir /workspace/logs --gpu-ids 0 --reproducible 2>&1 | tee /workspace/logs/iwc.txt
+# python /workspace/code/derm_pipeline/projects/disease_grading/iwc.py --encrypted --data /workspace/data/disease_grading/iwc/segm_iwc_with_objs_splitted_patched_512_encrypted --sl-train train --sl-tests test --exp-name iwc --logdir /workspace/logs --gpu-ids 0 --reproducible 2>&1 | tee /workspace/logs/iwc.txt
 
 import os
 import sys

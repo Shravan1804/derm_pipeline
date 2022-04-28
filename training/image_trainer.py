@@ -143,11 +143,13 @@ class ImageTrainer(FastaiTrainer):
             loss_func = None
         return loss_func
 
-    def get_learner_kwargs(self, dls):
-        """Add custom learner kwargs here. Here adds custom loss function.
-        :return kwargs dict with chosen custom arguments"""
-        kwargs = super().get_learner_kwargs()
+    def customize_learner(self, dls):
+        """Provides experiment specific kwargs for Learner
+        :return: kwargs dict
+        """
+        kwargs = super().customize_learner()
         kwargs['loss_func'] = self.get_loss_fn(dls)
+        kwargs['metrics'] = list(self.cust_metrics.values())
         return kwargs
 
     def get_cats_idxs(self):
@@ -333,7 +335,17 @@ class ImageTrainer(FastaiTrainer):
         elif load_im_array: return cimg.load_img(item)
         else: return item
 
-    def create_dls_from_lst(self, blocks, tr, val, bs, size, get_x=None, get_y=None, **kwargs):
+    def create_data_augm_tfms(self, size):
+        """Creates image augmentation transforms
+        :param size: int, final size of images
+        :return: list of transform operations
+        """
+        tfms = fv.aug_transforms(size=size, flip_vert=True, max_rotate=45)
+        if not self.args.no_norm:
+            tfms.append(fv.Normalize.from_stats(*fv.imagenet_stats))
+        return tfms
+
+    def create_dls(self, tr, val, bs, size, **kwargs):
         """Create train/valid dataloaders
         :param blocks: Problem specific data blocks
         :param tr: tuple of train items and labels
@@ -345,16 +357,16 @@ class ImageTrainer(FastaiTrainer):
         :param kwargs: dict, dataloaders kwargs
         :return: train/valid dataloaders
         """
-        tfms = fv.aug_transforms(size=size, flip_vert=True, max_rotate=45)
-        if not self.args.no_norm:
-            tfms.append(fv.Normalize.from_stats(*fv.imagenet_stats))
-        d = fv.DataBlock(blocks=blocks,
-                         get_items=lambda s: list(zip(*tuple(v+t for v, t in zip(val, tr)))),
-                         get_x=fv.Pipeline([fv.ItemGetter(0), self.load_image_item if get_x is None else get_x]),
-                         get_y=fv.Pipeline([fv.ItemGetter(1), fv.noop if get_y is None else get_y]),
-                         splitter=fv.IndexSplitter(list(range(len(val[0])))),
-                         item_tfms=fv.Resize(int(1.5*self.args.input_size), method=fv.ResizeMethod.Squish),
-                         batch_tfms=tfms)
+        datablock_args = {
+            'get_items': lambda s: list(zip(*tuple(v+t for v, t in zip(val, tr)))),
+            'get_x': fv.Pipeline([fv.ItemGetter(0), self.load_image_item]),
+            'get_y': fv.Pipeline([fv.ItemGetter(1)]),
+            'splitter': fv.IndexSplitter(list(range(len(val[0])))),
+            'item_tfms': fv.Resize(int(1.5*self.args.input_size), method=fv.ResizeMethod.Squish),
+            'batch_tfms': self.create_data_augm_tfms(size)
+        }
+        datablock_args.update(self.customize_datablock())
+        d = fv.DataBlock(**datablock_args)
         if self.args.debug_dls:
             if train_utils.GPUManager.is_master_process(): d.summary(self.args.data, bs=bs)
             sys.exit()

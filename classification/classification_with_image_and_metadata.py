@@ -93,8 +93,9 @@ class ClassifWithMetadata(nn.Sequential):
         out = self.head[2:](x)
         return out
 
-    def create_fastai_learner(self, dls, loss_func=None):
-        learn = fv.Learner(dls, self, loss_func, splitter=self.model_meta['split'])
+    def create_fastai_learner(self, dls, **kwargs):
+        learn = fv.Learner(dls, self, splitter=self.model_meta['split'], **kwargs)
+        loss_func = kwargs['loss_func']
         if loss_func is None: learn.loss_func = learn.loss_func[-1]
         print("Using", learn.loss_func)
         learn.freeze()

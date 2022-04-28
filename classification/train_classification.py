@@ -120,6 +120,12 @@ class ImageClassificationTrainer(ImageTrainer):
         """
         return classif_utils.conf_mat(fv.TensorBase(targs), fv.TensorBase(decoded), self.args.cats)
 
+    def customize_datablock(self):
+        """Provides experiment specific kwargs for DataBlock
+        :return: dict with argnames and argvalues
+        """
+        return {'blocks': (fv.ImageBlock, fv.CategoryBlock(vocab=self.args.cats))}
+
     def create_dls(self, tr, val, bs, size):
         """Create classification dataloaders
         :param tr: tuple of fastai lists, (items, labels), training split
@@ -128,12 +134,11 @@ class ImageClassificationTrainer(ImageTrainer):
         :param size: int, input size
         :return: train/valid dataloaders
         """
-        blocks = fv.ImageBlock, fv.CategoryBlock(vocab=self.args.cats)
+        kwargs = {}
         if self.args.oversample:
             kwargs = {'dl_type': fv.WeightedDL, 'wgts': self.get_train_items_weights(list(zip(*tr))),
                       'dl_kwargs': [{}, {'cls': fv.TfmdDL}]}
-        else: kwargs = {}
-        return self.create_dls_from_lst(blocks, tr, val, bs, size, **kwargs)
+        return super().create_dls(tr, val, bs, size, **kwargs)
 
     def get_class_weights(self, train_items):
         """Compute class weights based on train items labels frequency
@@ -152,14 +157,20 @@ class ImageClassificationTrainer(ImageTrainer):
         labels, class_weights = [x[1] for x in train_items], self.get_class_weights(train_items).numpy()
         return class_weights[fv.CategoryMap(self.args.cats).map_objs(labels)]
 
+    def customize_learner(self, dls):
+        """Provides experiment specific kwargs for Learner
+        :return: kwargs dict
+        """
+        kwargs = super().customize_learner()
+        kwargs['metrics'].extend([fv.Precision(average='micro'), fv.Recall(average='micro'), fv.BalancedAccuracy()])
+        return kwargs
+
     def create_learner(self, dls):
         """Creates learner with callbacks
         :param dls: train/valid dataloaders
         :return: learner
         """
-        learn_kwargs = self.get_learner_kwargs(dls)
-        metrics = list(self.cust_metrics.values())
-        metrics += [fv.Precision(average='micro'), fv.Recall(average='micro')] + [fv.accuracy]  # acc for early stop cb
+        learn_kwargs = self.customize_learner(dls)
         if "efficientnet" in self.args.model:
             from efficientnet_pytorch import EfficientNet
             model = EfficientNet.from_pretrained(self.args.model)
@@ -182,15 +193,6 @@ class ImageClassificationTrainer(ImageTrainer):
         corr = np.array(labels) != decoded
         labels[corr] = np.array([p for p in decoded[corr]])
         return wl_items, fv.L(labels.tolist())
-
-    def early_stop_cb(self, monitor='accuracy', min_delta=0.01, patience=3):
-        """Creates early stopping callback
-        :param monitor: str, which metric to monitor
-        :param min_delta: float, min difference
-        :param patience: int, how many epochs before stopping
-        :return: Early stopping callback
-        """
-        return EarlyStoppingCallback(monitor=monitor, min_delta=min_delta, patience=patience)
 
     def compute_metrics(self, interp):
         """Apply metrics functions on test set predictions

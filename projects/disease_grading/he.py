@@ -15,7 +15,7 @@ __copyright__ = (
 # distributed
 # python TODO
 # parallel single gpu
-# python /workspace/code/derm_pipeline/projects/ppp/he.py --encrypted --data /workspace/data/disease_grading/eczema/eczema_splitted_patched_512_encrypted --sl-train train --sl-tests test --exp-name he --logdir /workspace/logs --gpu-ids 0 --reproducible 2>&1 | tee /workspace/logs/he.txt
+# python /workspace/code/derm_pipeline/projects/disease_grading/he.py --encrypted --data /workspace/data/disease_grading/eczema/eczema_splitted_patched_512_encrypted --sl-train train --sl-tests test --exp-name he --logdir /workspace/logs --gpu-ids 0 --reproducible 2>&1 | tee /workspace/logs/he.txt
 
 import os
 import sys

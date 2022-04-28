@@ -15,7 +15,7 @@ __copyright__ = (
 # distributed
 # python /workspace/code/derm_pipeline/training/distributed_launch.py --encrypted /workspace/code/derm_pipeline/projects/ppp/ppp.py --data /workspace/data/disease_grading/ppp_grading/PPP_whs_corr_splitted_no_patient_leak_patched_512_encrypted --sl-train train --sl-tests test --exp-name ppp --logdir /workspace/logs --reproducible 2>&1 | tee /workspace/logs/ppp.txt
 # parallel single gpu
-# python /workspace/code/derm_pipeline/projects/ppp/ppp.py --encrypted --data /workspace/data/disease_grading/ppp_grading/PPP_whs_corr_splitted_no_patient_leak_patched_512_encrypted --sl-train train --sl-tests test --exp-name ppp --logdir /workspace/logs --gpu-ids 0 --reproducible 2>&1 | tee /workspace/logs/ppp.txt
+# python /workspace/code/derm_pipeline/projects/disease_grading/ppp.py --encrypted --data /workspace/data/disease_grading/ppp_grading/PPP_whs_corr_splitted_no_patient_leak_patched_512_encrypted --sl-train train --sl-tests test --exp-name ppp --logdir /workspace/logs --gpu-ids 0 --reproducible 2>&1 | tee /workspace/logs/ppp.txt
 
 import os
 import sys
