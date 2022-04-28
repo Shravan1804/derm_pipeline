@@ -13,13 +13,13 @@ __copyright__ = (
 
 # DGX
 # parallel single gpu
-# python /workspace/code/derm_pipeline/projects/disease_grading/ppp_study.py --encrypted --data /workspace/data/ppp_grading/ppp_study_segm_splitted_encrypted --sl-train train --sl-tests test --exp-name ppp_study --logdir /workspace/logs --gpu-ids 0 --reproducible 2>&1 | tee /workspace/logs/ppp_study.txt
+# python /workspace/code/derm_pipeline/projects/disease_grading/ppp_study.py --encrypted --data /workspace/data/disease_grading/ppp_grading/ppp_study_segm_splitted_encrypted --exp-name ppp_study --logdir /workspace/logs --gpu-ids 0 --reproducible 2>&1 | tee /workspace/logs/ppp_study.txt
 
 
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir, os.path.pardir)))
 from general import common
 from projects.disease_grading.ppp import PPPTrainer
 

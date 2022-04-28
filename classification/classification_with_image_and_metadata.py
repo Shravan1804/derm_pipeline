@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""classification_with_image_and_metadata.py: Model arch for image features + metadata classification"""
+"""classification_with_image_and_metadata.py: Trainer and model arch for image features + metadata classification"""
 
 __author__ = "Ludovic Amruthalingam"
 __maintainer__ = "Ludovic Amruthalingam"
@@ -11,11 +11,110 @@ __copyright__ = (
     "Copyright 2021, Lucerne University of Applied Sciences and Arts"
 )
 
+import os
+import sys
 from collections import OrderedDict
 
 import torch
 from torch import nn
 import fastai.vision.all as fv
+
+sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
+from general import common
+import classification.classification_utils as classif_utils
+
+
+class ImageMetadataClassificationTrainer(ImageClassificationTrainer):
+    @staticmethod
+    def get_argparser(desc="Image and metadata classification trainer arguments", pdef=dict(), phelp=dict()):
+        """Creates argparser
+        :param desc: str, argparser description
+        :param pdef: dict, default arguments values
+        :param phelp: dict, argument help strings
+        :return: argparser
+        """
+        parser = super(ImageMetadataClassificationTrainer,
+                       ImageMetadataClassificationTrainer).get_argparser(desc, pdef, phelp)
+        parser.add_argument('--metadata-labels', type=str, help="Image to metadata label file")
+        parser.add_argument('--image-only', action='store_true', help="Do not use metadata in training")
+        parser.add_argument('--nembed', type=int, default=64, help="Embedding size for metadata. -1 for no embedding")
+        return parser
+
+    @staticmethod
+    def get_exp_logdir(args, custom=""):
+        """Creates experiment log dir
+        :param args: command line arguments
+        :param custom: custom string to be added in experiment log dirname
+        :return: str, experiment log dir
+        """
+        d = ''
+        if args.image_only:
+            d += '_only-img'
+        else:
+            d += f'_embed{args.nembed}' if args.nembed > 0 else f'_no-embed'
+        return super(ImageMetadataClassificationTrainer,
+                     ImageMetadataClassificationTrainer).get_exp_logdir(args, custom=f'{d}_{custom}')
+
+    @staticmethod
+    def prepare_training(args):
+        """Sets up training, check args validity.
+        :param args: command line args
+        """
+        args.exp_name = "im-meta_" + args.exp_name
+        common.check_file_valid(args.metadata_labels)
+        super(ImageMetadataClassificationTrainer,
+              ImageMetadataClassificationTrainer).prepare_training(args)
+
+    def __init__(self, args, metadata_cats, **kwargs):
+        """Creates trainer
+        :param args: command line args
+        """
+        self.metadata_cats = metadata_cats
+        super().__init__(args, **kwargs)
+
+    def image_to_metadata(self, impath):
+        """Retrieve metadata of image
+        :param impath: str, image path
+        :return: list, corresponding metadata
+        """
+        raise NotImplementedError
+
+    def customize_datablock(self):
+        """Provides experiment specific kwargs for DataBlock
+        :return: dict with argnames and argvalues
+        """
+        if self.args.image_only:
+            return super().customize_datablock()
+        else:
+            return {
+                'blocks': (fv.ImageBlock, fv.MultiCategoryBlock(vocab=self.metadata_cats),
+                           fv.CategoryBlock(vocab=self.args.cats)),
+                'n_inp': 2,
+                'get_x': (fv.Pipeline([fv.ItemGetter(0), self.load_image_item]),
+                          fv.Pipeline([fv.ItemGetter(0), self.image_to_metadata])),
+            }
+
+    def create_learner(self, dls):
+        """Creates learner with callbacks
+        :param dls: train/valid dataloaders
+        :return: learner
+        """
+        if self.args.image_only:
+            return super().create_learner(dls)
+        else:
+            m = ClassifWithMetadata(len(self.metadata_cats), getattr(fv, self.args.model), len(self.args.cats),
+                                    embed_dim=self.args.nembed)
+            learn = m.create_fastai_learner(dls, **self.customize_learner(dls))
+            return self.prepare_learner(learn)
+
+    def compute_metrics(self, interp):
+        """Apply metrics functions on test set predictions
+        :param interp: namespace with predictions, targs, decoded preds, test set predictions
+        :return: same namespace but with metrics results dict
+        """
+        if not self.args.image_only:
+            interp.dl.vocab = interp.dl.vocab[-1]
+        return super().compute_metrics(interp)
 
 
 def dec2bin(x, bits):

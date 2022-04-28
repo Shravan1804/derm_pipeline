@@ -22,48 +22,18 @@ import fastai.vision.all as fv
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir, os.path.pardir)))
 from general import common
-from classification.train_classification import ImageClassificationTrainer
-from classification.classification_with_image_and_metadata import ClassifWithMetadata
+from classification.classification_with_image_and_metadata import ImageMetadataClassificationTrainer
 
 
-class EffsDDTrainer(ImageClassificationTrainer):
-    @staticmethod
-    def get_argparser(desc="Efflorescence based differential diagnosis trainer arguments", pdef=dict(), phelp=dict()):
-        """Creates argparser
-        :param desc: str, argparser description
-        :param pdef: dict, default arguments values
-        :param phelp: dict, argument help strings
-        :return: argparser
-        """
-        parser = super(EffsDDTrainer, EffsDDTrainer).get_argparser(desc, pdef, phelp)
-        parser.add_argument('--eff-labels', type=str, help="Efflorescence label file")
-        parser.add_argument('--image-only', action='store_true', help="Do not use efflorescence in training")
-        parser.add_argument('--nembed', type=int, default=64, help="Embedding size for effs. -1 for no embedding")
-        return parser
-
-    @staticmethod
-    def get_exp_logdir(args, custom=""):
-        """Creates experiment log dir
-        :param args: command line arguments
-        :param custom: custom string to be added in experiment log dirname
-        :return: str, experiment log dir
-        """
-        d = ''
-        if args.image_only:
-            d += '_only-img'
-        else:
-            d += f'_embed{args.nembed}' if args.nembed > 0 else f'_no-embed'
-        return super(EffsDDTrainer, EffsDDTrainer).get_exp_logdir(args, custom=f'{d}_{custom}')
-
+class EffsDDTrainer(ImageMetadataClassificationTrainer):
     @staticmethod
     def prepare_training(args):
         """Sets up training, check args validity.
         :param args: command line args
         """
         args.exp_name = "effs_dd_" + args.exp_name
-        if args.eff_labels is None:
-            args.eff_labels = os.path.join(args.data, "labels_encrypted.p" if args.encrypted else "labels.p")
-        common.check_file_valid(args.eff_labels)
+        if args.metadata_labels is None:
+            args.metadata_labels = os.path.join(args.data, "labels_encrypted.p" if args.encrypted else "labels.p")
         super(EffsDDTrainer, EffsDDTrainer).prepare_training(args)
 
     def __init__(self, args, **kwargs):
@@ -71,10 +41,10 @@ class EffsDDTrainer(ImageClassificationTrainer):
         :param args: command line args
         """
         self.healthy_cat = 'healthy'
-        self.efflorescences = sorted([self.healthy_cat, "erosion", "macule", "papule", "patch", "plaque", "scales"])
+        efflorescences = sorted([self.healthy_cat, "erosion", "macule", "papule", "patch", "plaque", "scales"])
         # place here as base_trainer init will create custom metrics which need all cats
         args.cats = sorted([self.healthy_cat, *args.cats])
-        super().__init__(args, **kwargs)
+        super().__init__(args, efflorescences, **kwargs)
         self.image_to_effs = self.create_image_to_effs()
 
     def create_image_to_effs(self):
@@ -89,19 +59,12 @@ class EffsDDTrainer(ImageClassificationTrainer):
             image_to_effs[os.path.basename(r['imname'])] = [self.healthy_cat] if len(effs) == 0 else effs
         return image_to_effs
 
-    def get_effs(self, impath):
+    def image_to_metadata(self, impath):
         """Retrieve efflorescence of image
         :param impath: str, image path
-        :return: list, corresponding efflorescences
+        :return: list, corresponding metadata
         """
         return self.image_to_effs[os.path.basename(impath)]
-
-    def eff1hot(self, effs):
-        """1 hot encoding efflorescences
-        :param effs: list, efflorescences to encode
-        :return: list with 1hot encoding of provided efflorescences
-        """
-        return [int(e in effs) for e in self.efflorescences]
 
     def load_items(self, set_dir):
         """Loads training items from directory. Checks if no effs in which case diagnosis is healthy.
@@ -112,42 +75,6 @@ class EffsDDTrainer(ImageClassificationTrainer):
         h = [self.healthy_cat]
         return impaths, fv.L([l if self.get_effs(p) != h else h[0] for p, l in zip(impaths, labels)])
 
-    def customize_datablock(self):
-        """Provides experiment specific kwargs for DataBlock
-        :return: dict with argnames and argvalues
-        """
-        if self.args.image_only:
-            return super().customize_datablock()
-        else:
-            return {
-                'blocks': (fv.ImageBlock, fv.MultiCategoryBlock(vocab=self.efflorescences),
-                           fv.CategoryBlock(vocab=self.args.cats)),
-                'n_inp': 2,
-                'get_x': (fv.Pipeline([fv.ItemGetter(0), self.load_image_item]),
-                          fv.Pipeline([fv.ItemGetter(0), self.get_effs])),
-            }
-
-    def create_learner(self, dls):
-        """Creates learner with callbacks
-        :param dls: train/valid dataloaders
-        :return: learner
-        """
-        if self.args.image_only:
-            return super().create_learner(dls)
-        else:
-            m = ClassifWithMetadata(len(self.efflorescences), getattr(fv, self.args.model), len(self.args.cats),
-                                    embed_dim=self.args.nembed)
-            learn = m.create_fastai_learner(dls, **self.customize_learner(dls))
-            return self.prepare_learner(learn)
-
-    def compute_metrics(self, interp):
-        """Apply metrics functions on test set predictions
-        :param interp: namespace with predictions, targs, decoded preds, test set predictions
-        :return: same namespace but with metrics results dict
-        """
-        if not self.args.image_only:
-            interp.dl.vocab = interp.dl.vocab[-1]
-        return super().compute_metrics(interp)
 
 def main(args):
     """Creates efflorescence based differential diagnosis trainer and launch training
