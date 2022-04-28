@@ -22,6 +22,7 @@ import fastai.vision.all as fv
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common
 import classification.classification_utils as classif_utils
+from classification.train_classification import ImageClassificationTrainer
 
 
 class ImageMetadataClassificationTrainer(ImageClassificationTrainer):

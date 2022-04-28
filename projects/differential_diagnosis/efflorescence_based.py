@@ -51,11 +51,11 @@ class EffsDDTrainer(ImageMetadataClassificationTrainer):
         """ Creates image to efflorescence dict
         :return: dict with image name as keys and corresponding list of efflorescences as values
         """
-        df_labels = pd.read_pickle(self.args.eff_labels)
+        df_labels = pd.read_pickle(self.args.metadata_labels)
         merge = {'erosion': ['atrophy', 'fissure'], 'scales': ['crust'], 'plaque': ['pustule', 'vesicle']}
         image_to_effs = {}
         for rid, r in df_labels.iterrows():
-            effs = [e for e in self.efflorescences if (e in r and r[e]) or (e in merge and r[merge[e]].any())]
+            effs = [e for e in self.metadata_cats if (e in r and r[e]) or (e in merge and r[merge[e]].any())]
             image_to_effs[os.path.basename(r['imname'])] = [self.healthy_cat] if len(effs) == 0 else effs
         return image_to_effs
 
@@ -73,7 +73,7 @@ class EffsDDTrainer(ImageMetadataClassificationTrainer):
         """
         impaths, labels = super().load_items(set_dir)
         h = [self.healthy_cat]
-        return impaths, fv.L([l if self.get_effs(p) != h else h[0] for p, l in zip(impaths, labels)])
+        return impaths, fv.L([l if self.image_to_metadata(p) != h else h[0] for p, l in zip(impaths, labels)])
 
 
 def main(args):
