@@ -12,7 +12,7 @@ __copyright__ = (
 )
 
 # Run on dgx
-# python /workspace/code/derm_pipeline/training/distributed_launch.py --encrypted /workspace/code/derm_pipeline/projects/differential_diagnosis/efflorescence_based.py --data /workspace/data/diff_diags/hands_splitted_encrypted --sl-train train --sl-tests test --exp-name eff_based_dd --logdir /workspace/logs --reproducible 2>&1 | tee /workspace/logs/effs_dd.txt
+# python /workspace/code/derm_pipeline/training/distributed_launch.py --encrypted /workspace/code/derm_pipeline/projects/differential_diagnosis/efflorescence_based.py --data /workspace/data/diff_diags/hands_splitted_encrypted --exp-name eff_based_dd --logdir /workspace/logs --reproducible --gpu-ids --full-precision 0 2>&1 | tee /workspace/logs/effs_dd.txt
 
 import os
 import sys
@@ -36,7 +36,7 @@ class EffsDDTrainer(ImageClassificationTrainer):
         :return: argparser
         """
         parser = super(EffsDDTrainer, EffsDDTrainer).get_argparser(desc, pdef, phelp)
-        parser.add_argument('--eff-labels', type=str, default="labels_encrypted.p", help="Efflorescence label file")
+        parser.add_argument('--eff-labels', type=str, help="Efflorescence label file")
         parser.add_argument('--image-only', action='store_true', help="Do not use efflorescence in training")
         parser.add_argument('--nembed', type=int, default=64, help="Embedding size for effs. -1 for no embedding")
         return parser
@@ -61,19 +61,20 @@ class EffsDDTrainer(ImageClassificationTrainer):
         :param args: command line args
         """
         args.exp_name = "effs_dd_" + args.exp_name
-        if not os.path.exists(args.eff_labels):
-            args.eff_labels = os.path.join(args.data, args.eff_labels)
-            common.check_file_valid(args.eff_labels)
+        if args.eff_labels is None:
+            args.eff_labels = os.path.join(args.data, "labels_encrypted.p" if args.encrypted else "labels.p")
+        common.check_file_valid(args.eff_labels)
         super(EffsDDTrainer, EffsDDTrainer).prepare_training(args)
 
     def __init__(self, args, **kwargs):
         """Creates trainer
         :param args: command line args
         """
-        super().__init__(args, **kwargs)
         self.healthy_cat = 'healthy'
-        self.args.cats = sorted([self.healthy_cat, *self.args.cats])
         self.efflorescences = sorted([self.healthy_cat, "erosion", "macule", "papule", "patch", "plaque", "scales"])
+        # place here as base_trainer init will create custom metrics which need all cats
+        args.cats = sorted([self.healthy_cat, *args.cats])
+        super().__init__(args, **kwargs)
         self.image_to_effs = self.create_image_to_effs()
 
     def create_image_to_effs(self):
@@ -83,7 +84,7 @@ class EffsDDTrainer(ImageClassificationTrainer):
         df_labels = pd.read_pickle(self.args.eff_labels)
         merge = {'erosion': ['atrophy', 'fissure'], 'scales': ['crust'], 'plaque': ['pustule', 'vesicle']}
         image_to_effs = {}
-        for r in df_labels.iterrows():
+        for rid, r in df_labels.iterrows():
             effs = [e for e in self.efflorescences if (e in r and r[e]) or (e in merge and r[merge[e]].any())]
             image_to_effs[os.path.basename(r['imname'])] = [self.healthy_cat] if len(effs) == 0 else effs
         return image_to_effs
@@ -116,7 +117,7 @@ class EffsDDTrainer(ImageClassificationTrainer):
         :return: dict with argnames and argvalues
         """
         if self.args.image_only:
-            return super().custom_datablock_args()
+            return super().customize_datablock()
         else:
             return {
                 'blocks': (fv.ImageBlock, fv.MultiCategoryBlock(vocab=self.efflorescences),
@@ -134,10 +135,19 @@ class EffsDDTrainer(ImageClassificationTrainer):
         if self.args.image_only:
             return super().create_learner(dls)
         else:
-            m = ClassifWithMetadata(len(self.efflorescences), getattr(fv, self.args.model), len(self.args.cats))
+            m = ClassifWithMetadata(len(self.efflorescences), getattr(fv, self.args.model), len(self.args.cats),
+                                    embed_dim=self.args.nembed)
             learn = m.create_fastai_learner(dls, **self.customize_learner(dls))
             return self.prepare_learner(learn)
 
+    def compute_metrics(self, interp):
+        """Apply metrics functions on test set predictions
+        :param interp: namespace with predictions, targs, decoded preds, test set predictions
+        :return: same namespace but with metrics results dict
+        """
+        if not self.args.image_only:
+            interp.dl.vocab = interp.dl.vocab[-1]
+        return super().compute_metrics(interp)
 
 def main(args):
     """Creates efflorescence based differential diagnosis trainer and launch training
