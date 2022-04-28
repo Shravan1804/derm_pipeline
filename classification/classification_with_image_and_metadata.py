@@ -85,7 +85,7 @@ class ImageMetadataClassificationTrainer(ImageClassificationTrainer):
         :param impath: str, image path
         :return: list, corresponding metadata
         """
-        raise self.image_to_metadata_dict[os.path.basename(impath)]
+        return self.image_to_metadata_dict[os.path.basename(impath)]
 
     def customize_datablock(self):
         """Provides experiment specific kwargs for DataBlock

@@ -60,6 +60,13 @@ class LocationDDTrainer(ImageMetadataClassificationTrainer):
             image_to_locs[os.path.basename(r['impaths'])] = im_locs
         return image_to_locs
 
+    def get_image_cls(self, img_path):
+        """Assumes image class is its directory name
+        :param img_path: str or Path, image path
+        :return: str, class name of image
+        """
+        return super().get_image_cls(img_path).split('__')[0]
+
 
 def main(args):
     """Creates location based differential diagnosis trainer and launch training

@@ -20,14 +20,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.pat
 from training import metrics
 
 
-def get_image_cls(img_path):
-    """Assumes image class is its directory name
-    :param img_path: str or Path, image path
-    :return: str, class name of image
-    """
-    return os.path.basename(os.path.dirname(img_path)) if type(img_path) is str else img_path.parent.name
-
-
 def cls_perf(perf, inp, targ, cls_idx, cats, axis=-1):
     """Function used to compute classification performance
     :param perf: function to call on inp and targ

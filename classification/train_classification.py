@@ -77,6 +77,13 @@ class ImageClassificationTrainer(ImageTrainer):
         """
         super().__init__(args, stratify, full_img_sep, **kwargs)
 
+    def get_image_cls(self, img_path):
+        """Assumes image class is its directory name
+        :param img_path: str or Path, image path
+        :return: str, class name of image
+        """
+        return os.path.basename(os.path.dirname(img_path)) if type(img_path) is str else str(img_path.parent.name)
+
     def load_items(self, set_dir):
         """Loads training items from directory
         :param set_dir: str, directory containing training items
@@ -84,14 +91,14 @@ class ImageClassificationTrainer(ImageTrainer):
         """
         path = os.path.join(self.args.data, set_dir)
         images = common.list_files_in_dirs(path, full_path=True, posix_path=True)
-        return fv.L(images), fv.L([classif_utils.get_image_cls(img_path) for img_path in images])
+        return fv.L(images), fv.L([self.get_image_cls(img_path) for img_path in images])
 
     def get_full_img_cls(self, img_path):
-        """Get label of full image
+        """Get label of full image (useful when working with patches)
         :param img_path: str, full image path
         :return: str, label
         """
-        return classif_utils.get_image_cls(img_path)
+        return self.get_image_cls(img_path)
 
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn):
         """Generates metrics functions for the individual categories
