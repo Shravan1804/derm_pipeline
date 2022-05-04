@@ -184,6 +184,13 @@ class ImageClassificationTrainer(ImageTrainer):
             model._fc = torch.nn.Linear(model._fc.in_features, dls.c)
             msplitter = lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params)
             learn = fv.Learner(dls, model, splitter=msplitter, **learn_kwargs)
+        if "ssl" in self.args.model:
+            from self_supervised_dermatology.embedder import Embedder
+            ssl_model = self.args.model.replace('ssl/', '')
+            model = Embedder.load_resnet(ssl_model)
+            model = torch.nn.Sequential(model, torch.nn.Linear(2048, dls.c))
+            msplitter = lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params)
+            learn = fv.Learner(dls, model, splitter=msplitter, **learn_kwargs)
         else:
             model = getattr(fv, self.args.model)
             learn = fv.cnn_learner(dls, model, **learn_kwargs)
@@ -229,4 +236,3 @@ if __name__ == '__main__':
     ImageClassificationTrainer.prepare_training(args)
 
     common.time_method(main, args)
-

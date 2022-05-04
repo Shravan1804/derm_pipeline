@@ -18,7 +18,11 @@ __copyright__ = (
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir, os.path.pardir)))
+sys.path.insert(
+    0,
+    os.path.abspath(
+        os.path.join(__file__, os.path.pardir, os.path.pardir,
+                     os.path.pardir)))
 from general import common
 from classification.train_classification import ImageClassificationTrainer
 
@@ -32,11 +36,16 @@ def main(args):
 
 
 if __name__ == '__main__':
-    defaults = {'--bs': 32, '--model': 'efficientnet-b2', '--input-size': 260, '--fepochs': 10, '--epochs': 30}
-    parser = ImageClassificationTrainer.get_argparser(desc="Coarse loc classification", pdef=defaults)
+    defaults = {
+        '--bs': 32,
+        '--model': 'efficientnet-b2',
+        '--input-size': 260,
+        '--fepochs': 10,
+        '--epochs': 30
+    }
+    parser = ImageClassificationTrainer.get_argparser(
+        desc="Coarse loc classification", pdef=defaults)
     args = parser.parse_args()
 
     ImageClassificationTrainer.prepare_training(args)
-
     common.time_method(main, args)
-
