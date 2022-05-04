@@ -191,8 +191,10 @@ class ImageClassificationTrainer(ImageTrainer):
             model = Embedder.load_resnet(ssl_model)
             model = torch.nn.Sequential(OrderedDict([
                 ('backbone', model),
+                ('flatten', torch.nn.Flatten()),
                 ('fc', torch.nn.Linear(2048, dls.c))
             ]))
+            model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
             msplitter = lambda m: fv.L(train_utils.split_model(m, [m.fc])).map(fv.params)
             learn = fv.Learner(dls, model, splitter=msplitter, **learn_kwargs)
         else:
