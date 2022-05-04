@@ -16,6 +16,7 @@ import os
 import sys
 import collections
 from functools import partial
+from collections import OrderedDict
 
 import numpy as np
 import sklearn.metrics as skm
@@ -188,8 +189,11 @@ class ImageClassificationTrainer(ImageTrainer):
             from self_supervised_dermatology.embedder import Embedder
             ssl_model = self.args.model.replace('ssl/', '')
             model = Embedder.load_resnet(ssl_model)
-            model = torch.nn.Sequential(model, torch.nn.Linear(2048, dls.c))
-            msplitter = lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params)
+            model = torch.nn.Sequential(OrderedDict([
+                ('backbone', model),
+                ('fc', torch.nn.Linear(2048, dls.c))
+            ]))
+            msplitter = lambda m: fv.L(train_utils.split_model(m, [m.fc])).map(fv.params)
             learn = fv.Learner(dls, model, splitter=msplitter, **learn_kwargs)
         else:
             model = getattr(fv, self.args.model)
