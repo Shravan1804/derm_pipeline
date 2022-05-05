@@ -185,9 +185,9 @@ class ImageClassificationTrainer(ImageTrainer):
             model._fc = torch.nn.Linear(model._fc.in_features, dls.c)
             msplitter = lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params)
             learn = fv.Learner(dls, model, splitter=msplitter, **learn_kwargs)
-        if "ssl" in self.args.model:
+        elif "ssl" in self.args.model:
             from self_supervised_dermatology.embedder import Embedder
-            ssl_model = self.args.model.replace('ssl/', '')
+            ssl_model = self.args.model.replace('ssl_', '')
             model = Embedder.load_resnet(ssl_model)
             model = torch.nn.Sequential(OrderedDict([
                 ('backbone', model),
