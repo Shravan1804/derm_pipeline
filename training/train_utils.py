@@ -60,11 +60,7 @@ def split_model(model, splits):
     assert len(idxs) > 0, f"Provided splits ({splits}) not found in top level children: {top_children}"
     if idxs[0] != 0: idxs = [0] + idxs
     if idxs[-1] != len(top_children): idxs.append(len(top_children))
-    return [
-        torch.nn.SyncBatchNorm.convert_sync_batchnorm(
-            torch.nn.Sequential(*top_children[i:j]))
-        for i, j in zip(idxs[:-1], idxs[1:])
-    ]
+    return [torch.nn.Sequential(*top_children[i:j]) for i, j in zip(idxs[:-1], idxs[1:])]
 
 
 def load_custom_pretrained_weights(model, weights_path):
