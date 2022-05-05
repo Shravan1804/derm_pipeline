@@ -188,11 +188,12 @@ class ImageClassificationTrainer(ImageTrainer):
         elif "ssl" in self.args.model:
             from self_supervised_dermatology.embedder import Embedder
             ssl_model = self.args.model.replace('ssl_', '')
-            model = Embedder.load_resnet(ssl_model)
+            model, info = Embedder.load_pretrained(ssl_model, return_info=True)
+            print(f'Loaded pretrained SSL model: {info}')
             model = torch.nn.Sequential(OrderedDict([
                 ('backbone', model),
                 ('flatten', torch.nn.Flatten()),
-                ('fc', torch.nn.Linear(2048, dls.c))
+                ('fc', torch.nn.Linear(info.out_dim, dls.c))
             ]))
             msplitter = lambda m: fv.L(train_utils.split_model(m, [m.fc])).map(fv.params)
             learn = fv.Learner(dls, model, splitter=msplitter, **learn_kwargs)
