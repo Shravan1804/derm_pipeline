@@ -194,10 +194,8 @@ class ImageClassificationTrainer(ImageTrainer):
                 ('flatten', torch.nn.Flatten()),
                 ('fc', torch.nn.Linear(2048, dls.c))
             ]))
-            model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
             msplitter = lambda m: fv.L(train_utils.split_model(m, [m.fc])).map(fv.params)
             learn = fv.Learner(dls, model, splitter=msplitter, **learn_kwargs)
-            learn.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(learn.model)
         else:
             model = getattr(fv, self.args.model)
             learn = fv.cnn_learner(dls, model, **learn_kwargs)
