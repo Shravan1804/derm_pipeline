@@ -13,7 +13,7 @@ __copyright__ = (
 
 # Run on dgx
 # parallel single gpu
-# python /workspace/code/derm_pipeline/projects/anatomy/segm_anato.py --encrypted --data /workspace/data/anatomy --exp-name anato --logdir /workspace/logs --gpu-ids 0 --deterministic --region hand 2>&1 | tee /workspace/logs/anato.txt
+# python /workspace/code/derm_pipeline/projects/anatomy/segm_anato.py --encrypted --data /workspace/data/anatomy_project --exp-name anato --logdir /workspace/logs --gpu-ids 0 --deterministic --region hand 2>&1 | tee /workspace/logs/anato.txt
 
 import os
 import sys
@@ -74,14 +74,14 @@ class AnatoSegmTrainer(ImageSegmentationTrainer):
             AnatoSegmTrainer.ANATO_DATA_CATS = {k: (v1.replace('_encrypted', ''), v2) for k, (v1, v2)
                                                 in AnatoSegmTrainer.ANATO_DATA_CATS.items()}
         if args.region == 'all':
-            args.train = [os.path.join(d, 'train') for d, _ in AnatoSegmTrainer.ANATO_DATA_CATS.values()]
-            args.test = [os.path.join(d, 'test') for d, _ in AnatoSegmTrainer.ANATO_DATA_CATS.values()]
-            args.cats = ["non__" + "_".join([n for n in sorted(AnatoSegmTrainer.ANATO_DATA_CATS.keys())]),
-                         *[c for _, (cs, _) in sorted(AnatoSegmTrainer.ANATO_DATA_CATS.items()) for c in cs
+            args.sl_train = [os.path.join(d, 'train') for d, _ in AnatoSegmTrainer.ANATO_DATA_CATS.values()]
+            args.sl_tests = [os.path.join(d, 'test') for d, _ in AnatoSegmTrainer.ANATO_DATA_CATS.values()]
+            args.cats = ["non__" + "_".join([n for n in AnatoSegmTrainer.ANATO_DATA_CATS.keys()]),
+                         *[c for _, (_, cs) in AnatoSegmTrainer.ANATO_DATA_CATS.items() for c in cs
                            if not c.startswith('non_')]]
         else:
-            args.train = [os.path.join(AnatoSegmTrainer.ANATO_DATA_CATS[args.region][0], 'train')]
-            args.test = [os.path.join(AnatoSegmTrainer.ANATO_DATA_CATS[args.region][0], 'test')]
+            args.sl_train = [os.path.join(AnatoSegmTrainer.ANATO_DATA_CATS[args.region][0], 'train')]
+            args.sl_tests = [os.path.join(AnatoSegmTrainer.ANATO_DATA_CATS[args.region][0], 'test')]
             args.cats = AnatoSegmTrainer.ANATO_DATA_CATS[args.region][1]
         super(AnatoSegmTrainer, AnatoSegmTrainer).prepare_training(args)
 
