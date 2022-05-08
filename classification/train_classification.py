@@ -226,6 +226,7 @@ class ImageClassificationTrainer(ImageTrainer):
         else:
             model = getattr(fv, self.args.model)
             learn = fv.cnn_learner(dls, model, **learn_kwargs)
+        learn.recorder.train_metrics = True
         return self.prepare_learner(learn)
 
     def correct_wl(self, wl_items_with_labels, decoded):

@@ -364,6 +364,9 @@ class FastaiTrainer:
                 interp.preds, interp.targs, interp.decoded = learn.get_preds(dl=dl, with_decoded=True)
             interp.dl = dl
             interp = self.compute_metrics(interp)
+            if self.args.wandb:
+                import wandb
+                wandb.log({f'test_{k}': v for (k, v) in interp.metrics.items()})
             del interp.preds, interp.targs, interp.decoded, interp.dl
             GPUManager.clean_gpu_memory(dl)
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(interp)
@@ -431,4 +434,3 @@ class FastaiTrainer:
                     learn, prev_run = self.train_procedure(tr, val, f'{fold_suffix}_wl_sl', repeat_prefix, learn)
             GPUManager.clean_gpu_memory(learn.dls, learn)
         self.generate_tests_reports()
-
