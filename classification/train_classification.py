@@ -127,7 +127,17 @@ class ImageClassificationTrainer(ImageTrainer):
         :param decoded: tensor, decoded predictions, size B
         :return: tensor, confusion metrics N x N (with N categories)
         """
-        return classif_utils.conf_mat(fv.TensorBase(targs), fv.TensorBase(decoded), self.args.cats)
+        if self.args.wandb:
+            import wandb
+            wandb.log({
+                "conf_mat":
+                wandb.plot.confusion_matrix(probs=None,
+                                            y_true=targs,
+                                            preds=decoded,
+                                            class_names=self.args.cats)
+            })
+        return classif_utils.conf_mat(fv.TensorBase(targs),
+                                      fv.TensorBase(decoded), self.args.cats)
 
     def customize_datablock(self):
         """Provides experiment specific kwargs for DataBlock
