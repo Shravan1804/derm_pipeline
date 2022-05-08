@@ -181,7 +181,14 @@ class ImageClassificationTrainer(ImageTrainer):
         :return: kwargs dict
         """
         kwargs = super().customize_learner(dls)
-        kwargs['metrics'].extend([fv.Precision(average='micro'), fv.Recall(average='micro'), fv.BalancedAccuracy()])
+        kwargs['metrics'].extend([
+            fv.Precision(average='micro'),
+            fv.Recall(average='micro'),
+            fv.BalancedAccuracy(),
+            fv.F1Score(average='macro'),
+            fv.RocAuc(average='macro'),
+            fv.MatthewsCorrCoef(),
+        ])
         return kwargs
 
     def create_learner(self, dls):
