@@ -199,7 +199,12 @@ class ImageClassificationTrainer(ImageTrainer):
             msplitter = lambda m: fv.L(train_utils.split_model(m, [m.fc])).map(fv.params)
             callbacks = []
             if self.args.wandb:
+                import wandb
                 callbacks += [WandbCallback()]
+                # update the name of the wandb run
+                run_name = f'{ssl_model}-{wandb.run.name}'
+                wandb.run.name = run_name
+                wandb.run.save()
             learn = fv.Learner(dls, model, splitter=msplitter, cbs=callbacks, **learn_kwargs)
         else:
             model = getattr(fv, self.args.model)
