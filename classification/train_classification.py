@@ -24,6 +24,7 @@ import sklearn.metrics as skm
 import torch
 import fastai.vision.all as fv
 from fastai.callback.tracker import EarlyStoppingCallback
+from fastai.callback.wandb import *
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common
@@ -196,7 +197,7 @@ class ImageClassificationTrainer(ImageTrainer):
                 ('fc', torch.nn.Linear(info.out_dim, dls.c))
             ]))
             msplitter = lambda m: fv.L(train_utils.split_model(m, [m.fc])).map(fv.params)
-            learn = fv.Learner(dls, model, splitter=msplitter, **learn_kwargs)
+            learn = fv.Learner(dls, model, splitter=msplitter, cbs=WandbCallback(), **learn_kwargs)
         else:
             model = getattr(fv, self.args.model)
             learn = fv.cnn_learner(dls, model, **learn_kwargs)

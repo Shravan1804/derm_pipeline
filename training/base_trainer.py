@@ -179,7 +179,7 @@ class FastaiTrainer:
         """Provides experiment specific kwargs for Learner
         :return: kwargs dict
         """
-        return {'opt_func': fv.RMSProp if self.args.RMSProp else fv.Adam}
+        return {'opt_func': fv.RMSProp if self.args.RMSProp else fv.SGD}
 
     def create_learner(self):
         """Create learner object, should be extended"""
