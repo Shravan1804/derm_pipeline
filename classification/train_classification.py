@@ -130,7 +130,7 @@ class ImageClassificationTrainer(ImageTrainer):
         if self.args.wandb:
             import wandb
             wandb.log({
-                "conf_mat":
+                "Test/Conf_mat":
                 wandb.plot.confusion_matrix(probs=None,
                                             y_true=targs.tolist(),
                                             preds=decoded.tolist(),
