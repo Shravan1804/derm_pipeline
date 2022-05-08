@@ -132,8 +132,8 @@ class ImageClassificationTrainer(ImageTrainer):
             wandb.log({
                 "conf_mat":
                 wandb.plot.confusion_matrix(probs=None,
-                                            y_true=targs,
-                                            preds=decoded,
+                                            y_true=targs.tolist(),
+                                            preds=decoded.tolist(),
                                             class_names=self.args.cats)
             })
         return classif_utils.conf_mat(fv.TensorBase(targs),
