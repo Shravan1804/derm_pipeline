@@ -37,8 +37,6 @@ def main(args):
 
 
 if __name__ == '__main__':
-    wandb.init(project='vm02-body-loc')
-    
     defaults = {
         '--bs': 32,
         '--model': 'efficientnet-b2',
@@ -49,6 +47,10 @@ if __name__ == '__main__':
     parser = ImageClassificationTrainer.get_argparser(
         desc="Coarse loc classification", pdef=defaults)
     args = parser.parse_args()
+
+    if args.wandb:
+        wandb.init(project='vm02-body-loc')
+        wandb.config.update(args)
 
     ImageClassificationTrainer.prepare_training(args)
     common.time_method(main, args)

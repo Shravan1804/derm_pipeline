@@ -197,7 +197,10 @@ class ImageClassificationTrainer(ImageTrainer):
                 ('fc', torch.nn.Linear(info.out_dim, dls.c))
             ]))
             msplitter = lambda m: fv.L(train_utils.split_model(m, [m.fc])).map(fv.params)
-            learn = fv.Learner(dls, model, splitter=msplitter, cbs=WandbCallback(), **learn_kwargs)
+            callbacks = []
+            if self.args.wandb:
+                callbacks += [WandbCallback()]
+            learn = fv.Learner(dls, model, splitter=msplitter, cbs=callbacks, **learn_kwargs)
         else:
             model = getattr(fv, self.args.model)
             learn = fv.cnn_learner(dls, model, **learn_kwargs)

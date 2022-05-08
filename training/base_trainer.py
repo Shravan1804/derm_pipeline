@@ -71,6 +71,7 @@ class FastaiTrainer:
         parser.add_argument('--fepochs', type=int, default=pdef.get('--fepochs', 4), help='Epochs for frozen model')
         parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 12), help='Epochs for unfrozen model')
         parser.add_argument('--RMSProp', action='store_true', help="Use RMSProp optimizer")
+        parser.add_argument('--SGD', action='store_true', help="Use SGD optimizer")
 
         parser.add_argument('--no-norm', action='store_true', help="Do not normalizes data")
         parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
@@ -88,6 +89,7 @@ class FastaiTrainer:
         parser.add_argument('--seed', type=int, default=pdef.get('--seed', 42), help="Random seed")
         parser.add_argument('--deterministic', action='store_true', help="Sets cudnn backends to deterministic")
         parser.add_argument('--debug-dls', action='store_true', help="Summarize dls then exits")
+        parser.add_argument('--wandb', action='store_true', help="If the experiment should be logged to wandb")
 
         return parser
 
@@ -179,7 +181,13 @@ class FastaiTrainer:
         """Provides experiment specific kwargs for Learner
         :return: kwargs dict
         """
-        return {'opt_func': fv.RMSProp if self.args.RMSProp else fv.SGD}
+        if self.args.RMSProp:
+            opt_func = fv.RMSProp
+        elif self.args.SGD:
+            opt_func = fv.SGD
+        else:
+            opt_func = fv.Adam
+        return {'opt_func': opt_func}
 
     def create_learner(self):
         """Create learner object, should be extended"""
