@@ -331,11 +331,17 @@ class FastaiTrainer:
         train_cbs = self.get_train_cbs(run)
         print("Training model:", run)
         with GPUManager.running_context(learn, self.args.gpu_ids):
+            if self.args.momentum is not None:
+                mom = [self.args.momentum,
+                       self.args.momentum,
+                       self.args.momentum]
+            else:
+                mom = None
             learn.fine_tune(self.args.epochs,
                             base_lr=lr,
                             freeze_epochs=self.args.fepochs,
                             wd=self.args.weight_decay,
-                            moms=self.args.momentum,
+                            moms=mom,
                             cbs=train_cbs)
         if save_model:
             model_dir = fd.rank0_first(lambda: common.maybe_create(self.args.exp_logdir, learn.model_dir))
