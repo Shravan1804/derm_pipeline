@@ -72,6 +72,8 @@ class FastaiTrainer:
         parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 12), help='Epochs for unfrozen model')
         parser.add_argument('--RMSProp', action='store_true', help="Use RMSProp optimizer")
         parser.add_argument('--SGD', action='store_true', help="Use SGD optimizer")
+        parser.add_argument('--weight_decay', type=float, default=None, help='Weight decay used for training.')
+        parser.add_argument('--moementum', type=float, default=None, help='Momentum used for training.')
 
         parser.add_argument('--no-norm', action='store_true', help="Do not normalizes data")
         parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
@@ -329,7 +331,12 @@ class FastaiTrainer:
         train_cbs = self.get_train_cbs(run)
         print("Training model:", run)
         with GPUManager.running_context(learn, self.args.gpu_ids):
-            learn.fine_tune(self.args.epochs, base_lr=lr, freeze_epochs=self.args.fepochs, cbs=train_cbs)
+            learn.fine_tune(self.args.epochs,
+                            base_lr=lr,
+                            freeze_epochs=self.args.fepochs,
+                            wd=self.args.weight_decay,
+                            moms=self.args.momentum,
+                            cbs=train_cbs)
         if save_model:
             model_dir = fd.rank0_first(lambda: common.maybe_create(self.args.exp_logdir, learn.model_dir))
             learn.save(os.path.join(model_dir, f'{run}{self.MODEL_SUFFIX}_lr{lr:.2e}'))
