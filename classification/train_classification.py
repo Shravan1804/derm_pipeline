@@ -32,7 +32,7 @@ from general import common
 from training import metrics, train_utils
 from training.image_trainer import ImageTrainer
 from general.PatchExtractor import PatchExtractor
-import classification.classification_utils as classif_utils, LinearClassifier
+import classification.classification_utils as classif_utils
 
 
 class ImageClassificationTrainer(ImageTrainer):
@@ -212,7 +212,7 @@ class ImageClassificationTrainer(ImageTrainer):
             model = torch.nn.Sequential(OrderedDict([
                 ('backbone', model),
                 ('flatten', torch.nn.Flatten()),
-                ('fc', LinearClassifier(info.out_dim, dls.c)),
+                ('fc', classif_utils.LinearClassifier(info.out_dim, dls.c)),
             ]))
             msplitter = lambda m: fv.L(train_utils.split_model(m, [m.fc])).map(fv.params)
             callbacks = []
