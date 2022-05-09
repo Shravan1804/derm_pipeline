@@ -23,6 +23,7 @@ import sklearn.metrics as skm
 
 import torch
 import fastai.vision.all as fv
+from fastai.vision.all import *
 from fastai.callback.tracker import EarlyStoppingCallback
 from fastai.callback.wandb import *
 
@@ -215,6 +216,8 @@ class ImageClassificationTrainer(ImageTrainer):
             ]))
             msplitter = lambda m: fv.L(train_utils.split_model(m, [m.fc])).map(fv.params)
             callbacks = []
+            if self.args.mixup:
+                callbacks += [MixUp()]
             if self.args.wandb:
                 import wandb
                 callbacks += [WandbCallback()]
