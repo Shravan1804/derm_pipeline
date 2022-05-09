@@ -73,7 +73,7 @@ class FastaiTrainer:
         parser.add_argument('--RMSProp', action='store_true', help="Use RMSProp optimizer")
         parser.add_argument('--SGD', action='store_true', help="Use SGD optimizer")
         parser.add_argument('--weight_decay', type=float, default=None, help='Weight decay used for training.')
-        parser.add_argument('--moementum', type=float, default=None, help='Momentum used for training.')
+        parser.add_argument('--momentum', type=float, default=None, help='Momentum used for training.')
 
         parser.add_argument('--no-norm', action='store_true', help="Do not normalizes data")
         parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
