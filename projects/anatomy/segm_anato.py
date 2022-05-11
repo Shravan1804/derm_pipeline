@@ -11,10 +11,6 @@ __copyright__ = (
     "Copyright 2021, Lucerne University of Applied Sciences and Arts"
 )
 
-# Run on dgx
-# parallel single gpu
-# python /workspace/code/derm_pipeline/projects/anatomy/segm_anato.py --encrypted --data /workspace/data/anatomy_project --exp-name anato --logdir /workspace/logs --gpu-ids 0 --deterministic --region hand 2>&1 | tee /workspace/logs/anato.txt
-
 import os
 import sys
 
@@ -41,12 +37,12 @@ class AnatoSegmTrainer(ImageSegmentationTrainer):
                   'index_middle', 'index_proximal', 'little_f_distal', 'little_f_middle', 'little_f_proximal',
                   'middle_f_distal', 'middle_f_middle', 'middle_f_proximal', 'nail', 'palm', 'ring_f_distal',
                   'ring_f_middle', 'ring_f_proximal', 'thenar', 'thumb_distal', 'thumb_proximal', 'wrist']),
-        'nail': (f"nail_anatomy/nail_segm_splitted_encrypted",
-                 ['non_nail', 'cuticle', 'distal_edge_plate', 'distal_groove', 'hyponychium', 'lateral_fold', 'lunula',
-                  'onychodermal_band', 'plate', 'proximal_fold', 'pulp']),
         'mouth': (f"mouth_anatomy/before_correction/mouth_segm_splitted_encrypted",
                   ['non_mouth', 'cutaneous_lip_lower', 'cutaneous_lip_upper', 'inside_mouth', 'oral_commisure', 'teeth',
                    'tongue', 'vermillion_lower', 'vermillion_upper']),
+        'nail': (f"nail_anatomy/nail_segm_splitted_encrypted",
+                 ['non_nail', 'cuticle', 'distal_edge_plate', 'distal_groove', 'hyponychium', 'lateral_fold', 'lunula',
+                  'onychodermal_band', 'plate', 'proximal_fold', 'pulp']),
     }.items()))
 
     @staticmethod

@@ -51,7 +51,7 @@ python /workspace/code/derm_pipeline/projects/differential_diagnosis/location_ba
         --data /workspace/data/diff_diags/loc_with_diff_diags/localisation_diff_diags_auto_splitted_encrypted \
         --exp-name loc_based_dd --logdir /workspace/logs --deterministic --full-precision --full-data
 ```
-Example training logs: `20220511_0850_resnet34_bs32_epo30_seed42_world1_normed_Adam_fp16_fullData_SL_deterministic__input512___img_classif_im-meta_loc_dd_loc_based_dd`
+Example training logs: `/raid/logs/20220511_0850_resnet34_bs32_epo30_seed42_world1_normed_Adam_fp16_fullData_SL_deterministic__input512___img_classif_im-meta_loc_dd_loc_based_dd`
 
 ### Results
 | Diagnosis                | F1-score |

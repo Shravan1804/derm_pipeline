@@ -11,12 +11,6 @@ __copyright__ = (
     "Copyright 2021, Lucerne University of Applied Sciences and Arts"
 )
 
-# Run on dgx
-# distributed
-# python TODO
-# parallel single gpu
-# python /workspace/code/derm_pipeline/projects/disease_grading/iwc.py --encrypted --data /workspace/data/disease_grading/iwc/segm_iwc_with_objs_splitted_patched_512_encrypted --exp-name iwc --logdir /workspace/logs --gpu-ids 0 --reproducible 2>&1 | tee /workspace/logs/iwc.txt
-
 import os
 import sys
 
