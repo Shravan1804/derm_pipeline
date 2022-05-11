@@ -11,9 +11,6 @@ __copyright__ = (
     "Copyright 2021, Lucerne University of Applied Sciences and Arts"
 )
 
-# Run on dgx
-# python /workspace/code/derm_pipeline/training/distributed_launch.py --encrypted /workspace/code/derm_pipeline/projects/differential_diagnosis/location_based.py --data /workspace/data/diff_diags/loc_with_diff_diags/localisation_diff_diags_auto_splitted_encrypted --exp-name loc_based_dd --logdir /workspace/logs --reproducible --gpu-ids --full-precision 0 2>&1 | tee /workspace/logs/loc_dd.txt
-
 import os
 import sys
 
