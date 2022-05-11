@@ -9,10 +9,6 @@ Images without any efflorescences were labeled as healthy.
 * Efflorescence labels: `/raid/dataset/diff_diags/hands_splitted_encrypted/labels_encrypted.p`
 
 ### Training
-Creation of the docker container:
-```
-docker run --gpus '"device=4"' -it --rm -v /raid/dataset:/workspace/data -v /raid/code:/workspace/code -v /raid/logs:/workspace/logs --ipc=host --name test_pipeline fastai2:latest
-```
 Training can be launched with the following command:
 ```
 python /workspace/code/derm_pipeline/projects/differential_diagnosis/efflorescence_based.py \
@@ -40,10 +36,6 @@ Images of patients with Acne, Drug eruptions, Darier disease, Dyshidrotic eczema
 * Location labels: `/raid/dataset/diff_diags/loc_with_diff_diags/localisation_diff_diags_auto_splitted_encrypted/localisation_diff_diags_auto_splitted_encrypted_preds_df.p`
 
 ### Training
-Creation of the docker container:
-```
-docker run --gpus '"device=4"' -it --rm -v /raid/dataset:/workspace/data -v /raid/code:/workspace/code -v /raid/logs:/workspace/logs --ipc=host --name test_pipeline fastai2:latest
-```
 Training can be launched with the following command:
 ```
 python /workspace/code/derm_pipeline/projects/differential_diagnosis/location_based.py \

@@ -9,10 +9,6 @@ Dataset composed of strongly labeled images and unlabeled images of the main bod
 * Strongly labeled images: `strong_labels_train`, `strong_labels_test`, `strong_labels_test_balanced510`
 
 ### Training
-Creation of the docker container:
-```
-docker run --gpus '"device=4"' -it --rm -v /raid/dataset:/workspace/data -v /raid/code:/workspace/code -v /raid/logs:/workspace/logs --ipc=host --name test_pipeline fastai2:latest
-```
 Training can be launched with the following command:
 ```
 python /workspace/code/derm_pipeline/projects/anatomy/body_loc.py \
@@ -46,10 +42,6 @@ Images of specific body regions with semantic labels of the different anatomical
 * Nail images: `nail_anatomy/nail_segm_splitted_encrypted`
 
 ### Training
-Creation of the docker container:
-```
-docker run --gpus '"device=4"' -it --rm -v /raid/dataset:/workspace/data -v /raid/code:/workspace/code -v /raid/logs:/workspace/logs --ipc=host --name test_pipeline fastai2:latest
-```
 Training can be launched with the following command (replacing the --region and -exp-name parameter for the different regions, namely ear, eye, hand, mouth, nail or all):
 ```
 python /workspace/code/derm_pipeline/projects/anatomy/segm_anato.py \

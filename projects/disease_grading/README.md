@@ -7,10 +7,6 @@ Images semantic labeled for classes other, skin, eczema.
 * Image directory: `/raid/dataset/disease_grading/eczema/eczema_splitted_patched_512_encrypted`
 
 ### Training
-Creation of the docker container:
-```
-docker run --gpus '"device=4"' -it --rm -v /raid/dataset:/workspace/data -v /raid/code:/workspace/code -v /raid/logs:/workspace/logs --ipc=host --name test_pipeline fastai2:latest
-```
 Training can be launched with the following command:
 ```
 python /workspace/code/derm_pipeline/projects/disease_grading/he.py \
@@ -34,10 +30,6 @@ Images semantic labeled for classes other, white_skin, non_white_skin.
 * Image directory: `/raid/dataset/disease_grading/iwc/segm_iwc_with_objs_splitted_patched_512_encrypted`
 
 ### Training
-Creation of the docker container:
-```
-docker run --gpus '"device=4"' -it --rm -v /raid/dataset:/workspace/data -v /raid/code:/workspace/code -v /raid/logs:/workspace/logs --ipc=host --name test_pipeline fastai2:latest
-```
 Training can be launched with the following command:
 ```
 python /workspace/code/derm_pipeline/projects/disease_grading/iwc.py \
@@ -62,10 +54,6 @@ Images semantic labeled for classes other, skin, pustules, spots. The skin label
 * Cropped train images: Additional train directory generated with `segmentation/crop_to_thresh.py`, which crops images around lesions
 
 ### Training
-Creation of the docker container:
-```
-docker run --gpus '"device=4"' -it --rm -v /raid/dataset:/workspace/data -v /raid/code:/workspace/code -v /raid/logs:/workspace/logs --ipc=host --name test_pipeline fastai2:latest
-```
 Training can be launched with the following command:
 ```
 python /workspace/code/derm_pipeline/projects/disease_grading/ppp.py \
