@@ -96,7 +96,7 @@ class AnatoSegmTrainer(ImageSegmentationTrainer):
         :return: array mask if encrypted else str mask path
         """
         mask = super().load_mask(item, load_mask_array=True)
-        if args.region == 'all':
+        if self.args.region == 'all':
             region_idx = [i for i, (p, _) in enumerate(AnatoSegmTrainer.ANATO_DATA_CATS.values()) if p in str(item)][0]
             mask = self.mask_conversion(mask, np.ones_like(mask)*region_idx).astype(np.uint8)
         return mask

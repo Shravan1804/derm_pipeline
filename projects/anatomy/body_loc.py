@@ -28,7 +28,8 @@ def main(args):
 
 
 if __name__ == '__main__':
-    defaults = {'--bs': 32, '--model': 'efficientnet-b2', '--input-size': 260, '--fepochs': 10, '--epochs': 30}
+    defaults = {'--bs': 32, '--model': 'efficientnet-b2', '--input-size': 260, '--fepochs': 10, '--epochs': 30,
+                '--lr': .002}
     parser = ImageClassificationTrainer.get_argparser(desc="Coarse loc classification", pdef=defaults)
     args = parser.parse_args()
 
