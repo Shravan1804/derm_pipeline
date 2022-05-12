@@ -260,10 +260,8 @@ class ImageSegmentationTrainer(ImageTrainer):
             # infer the shape of the dataset
             size = dls.one_batch()[0].shape[-2:]
             # create the unet
-            msplitter = lambda m: fv.L(
-                train_utils.split_model(m, [m[0][:6], m[0][6:], m[1:]])).map(
-                    fv.params)
             unet = DynamicUnet(model, n_out=dls.train.after_item.c, img_size=size)
+            msplitter = lambda m: fv.L(m[0][:6], m[0][6:], m[1:]).map(fv.params)
             learn = fv.Learner(dls, unet, splitter=msplitter, cbs=callbacks, **learn_kwargs)
         else:
             learn = fv.unet_learner(dls, getattr(fv, self.args.model), cbs=callbacks, **learn_kwargs)
