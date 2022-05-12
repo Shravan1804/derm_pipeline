@@ -22,6 +22,7 @@ import sklearn.metrics as skm
 import torch
 import fastai.vision.all as fv
 from fastai.callback.tracker import EarlyStoppingCallback
+from fastai.vision.models.unet import DynamicUnet
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common
@@ -229,7 +230,35 @@ class ImageSegmentationTrainer(ImageTrainer):
         :param dls: train/valid dataloaders
         :return: learner
         """
-        learn = fv.unet_learner(dls, getattr(fv, self.args.model), **self.customize_learner(dls))
+        learn_kwargs = self.customize_learner(dls)
+        callbacks = []
+        if self.args.mixup:
+            callbacks += [MixUp()]
+        if self.args.wandb:
+            import wandb
+            from fastai.callback.wandb import WandbCallback
+            callbacks += [WandbCallback()]
+            # update the name of the wandb run
+            run_name = f'{self.args.model}-{wandb.run.name}'
+            wandb.run.name = run_name
+            wandb.run.save()
+
+        if "ssl" in self.args.model:
+            from self_supervised_dermatology.embedder import Embedder
+            ssl_model = self.args.model.replace('ssl_', '')
+            model, info = Embedder.load_pretrained(ssl_model, return_info=True)
+            print(f'Loaded pretrained SSL model: {info}')
+            # removing last layer (i.e. adaptive pooling)
+            model = torch.nn.Sequential(*list(model.children())[:-1])
+            # infer the shape of the dataset
+            try:
+                size = dls.train_ds[0][0].size
+            except:
+                size = next(iter(dls.train_dl))[0].shape[-2:]
+            unet = DynamicUnet(model, n_classes=dls.c, img_size=size)
+            learn = fv.Learner(dls, unet, cbs=callbacks, **learn_kwargs)
+        else:
+            learn = fv.unet_learner(dls, getattr(fv, self.args.model), cbs=callbacks, **learn_kwargs)
         return self.prepare_learner(learn)
 
     def correct_wl(self, wl_items_with_labels, preds):
@@ -280,4 +309,3 @@ if __name__ == '__main__':
     ImageSegmentationTrainer.prepare_training(args)
 
     common.time_method(main, args)
-

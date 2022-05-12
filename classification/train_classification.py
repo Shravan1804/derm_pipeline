@@ -25,7 +25,6 @@ import torch
 import fastai.vision.all as fv
 from fastai.vision.all import *
 from fastai.callback.tracker import EarlyStoppingCallback
-from fastai.callback.wandb import *
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common
@@ -198,12 +197,24 @@ class ImageClassificationTrainer(ImageTrainer):
         :return: learner
         """
         learn_kwargs = self.customize_learner(dls)
+        callbacks = []
+        if self.args.mixup:
+            callbacks += [MixUp()]
+        if self.args.wandb:
+            import wandb
+            from fastai.callback.wandb import WandbCallback
+            callbacks += [WandbCallback()]
+            # update the name of the wandb run
+            run_name = f'{self.args.model}-{wandb.run.name}'
+            wandb.run.name = run_name
+            wandb.run.save()
+
         if "efficientnet" in self.args.model:
             from efficientnet_pytorch import EfficientNet
             model = EfficientNet.from_pretrained(self.args.model)
             model._fc = torch.nn.Linear(model._fc.in_features, dls.c)
             msplitter = lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params)
-            learn = fv.Learner(dls, model, splitter=msplitter, **learn_kwargs)
+            learn = fv.Learner(dls, model, splitter=msplitter, cbs=callbacks, **learn_kwargs)
         elif "ssl" in self.args.model:
             from self_supervised_dermatology.embedder import Embedder
             ssl_model = self.args.model.replace('ssl_', '')
@@ -215,20 +226,12 @@ class ImageClassificationTrainer(ImageTrainer):
                 ('fc', classif_utils.LinearClassifier(info.out_dim, dls.c)),
             ]))
             msplitter = lambda m: fv.L(train_utils.split_model(m, [m.fc])).map(fv.params)
-            callbacks = []
-            if self.args.mixup:
-                callbacks += [MixUp()]
-            if self.args.wandb:
-                import wandb
-                callbacks += [WandbCallback()]
-                # update the name of the wandb run
-                run_name = f'{ssl_model}-{wandb.run.name}'
-                wandb.run.name = run_name
-                wandb.run.save()
             learn = fv.Learner(dls, model, splitter=msplitter, cbs=callbacks, **learn_kwargs)
         else:
             model = getattr(fv, self.args.model)
-            learn = fv.cnn_learner(dls, model, **learn_kwargs)
+            learn = fv.cnn_learner(dls, model, cbs=callbacks, **learn_kwargs)
+        # also log the training metrics
+        # then train + valid metrics are reported
         learn.recorder.train_metrics = True
         return self.prepare_learner(learn)
 
