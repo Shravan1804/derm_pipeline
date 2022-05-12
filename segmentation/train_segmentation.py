@@ -17,11 +17,11 @@ import datetime
 from functools import partial
 
 import numpy as np
+from tqdm import tqdm
 import sklearn.metrics as skm
 
 import torch
 import fastai.vision.all as fv
-from fastai.callback.tracker import EarlyStoppingCallback
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common
@@ -204,13 +204,10 @@ class ImageSegmentationTrainer(ImageTrainer):
         :param train_items: tuple of fastai lists, (items, labels)
         :return: tensor, weight for each categories
         """
-        from p_tqdm import p_umap
-        common_size = self.args.input_size, self.args.input_size
-        def load_resize(train_item):
-            impath, mpath = train_item
-            return mask_utils.resize_mask(self.load_mask(mpath, load_mask_array=True), common_size)
-        masks = np.stack(p_umap(load_resize, train_items))
-        _, class_counts = np.unique(masks, return_counts=True)
+        print("Computing class weights")
+        size = self.args.input_size, self.args.input_size
+        ms = [mask_utils.resize_mask(self.load_mask(m, load_mask_array=True), size) for _, m in tqdm(train_items)]
+        _, class_counts = np.unique(np.stack(ms), return_counts=True)
         assert class_counts.size == len(self.args.cats)
         # this one causes issues if imbalance too high
         #return torch.FloatTensor(class_counts.max() / class_counts)
