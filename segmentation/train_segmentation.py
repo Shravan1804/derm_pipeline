@@ -142,6 +142,15 @@ class ImageSegmentationTrainer(ImageTrainer):
         :param decoded: tensor, decoded predictions, size B x M x M
         :return: tensor, confusion metrics N x N (with N categories)
         """
+        if self.args.wandb:
+            import wandb
+            wandb.log({
+                "Test/Conf_mat":
+                wandb.plot.confusion_matrix(probs=None,
+                                            y_true=targs.flatten().tolist(),
+                                            preds=preds.flatten().tolist(),
+                                            class_names=self.args.cats)
+            })
         return segm_utils.pixel_conf_mat(targs, preds, self.args.cats)
 
     def plot_custom_metrics(self, ax, agg_perf, show_val, title=None):
