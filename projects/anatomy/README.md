@@ -14,22 +14,23 @@ Training can be launched with the following command:
 python /workspace/code/derm_pipeline/projects/anatomy/body_loc.py \
         --encrypted  \
         --data /workspace/data/anatomy_project/body_loc/USZ_pipeline_cropped_images_patched_512_encrypted \
-        --sl-train strong_labels_train --sl-tests strong_labels_test_balanced510 strong_labels_test \
-        --progr-size --exp-name body_loc --logdir /workspace/logs --deterministic
+        --sl-train strong_labels_train --sl-tests strong_labels_test \
+        --progr-size --exp-name body_loc --logdir /workspace/logs --deterministic \
+        --lr .002 --full-data
 ```
 Example training logs: `/raid/logs/20220511_1047_efficientnet-b2_bs32_epo30_seed42_world1_normed_Adam_fp16_noCV_valid0.2_SL_deterministic__input260_progr-size0.5_0.75_1___img_classif_body_loc`
 
 ### Results
 | Diagnosis | F1-score |
 |-----------|----------|
-| Arms      | 0.00     |
-| Legs      | 0.00     |
-| Feet      | 0.00     |
-| Hands     | 0.00     |
-| Head      | 0.00     |
-| Other     | 0.00     |
-| Trunk     | 0.00     |
-| Average   | 0.00     |
+| Arms      | 0.67     |
+| Legs      | 0.65     |
+| Feet      | 0.85     |
+| Hands     | 0.81     |
+| Head      | 0.89     |
+| Other     | 0.99     |
+| Trunk     | 0.64     |
+| Average   | 0.79     |
 
 ## Micro-anatomy mapping
 ### Data
@@ -63,8 +64,7 @@ In the case of the eye region, labels include the abnormal semantic class that s
 | Diagnosis        | F1-score |
 |------------------|----------|
 | Average ear      | 0.80     |
-| Average eye      | 0.83     |
+| Average eye      | 0.83     | 
 | Average hand     | 0.83     |
 | Average mouth    | 0.66     |
 | Average nail     | 0.65     |
-| Average all      | -        |

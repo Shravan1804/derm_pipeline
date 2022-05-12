@@ -19,10 +19,10 @@ Example training logs: `/raid/logs/20220511_1329_resnet18_bs16_epo30_seed42_worl
 ### Results
 | Class   | F1-score |
 |---------|----------|
-| Other   | 0.00     |
-| Skin    | 0.00     |
-| Eczema  | 0.00     |
-| Average | 0.00     |
+| Other   | 1.00     |
+| Skin    | 0.95     |
+| Eczema  | 0.70     |
+| Average | 0.88     |
 
 ## Ichthyosis with confetti
 ### Data
