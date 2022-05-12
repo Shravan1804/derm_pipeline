@@ -11,10 +11,6 @@ __copyright__ = (
     "Copyright 2021, Lucerne University of Applied Sciences and Arts"
 )
 
-# Run on dgx
-# python /workspace/code/derm_pipeline/training/distributed_launch.py --encrypted /workspace/code/derm_pipeline/projects/anatomy/body_loc.py --data /workspace/data/anatomy_project/body_loc/USZ_pipeline_cropped_images_patched_512_encrypted --sl-train strong_labels_train --sl-tests strong_labels_test_balanced510 --progr-size --exp-name body_loc --logdir /workspace/logs --reproducible 2>&1 | tee /workspace/logs/body_loc.txt
-
-
 import os
 import sys
 
@@ -41,7 +37,8 @@ if __name__ == '__main__':
         '--model': 'efficientnet-b2',
         '--input-size': 260,
         '--fepochs': 10,
-        '--epochs': 30
+        '--epochs': 30,
+        '--lr': .002
     }
     parser = ImageClassificationTrainer.get_argparser(
         desc="Coarse loc classification", pdef=defaults)

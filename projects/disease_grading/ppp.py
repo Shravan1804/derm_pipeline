@@ -11,10 +11,6 @@ __copyright__ = (
     "Copyright 2021, Lucerne University of Applied Sciences and Arts"
 )
 
-# Run on dgx
-# parallel single gpu
-# python /workspace/code/derm_pipeline/projects/disease_grading/ppp.py --encrypted --data /workspace/data/disease_grading/ppp_grading/PPP_whs_corr_splitted_no_patient_leak_patched_512_encrypted --exp-name ppp --logdir /workspace/logs --gpu-ids 0 --reproducible 2>&1 | tee /workspace/logs/ppp.txt
-
 import os
 import sys
 
@@ -85,7 +81,7 @@ def main(args):
 
 
 if __name__ == '__main__':
-    defaults = {'--bs': 16, '--model': 'resnet18', '--input-size': 380, '--fepochs': 10, '--epochs': 30}
+    defaults = {'--bs': 8, '--model': 'resnet50', '--input-size': 380, '--fepochs': 10, '--epochs': 30}
     parser = PPPTrainer.get_argparser(pdef=defaults)
     args = parser.parse_args()
 

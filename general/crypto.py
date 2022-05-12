@@ -17,6 +17,7 @@ import io
 import sys
 import shutil
 import pickle
+import random
 import argparse
 import multiprocessing as mp
 
@@ -139,6 +140,8 @@ def create_filenames_dict(files, save_path):
     """
     n0 = len(str(len(files))) + 1
     filenames_dict = bidict()
+    random.seed(42)
+    random.shuffle(files)
     for i, f in enumerate(files):
         name, ext = os.path.splitext(os.path.basename(f))
         if name not in filenames_dict:

@@ -11,10 +11,6 @@ __copyright__ = (
     "Copyright 2021, Lucerne University of Applied Sciences and Arts"
 )
 
-# Run on dgx
-# parallel single gpu
-# python /workspace/code/derm_pipeline/projects/disease_grading/he.py --encrypted --data /workspace/data/disease_grading/eczema/eczema_splitted_patched_512_encrypted --exp-name he --logdir /workspace/logs --gpu-ids 0 --reproducible 2>&1 | tee /workspace/logs/he.txt
-
 import os
 import sys
 
