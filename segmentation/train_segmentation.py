@@ -249,11 +249,8 @@ class ImageSegmentationTrainer(ImageTrainer):
             # removing last layer (i.e. adaptive pooling)
             model = torch.nn.Sequential(*list(model.children())[:-1])
             # infer the shape of the dataset
-            try:
-                size = dls.train_ds[0][0].size
-            except:
-                size = next(iter(dls.train_dl))[0].shape[-2:]
-            unet = DynamicUnet(model, n_classes=dls.c, img_size=size)
+            size = dls.one_batch()[0].shape[-2:]
+            unet = DynamicUnet(model, n_out=dls.train.after_item.c, img_size=size)
             learn = fv.Learner(dls, unet, cbs=callbacks, **learn_kwargs)
         else:
             learn = fv.unet_learner(dls, getattr(fv, self.args.model), cbs=callbacks, **learn_kwargs)
