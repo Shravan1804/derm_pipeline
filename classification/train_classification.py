@@ -182,8 +182,8 @@ class ImageClassificationTrainer(ImageTrainer):
         """
         kwargs = super().customize_learner(dls)
         kwargs['metrics'].extend([
-            fv.Precision(average='micro'),
-            fv.Recall(average='micro'),
+            fv.Precision(average='macro'),
+            fv.Recall(average='macro'),
             fv.BalancedAccuracy(),
             fv.F1Score(average='macro'),
             fv.RocAuc(average='macro'),
