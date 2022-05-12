@@ -27,7 +27,7 @@ from fastai.vision.models.unet import DynamicUnet
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common
-from training import metrics
+from training import metrics, train_utils
 from training.image_trainer import ImageTrainer
 import segmentation.mask_utils as mask_utils
 import segmentation.segmentation_utils as segm_utils
@@ -250,10 +250,17 @@ class ImageSegmentationTrainer(ImageTrainer):
             model = torch.nn.Sequential(*list(model.children())[:-1])
             # infer the shape of the dataset
             size = dls.one_batch()[0].shape[-2:]
+            # create the unet
+            msplitter = lambda m: fv.L(
+                train_utils.split_model(m, [m[0][:6], m[0][6:], m[1:]])).map(
+                    fv.params)
             unet = DynamicUnet(model, n_out=dls.train.after_item.c, img_size=size)
-            learn = fv.Learner(dls, unet, cbs=callbacks, **learn_kwargs)
+            learn = fv.Learner(dls, unet, splitter=msplitter, cbs=callbacks, **learn_kwargs)
         else:
             learn = fv.unet_learner(dls, getattr(fv, self.args.model), cbs=callbacks, **learn_kwargs)
+        # also log the training metrics
+        # then train + valid metrics are reported
+        learn.recorder.train_metrics = True
         return self.prepare_learner(learn)
 
     def correct_wl(self, wl_items_with_labels, preds):
