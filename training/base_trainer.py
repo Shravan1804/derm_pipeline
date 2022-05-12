@@ -98,8 +98,8 @@ class FastaiTrainer:
         :param custom: custom string to be added in experiment log dirname
         :return: str, experiment log dir
         """
-        d = f'{common.now()}_{args.model}_bs{args.bs}_epo{args.epochs}_seed{args.seed}' \
-            f'_world{args.num_machines * len(args.gpu_ids)}'
+        d = f'{common.now()}_{args.model}_bs{args.bs}_epo{args.epochs}_lr{args.lr}_seed{args.seed}'
+        d += f'_world{args.num_machines * len(args.gpu_ids)}'
         if not args.no_norm: d += '_normed'
         d += '_RMSProp' if args.RMSProp else '_Adam'
         d += '_fp32' if args.full_precision else '_fp16'
