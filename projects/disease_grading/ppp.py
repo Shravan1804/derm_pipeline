@@ -85,7 +85,11 @@ if __name__ == '__main__':
     parser = PPPTrainer.get_argparser(pdef=defaults)
     args = parser.parse_args()
 
-    PPPTrainer.prepare_training(args)
+    if args.wandb:
+        import wandb
+        wandb.init(project='vm02-PPP')
+        wandb.config.update(args)
 
+    PPPTrainer.prepare_training(args)
     common.time_method(main, args)
 
