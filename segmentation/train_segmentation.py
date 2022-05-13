@@ -44,6 +44,7 @@ class ImageSegmentationTrainer(ImageTrainer):
         """
         # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
         parser = super(ImageSegmentationTrainer, ImageSegmentationTrainer).get_argparser(desc, pdef, phelp)
+        parser.add_argument('--include-no-bg', action='store_true', help="Also evaluate metrics after masking bg")
         parser.add_argument('--plot-no-bg', action='store_true', help="Include perfs without bg cat in plots")
         parser.add_argument('--coco-metrics', action='store_true', help="Also computes coco metrics")
         parser.add_argument('--rm-small-objs', action='store_true', help="Remove objs smaller than --min-size")
@@ -55,6 +56,8 @@ class ImageSegmentationTrainer(ImageTrainer):
         """Sets up training, check args validity.
         :param args: command line args
         """
+        if not args.include_no_bg:
+            args.plot_no_bg = False
         args.exp_name = "img_segm_" + args.exp_name
         super(ImageSegmentationTrainer, ImageSegmentationTrainer).prepare_training(args)
 
@@ -110,6 +113,10 @@ class ImageSegmentationTrainer(ImageTrainer):
         """
         return f'{super().get_cat_metric_name(perf_fn, cat)}{"" if bg is None else self.NO_BG}'
 
+    def get_mask_bg_choices(self):
+        """Returns a tuple with choices whether to mask background or not in metric"""
+        return (None, self.args.bg) if self.args.include_no_bg else (None,)
+
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn):
         """Generates metrics functions for the individual categories and background inclusion/exclusion
         :param perf_fn: function, metrics to apply, e.g. precision
@@ -117,8 +124,8 @@ class ImageSegmentationTrainer(ImageTrainer):
         :param cat: str, label of category for which to compute metric
         :param metrics_fn: dict, contains generated metrics function names as keys and metrics functions as values
         """
-        for bg in [None, self.args.bg]:
-            cat_perf = partial(segm_utils.cls_perf, cls_idx=cat_id, cats=self.args.cats, bg=bg)
+        for bg in self.get_mask_bg_choices():
+            cat_perf = partial(segm_utils.cls_perf, cidx=cat_id, cats=self.args.cats, bg=bg)
             signature = f'{self.get_cat_metric_name(perf_fn, cat, bg)}(inp, targ, prm=dict())'
             code = f"def {signature}: return cat_perf(metrics.{perf_fn}, inp, targ, precomp=prm).to(inp.device)"
             exec(code, {"cat_perf": cat_perf, 'metrics': metrics}, metrics_fn)
@@ -129,7 +136,7 @@ class ImageSegmentationTrainer(ImageTrainer):
         """
         ordered = []
         for perf_fn in self.args.metrics_base_fns:
-            for bg in [None, self.args.bg]:
+            for bg in self.get_mask_bg_choices():
                 mns = [self.get_cat_metric_name(perf_fn, cat, bg) for cat in self.get_cats_with_all()]
                 ordered.append((mns, perf_fn + ("" if bg is None else self.NO_BG)))
         return ordered
