@@ -159,6 +159,7 @@ class FastaiTrainer:
         :param stratify: bool, whether to stratify data when splitting
         """
         self.PERF_CI = '__ci'
+        self.ci_bootstrap_n = 100
         self.MODEL_SUFFIX = '_model'
         self.args = args
         self.stratify = stratify
@@ -390,7 +391,7 @@ class FastaiTrainer:
             self.print_metrics_summary(interp.metrics)
         return interp
 
-    def compute_metrics_with_ci(self, interp, ci_p=.95, n=100):
+    def compute_metrics_with_ci(self, interp, ci_p=.95):
         """Computes metrics with non-parametric confidence interval
         :param interp: namespace with predictions, targets, decoded predictions
         :param ci_p: float, requested CI
@@ -401,7 +402,7 @@ class FastaiTrainer:
             interp = self.compute_metrics(interp, with_ci=False)
         all_metrics = [interp.metrics]
         bs = interp.targs.shape[0]
-        for _ in tqdm(range(n)):
+        for _ in tqdm(range(self.ci_bootstrap_n)):
             idxs = np.random.randint(0, bs, bs)
             s = SimpleNamespace()
             s.preds, s.targs, s.decoded, s.dl = interp.preds[idxs], interp.targs[idxs], interp.decoded[idxs], interp.dl

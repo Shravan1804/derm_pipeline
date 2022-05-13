@@ -70,6 +70,7 @@ class ImageSegmentationTrainer(ImageTrainer):
         self.NO_BG = '_no_bg'    # used to differentiate metrics ignoring background
         super().__init__(args, stratify, full_img_sep, **kwargs)
         self.loss_axis = 1
+        self.ci_bootstrap_n = 5
         if self.args.coco_metrics:
             # conditional import because object detection requires the icevision library
             from object_detection.object_detection_utils import CustomCocoEval, segm_dataset_to_coco_format
