@@ -244,7 +244,7 @@ class ImageSegmentationTrainer(ImageTrainer):
         if self.args.wandb:
             import wandb
             from fastai.callback.wandb import WandbCallback
-            callbacks += [WandbCallback(log='all')]
+            callbacks += [WandbCallback(log='all', log_preds=False)]
             # update the name of the wandb run
             run_name = f'{self.args.model}-{wandb.run.name}'
             wandb.run.name = run_name
