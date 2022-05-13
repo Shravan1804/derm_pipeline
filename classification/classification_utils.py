@@ -56,16 +56,32 @@ def conf_mat(targs, preds, cats, normalize=True, epsilon=1e-8):
 
 
 class LinearClassifier(torch.nn.Module):
-    """Linear layer as classification head."""
     def __init__(self, dim, num_labels=1000):
         super(LinearClassifier, self).__init__()
         self.num_labels = num_labels
-        self.linear = torch.nn.Linear(dim, num_labels)
+
+        self.dropout = torch.nn.Dropout(0.3)
+
+        self.linear = torch.nn.Linear(dim, 128)
         self.linear.weight.data.normal_(mean=0.0, std=0.01)
         self.linear.bias.data.zero_()
+        self.relu = torch.nn.ReLU()
+
+        self.dropout2 = torch.nn.Dropout(0.3)
+
+        self.linear2 = torch.nn.Linear(128, num_labels)
+        self.linear2.weight.data.normal_(mean=0.0, std=0.01)
+        self.linear2.bias.data.zero_()
 
     def forward(self, x):
         # flatten
         x = x.view(x.size(0), -1)
-        # linear layer
-        return self.linear(x)
+        # Dropout
+        x = self.dropout(x)
+        # 1. linear layer
+        x = self.linear(x)
+        x = self.relu(x)
+        x = self.dropout2(x)
+        # 2. linear layer
+        x = self.linear2(x)
+        return x
