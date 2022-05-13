@@ -201,16 +201,16 @@ class ImageClassificationTrainer(ImageTrainer):
         d, t = fv.flatten_check(interp.decoded, interp.targs)
         return {cid: metrics.get_cls_TP_TN_FP_FN(t == cid, d == cid) for cid in self.get_cats_idxs()}
 
-    def compute_metrics(self, interp):
+    def compute_metrics(self, interp, print_summary=False, with_ci=True):
         """Apply metrics functions on test set predictions
         :param interp: namespace with predictions, targs, decoded preds, test set predictions
         :return: same namespace but with metrics results dict
         """
-        interp = super().compute_metrics(interp)
-        d, t = fv.flatten_check(interp.decoded, interp.targs)
-        interp.metrics['cm'] = classif_utils.conf_mat(d, t, self.args.cats)
-        print(skm.classification_report(t, d, labels=list(interp.dl.vocab.o2i.values()),
-                                        target_names=[str(v) for v in interp.dl.vocab]))
+        interp = super().compute_metrics(interp, print_summary, with_ci)
+        targs, dec = interp.targs.flatten(), interp.decoded.flatten()
+        interp.metrics['cm'] = classif_utils.conf_mat(targs, dec, self.args.cats)
+        if print_summary:
+            print(skm.classification_report(targs, dec, target_names=self.args.cats, labels=self.get_cats_idxs()))
         return interp
 
 

@@ -169,6 +169,19 @@ class ImageTrainer(FastaiTrainer):
                 self.create_cats_metrics(perf_fn, cat_id, cat, metrics_fn)
         return metrics_fn
 
+    def print_metrics_summary(self, metrics):
+        """Prints summary of metrics
+        :param metrics, dict with metrics results
+        :return str of printed txt
+        """
+        metric_names, agg_keys = zip(*self.ordered_test_perfs_per_cats())
+        s = ';'.join(["category"] + agg_keys)
+        for cat in self.get_cats_with_all():
+            res = [metrics[mn] for mn in metric_names if mn in metrics]
+            s += cat + ';' + ';'.join([f"{r:.0%}" for r in res])
+        print(s)
+        return s
+
     def plot_custom_metrics(self, ax, agg_perf, show_val, title=None):
         """Plots aggregated metrics results.
         :param ax: axis

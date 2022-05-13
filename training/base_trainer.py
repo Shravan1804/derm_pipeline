@@ -358,10 +358,14 @@ class FastaiTrainer:
                 interp = SimpleNamespace()
                 interp.preds, interp.targs, interp.decoded = learn.get_preds(dl=dl, with_decoded=True)
             interp.dl = dl
-            interp = self.compute_metrics(interp)
+            interp = self.compute_metrics(interp, print_summary=True)
             del interp.preds, interp.targs, interp.decoded, interp.dl
             GPUManager.clean_gpu_memory(dl)
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(interp)
+
+    def print_metrics_summary(self):
+        """Prints summary of metrics"""
+        raise NotImplementedError
 
     def precompute_metrics(self, interp):
         """Precomputes values useful to speed up metrics calculations (e.g. class TP TN FP FN)
@@ -370,7 +374,7 @@ class FastaiTrainer:
         """
         return {}
 
-    def compute_metrics(self, interp, with_ci=True):
+    def compute_metrics(self, interp, print_summary=False, with_ci=True):
         """Computes custom metrics and add results to interp object. Should return interp.
         :param interp: namespace with predictions, targets, decoded predictions
         :param with_ci: bool, compute confidence interval as well
@@ -382,6 +386,8 @@ class FastaiTrainer:
         if with_ci:
             with common.temporary_np_seed(self.args.seed):
                 interp = self.compute_metrics_with_ci(interp)
+        if print_summary:
+            self.print_metrics_summary(interp.metrics)
         return interp
 
     def compute_metrics_with_ci(self, interp, ci_p=.95, n=100):
@@ -397,9 +403,9 @@ class FastaiTrainer:
         bs = interp.targs.shape[0]
         for _ in tqdm(range(n)):
             idxs = np.random.randint(0, bs, bs)
-            sample = SimpleNamespace()
-            sample.preds, sample.targs, sample.decoded = interp.preds[idxs], interp.targs[idxs], interp.decoded[idxs]
-            all_metrics.append(self.compute_metrics(sample, with_ci=False).metrics)
+            s = SimpleNamespace()
+            s.preds, s.targs, s.decoded, s.dl = interp.preds[idxs], interp.targs[idxs], interp.decoded[idxs], interp.dl
+            all_metrics.append(self.compute_metrics(s, with_ci=False).metrics)
         for mn in interp.metrics.keys():
             interp.metrics[f'{mn}{self.PERF_CI}'] = non_param_ci([am[mn] for am in all_metrics], ci_p)
         return interp
