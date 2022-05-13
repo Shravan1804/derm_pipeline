@@ -84,7 +84,7 @@ def F1(TP, TN, FP, FN, epsilon=1e-8):
     :return: float, F1 result
     """
     pre, rec = precision(TP, TN, FP, FN, epsilon), recall(TP, TN, FP, FN, epsilon)
-    return 2 * pre * rec / (pre + rec)
+    return 2 * pre * rec / (pre + rec + epsilon)
 
 
 def specificity(TP, TN, FP, FN, epsilon=1e-8):
