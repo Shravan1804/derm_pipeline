@@ -108,9 +108,9 @@ class ImageClassificationTrainer(ImageTrainer):
         :param metrics_fn: dict, contains generated metrics function names as keys and metrics functions as values
         """
         cat_perf = partial(classif_utils.cls_perf, cats=self.args.cats)
-        signature = f'{self.get_cat_metric_name(perf_fn, cat)}(inp, targ)'
-        code = f"def {signature}: return cat_perf(metrics.{perf_fn}, inp, targ, {cat_id}).to(inp.device)"
-        exec(code, {"cat_perf": cat_perf, 'metrics': metrics, 'TensorBase': fv.TensorBase}, metrics_fn)
+        signature = f'{self.get_cat_metric_name(perf_fn, cat)}(inp, targ, prm)'
+        code = f"def {signature}: return cat_perf(metrics.{perf_fn}, inp, targ, {cat_id}, precomp=prm).to(inp.device)"
+        exec(code, {"cat_perf": cat_perf, 'metrics': metrics}, metrics_fn)
 
     def ordered_test_perfs_per_cats(self):
         """Returns custom metrics ordered per category order and metrics type
