@@ -177,9 +177,10 @@ class ImageTrainer(FastaiTrainer):
         metric_names, agg_keys = zip(*self.ordered_test_perfs_per_cats())
         s = 'category;' + ';'.join(agg_keys) + '\n'
         for cid, cat in enumerate(self.get_cats_with_all()):
-            mns = [mns[cid] for mns in metric_names]
-            res = [f"{metrics[mn]:.0%}" for mn in mns if mn in metrics]
-            s += cat + ';' + ';'.join([f"{r:.0%}" for r in metrics[mn]]) + '\n'
+            mns = [mns[cid] for mns in metric_names if mns[cid] in metrics]
+            cis = [metrics[f'{mn}{self.PERF_CI}'] if f'{mn}{self.PERF_CI}' in metrics else None for mn in mns]
+            cis = [ci if ci is None else f"({ci[0]*100:.0f}-{ci[1]*100:.0f})" for ci in cis]
+            s += cat + ';' + ';'.join([f"{metrics[mn]:.0%} {ci}" for mn, ci in zip(mns, cis)]) + '\n'
         print(s)
         return s
 
