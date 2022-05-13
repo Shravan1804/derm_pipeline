@@ -109,7 +109,7 @@ class ImageClassificationTrainer(ImageTrainer):
         """
         cat_perf = partial(classif_utils.cls_perf, cats=self.args.cats)
         signature = f'{self.get_cat_metric_name(perf_fn, cat)}(inp, targ)'
-        code = f"def {signature}: return cat_perf(metrics.{perf_fn}, TensorBase(inp), TensorBase(targ), {cat_id}).to(inp.device)"
+        code = f"def {signature}: return cat_perf(metrics.{perf_fn}, inp, targ, {cat_id}).to(inp.device)"
         exec(code, {"cat_perf": cat_perf, 'metrics': metrics, 'TensorBase': fv.TensorBase}, metrics_fn)
 
     def ordered_test_perfs_per_cats(self):
@@ -192,6 +192,17 @@ class ImageClassificationTrainer(ImageTrainer):
         corr = np.array(labels) != decoded
         labels[corr] = np.array([p for p in decoded[corr]])
         return wl_items, fv.L(labels.tolist())
+
+    def precompute_metrics(self, interp):
+        """Precomputes values useful to speed up metrics calculations (e.g. class TP TN FP FN)
+        :param interp: namespace with predictions, targets, decoded predictions
+        :return: dict, with precomputed values. Keys are category id. None (all cats) is replaced by -1
+        """
+        precomp = {}
+        d, t = fv.flatten_check(interp.decoded, interp.targs)
+        for cid in [None, *self.get_cats_idxs()]:
+            precomp[-1 if cid is None else cid] = metrics.get_cls_TP_TN_FP_FN(t == cid, d == cid)
+        return precomp
 
     def compute_metrics(self, interp):
         """Apply metrics functions on test set predictions

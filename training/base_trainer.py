@@ -362,12 +362,22 @@ class FastaiTrainer:
             GPUManager.clean_gpu_memory(dl)
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(interp)
 
+    def precompute_metrics(self, interp):
+        """Precomputes values useful to speed up metrics calculations (e.g. class TP TN FP FN)
+        :param interp: namespace with predictions, targets, decoded predictions
+        :return: dict, with precomputed values
+        """
+        return {}
+
     def compute_metrics(self, interp):
         """Computes custom metrics and add results to interp object. Should return interp.
         :param interp: namespace with predictions, targets, decoded predictions
+        :param precomputed_vals: values that were precomputed to speed up metrics computations
+        (used for confidence interval)
         :return: namespace with metrics results
         """
-        interp.metrics = {mn: mfn(interp.preds, interp.targs) for mn, mfn in self.cust_metrics.items()}
+        prm = self.precompute_metrics(interp)
+        interp.metrics = {mn: mfn(interp.preds, interp.targs, precomp=prm) for mn, mfn in self.cust_metrics.items()}
         return interp
 
     def compute_metrics_with_ci(self, interp, ci_p=.95, n=100):
