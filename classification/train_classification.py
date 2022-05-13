@@ -119,14 +119,6 @@ class ImageClassificationTrainer(ImageTrainer):
         all_cats = self.get_cats_with_all()
         return [([self.get_cat_metric_name(f, c) for c in all_cats], f) for f in self.args.metrics_base_fns]
 
-    def compute_conf_mat(self, targs, decoded):
-        """Compute confusion matrix from predictions
-        :param targs: tensor, ground truth, size B
-        :param decoded: tensor, decoded predictions, size B
-        :return: tensor, confusion metrics N x N (with N categories)
-        """
-        return classif_utils.conf_mat(fv.TensorBase(targs), fv.TensorBase(decoded), self.args.cats)
-
     def customize_datablock(self):
         """Provides experiment specific kwargs for DataBlock
         :return: dict with argnames and argvalues
@@ -208,6 +200,7 @@ class ImageClassificationTrainer(ImageTrainer):
         """
         interp = super().compute_metrics(interp)
         d, t = fv.flatten_check(interp.decoded, interp.targs)
+        interp.metrics['cm'] = classif_utils.conf_mat(d, t, self.args.cats)
         print(skm.classification_report(t, d, labels=list(interp.dl.vocab.o2i.values()),
                                         target_names=[str(v) for v in interp.dl.vocab]))
         return interp

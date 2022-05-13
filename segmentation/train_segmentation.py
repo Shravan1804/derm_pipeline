@@ -134,14 +134,6 @@ class ImageSegmentationTrainer(ImageTrainer):
                 ordered.append((mns, perf_fn + ("" if bg is None else self.NO_BG)))
         return ordered
 
-    def compute_conf_mat(self, targs, preds):
-        """Compute pixel-wise confusion matrix from flattened predicted masks
-        :param targs: tensor, ground truth, size B x M x M
-        :param decoded: tensor, decoded predictions, size B x M x M
-        :return: tensor, confusion metrics N x N (with N categories)
-        """
-        return segm_utils.pixel_conf_mat(targs, preds, self.args.cats)
-
     def plot_custom_metrics(self, ax, agg_perf, show_val, title=None):
         """Plots aggregated metrics results.
         :param ax: axis
@@ -161,6 +153,7 @@ class ImageSegmentationTrainer(ImageTrainer):
         interp.targs = interp.targs.as_subclass(torch.Tensor)   # otherwise issues with fastai PILMask custom class
         interp = super().compute_metrics(interp)
         targs, dec = interp.targs.flatten(), interp.decoded.flatten()
+        interp.metrics['cm'] = segm_utils.pixel_conf_mat(targs, dec, self.args.cats)
         print(skm.classification_report(targs, dec, target_names=self.args.cats,
                                         labels=[i for i, v in enumerate(self.args.cats)]))
         if self.args.coco_metrics:

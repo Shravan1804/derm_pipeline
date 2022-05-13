@@ -78,7 +78,9 @@ class FastaiTrainer:
         parser.add_argument('--reduce-lr-on-plateau', action='store_true', help="Reduce lr during training")
         parser.add_argument('--no-plot', action='store_true', help="Will not plot test results (e.g. too many classes)")
         parser.add_argument('--no-plot-val', action='store_true', help="Will not print vals inside plot area")
-        parser.add_argument("--metrics-base-fns", type=str, nargs='+', default=['precision', 'recall'], help="metrics")
+        parser.add_argument("--metrics-base-fns", type=str, nargs='+', default=['precision', 'recall', 'F1'],
+                            choices=['accuracy', 'precision', 'recall', 'F1', 'specificity', 'sensitivity', 'ppv',
+                                     'npv'], help="metrics")
 
         parser.add_argument('--proc-gpu', type=int, default=0, help="Id of gpu to be used by process")
         parser.add_argument("--gpu-ids", type=int, nargs='+', default=GPUManager.default_gpu_device_ids(),
@@ -368,7 +370,7 @@ class FastaiTrainer:
         interp.metrics = {mn: mfn(interp.preds, interp.targs) for mn, mfn in self.cust_metrics.items()}
         return interp
 
-    def compute_metrics_with_ci(self, interp, ci_p=.95, n=20):
+    def compute_metrics_with_ci(self, interp, ci_p=.95, n=100):
         """Computes metrics with non-parametric confidence interval
         :param interp: namespace with predictions, targets, decoded predictions
         :param ci_p: float, requested CI

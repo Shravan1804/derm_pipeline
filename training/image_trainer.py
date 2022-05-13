@@ -99,14 +99,6 @@ class ImageTrainer(FastaiTrainer):
         self.loss_axis = -1     # predictions argmax axis to get decoded preds
         super().__init__(args, stratify)
 
-    def compute_conf_mat(self, targs, preds):
-        """Compute confusion matrix from predictions
-        :param targs: tensor, ground truth, size B
-        :param decoded: tensor, decoded predictions, size B
-        :return: tensor, confusion metrics N x N
-        """
-        raise NotImplementedError
-
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn):
         """Generates metrics functions for the individual classes
         :param perf_fn: function, metrics to apply, e.g. precision
@@ -188,15 +180,6 @@ class ImageTrainer(FastaiTrainer):
         bar_perf = {mn: cat_mres for p in self.args.metrics_base_fns for mn, cat_mres in agg_perf.items() if p in mn}
         bar_cats = self.get_cats_with_all()
         cplot.grouped_barplot_with_err(ax, bar_perf, bar_cats, xlabel='Classes', show_val=show_val, title=title)
-
-    def compute_metrics(self, interp):
-        """Computes custom metrics and conf mat and add results to interp object. Should return interp.
-        :param interp: namespace with predictions, targets, decoded predictions
-        :return: same namespace with metrics results
-        """
-        interp = super().compute_metrics(interp)
-        interp.metrics['cm'] = self.compute_conf_mat(interp.targs, interp.decoded)
-        return interp
 
     def aggregate_test_performance(self, folds_res):
         """Merges metrics over different folds, computes mean and std.
