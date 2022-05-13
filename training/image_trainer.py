@@ -177,7 +177,9 @@ class ImageTrainer(FastaiTrainer):
         :param title: str, plot title
         """
         ax.axis('on')
-        bar_perf = {mn: cat_mres for p in self.args.metrics_base_fns for mn, cat_mres in agg_perf.items() if p in mn}
+        # if p in mn because mn may be variation of perfs: e.g. in segm perf to ignore bg (precision, precision_no_bg)
+        bar_perf = {mn: cat_mres for p in self.args.metrics_base_fns for mn, cat_mres in agg_perf.items() if p in mn
+                    and self.PERF_CI not in mn}
         bar_cats = self.get_cats_with_all()
         cplot.grouped_barplot_with_err(ax, bar_perf, bar_cats, xlabel='Classes', show_val=show_val, title=title)
 
@@ -189,14 +191,15 @@ class ImageTrainer(FastaiTrainer):
         """
         agg = super().aggregate_test_performance(folds_res)
         for mns, agg_key in self.ordered_test_perfs_per_cats():
-            # if mn in agg: in case we did no compute all metrics fns
+            # if mn in agg: in case some metrics fns were not computed
             mns = [mn for mn in mns if mn in agg]
             if len(mns) > 0:
                 agg[agg_key] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns if mn in agg]))
         return agg
 
     def ordered_test_perfs_per_cats(self):
-        """:return list of tuples of list of metrics names (following cat order) with corresponding aggregated key"""
+        """Returns list of tuples, each tuple is the list of metrics names (following cat order) with corresponding
+        aggregated key"""
         raise NotImplementedError
 
     def plot_save_path(self, test_path, run, show_val, custom=""):

@@ -158,6 +158,7 @@ class FastaiTrainer:
         :param args: command line args
         :param stratify: bool, whether to stratify data when splitting
         """
+        self.PERF_CI = '__ci'
         self.MODEL_SUFFIX = '_model'
         self.args = args
         self.stratify = stratify
@@ -369,14 +370,18 @@ class FastaiTrainer:
         """
         return {}
 
-    def compute_metrics(self, interp):
+    def compute_metrics(self, interp, with_ci=True):
         """Computes custom metrics and add results to interp object. Should return interp.
         :param interp: namespace with predictions, targets, decoded predictions
+        :param with_ci: bool, compute confidence interval as well
         (used for confidence interval)
         :return: namespace with metrics results
         """
         prm = self.precompute_metrics(interp)
         interp.metrics = {mn: mfn(interp.preds, interp.targs, prm) for mn, mfn in self.cust_metrics.items()}
+        if with_ci:
+            with common.temporary_np_seed(self.args.seed):
+                interp = self.compute_metrics_with_ci(interp)
         return interp
 
     def compute_metrics_with_ci(self, interp, ci_p=.95, n=100):
@@ -386,15 +391,18 @@ class FastaiTrainer:
         :param n: int, number of repetitions
         :return: tuple with list of repetition metrics results and resulting CI
         """
-        bs = interp.preds.shape[0]
-        all_metrics = [self.compute_metrics(interp).metrics]
+        if not hasattr(interp, 'metrics'):
+            interp = self.compute_metrics(interp, with_ci=False)
+        all_metrics = [interp.metrics]
+        bs = interp.targs.shape[0]
         for _ in tqdm(range(n)):
             idxs = np.random.randint(0, bs, bs)
             sample = SimpleNamespace()
             sample.preds, sample.targs, sample.decoded = interp.preds[idxs], interp.targs[idxs], interp.decoded[idxs]
-            all_metrics.append(self.compute_metrics(sample).metrics)
-        with_ci = {mn: (res, non_param_ci([am[mn] for am in all_metrics], ci_p)) for mn, res in interp.metrics.items()}
-        return all_metrics, with_ci
+            all_metrics.append(self.compute_metrics(sample, with_ci=False).metrics)
+        for mn in interp.metrics.keys():
+            interp.metrics[f'{mn}{self.PERF_CI}'] = non_param_ci([am[mn] for am in all_metrics], ci_p)
+        return interp
 
     def aggregate_test_performance(self, folds_res):
         """Merges metrics over different folds, computes mean and std.
