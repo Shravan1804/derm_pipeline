@@ -108,7 +108,7 @@ class ImageClassificationTrainer(ImageTrainer):
         :param metrics_fn: dict, contains generated metrics function names as keys and metrics functions as values
         """
         cat_perf = partial(classif_utils.cls_perf, cats=self.args.cats)
-        signature = f'{self.get_cat_metric_name(perf_fn, cat)}(inp, targ, prm)'
+        signature = f'{self.get_cat_metric_name(perf_fn, cat)}(inp, targ, prm=dict())'
         code = f"def {signature}: return cat_perf(metrics.{perf_fn}, inp, targ, {cat_id}, precomp=prm).to(inp.device)"
         exec(code, {"cat_perf": cat_perf, 'metrics': metrics}, metrics_fn)
 
@@ -196,7 +196,7 @@ class ImageClassificationTrainer(ImageTrainer):
     def precompute_metrics(self, interp):
         """Precomputes values useful to speed up metrics calculations (e.g. class TP TN FP FN)
         :param interp: namespace with predictions, targets, decoded predictions
-        :return: dict, with precomputed values. Keys are category id. None (all cats) is replaced by -1
+        :return: dict, with precomputed values. Keys are category id.
         """
         precomp = {}
         d, t = fv.flatten_check(interp.decoded, interp.targs)

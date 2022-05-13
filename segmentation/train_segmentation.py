@@ -119,8 +119,8 @@ class ImageSegmentationTrainer(ImageTrainer):
         """
         for bg in [None, self.args.bg]:
             cat_perf = partial(segm_utils.cls_perf, cls_idx=cat_id, cats=self.args.cats, bg=bg)
-            signature = f'{self.get_cat_metric_name(perf_fn, cat, bg)}(inp, targ)'
-            code = f"def {signature}: return cat_perf(metrics.{perf_fn}, inp, targ).to(inp.device)"
+            signature = f'{self.get_cat_metric_name(perf_fn, cat, bg)}(inp, targ, prm=dict())'
+            code = f"def {signature}: return cat_perf(metrics.{perf_fn}, inp, targ, precomp=prm).to(inp.device)"
             exec(code, {"cat_perf": cat_perf, 'metrics': metrics}, metrics_fn)
 
     def ordered_test_perfs_per_cats(self):
@@ -144,6 +144,15 @@ class ImageSegmentationTrainer(ImageTrainer):
         if not self.args.plot_no_bg:
             agg_perf = {k: v for k, v in agg_perf.items() if self.NO_BG not in k}
         super().plot_custom_metrics(ax, agg_perf, show_val, title)
+
+    def precompute_metrics(self, interp):
+        """Precomputes values useful to speed up metrics calculations (e.g. class TP TN FP FN)
+        :param interp: namespace with predictions, targets, decoded predictions
+        :return: dict, with precomputed values. Keys are tuple of category id and whether to mask bg.
+        """
+        precomp = {}
+
+        return precomp
 
     def compute_metrics(self, interp):
         """Apply metrics functions on test set predictions. If requested, will also compute object detection metrics
