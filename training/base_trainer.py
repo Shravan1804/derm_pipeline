@@ -406,7 +406,7 @@ class FastaiTrainer:
             s = SimpleNamespace()
             s.preds, s.targs, s.decoded, s.dl = interp.preds[idxs], interp.targs[idxs], interp.decoded[idxs], interp.dl
             all_metrics.append(self.compute_metrics(s, with_ci=False).metrics)
-        for mn in interp.metrics.keys():
+        for mn in list(interp.metrics.keys()):
             interp.metrics[f'{mn}{self.PERF_CI}'] = non_param_ci([am[mn] for am in all_metrics], ci_p)
         return interp
 

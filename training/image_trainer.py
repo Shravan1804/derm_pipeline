@@ -175,10 +175,11 @@ class ImageTrainer(FastaiTrainer):
         :return str of printed txt
         """
         metric_names, agg_keys = zip(*self.ordered_test_perfs_per_cats())
-        s = ';'.join(["category"] + agg_keys)
-        for cat in self.get_cats_with_all():
-            res = [metrics[mn] for mn in metric_names if mn in metrics]
-            s += cat + ';' + ';'.join([f"{r:.0%}" for r in res])
+        s = 'category;' + ';'.join(agg_keys) + '\n'
+        for cid, cat in enumerate(self.get_cats_with_all()):
+            mns = [mns[cid] for mns in metric_names]
+            res = [f"{metrics[mn]:.0%}" for mn in mns if mn in metrics]
+            s += cat + ';' + ';'.join([f"{r:.0%}" for r in metrics[mn]]) + '\n'
         print(s)
         return s
 
