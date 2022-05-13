@@ -157,9 +157,9 @@ class ImageSegmentationTrainer(ImageTrainer):
         :param interp: namespace with predictions, targets, decoded predictions
         :return: dict, with precomputed values. Keys are tuple of category id and whether to mask bg.
         """
-        precomp = {}
-
-        return precomp
+        d, t = fv.flatten_check(interp.decoded, interp.targs)
+        return {(cid, bg): metrics.get_cls_TP_TN_FP_FN(t == cid, d == cid) for cid in self.get_cats_idxs()
+                for bg in self.get_mask_bg_choices()}
 
     def compute_metrics(self, interp):
         """Apply metrics functions on test set predictions. If requested, will also compute object detection metrics

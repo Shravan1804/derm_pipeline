@@ -198,11 +198,8 @@ class ImageClassificationTrainer(ImageTrainer):
         :param interp: namespace with predictions, targets, decoded predictions
         :return: dict, with precomputed values. Keys are category id.
         """
-        precomp = {}
         d, t = fv.flatten_check(interp.decoded, interp.targs)
-        for cid in self.get_cats_idxs():
-            precomp[-1 if cid is None else cid] = metrics.get_cls_TP_TN_FP_FN(t == cid, d == cid)
-        return precomp
+        return {cid: metrics.get_cls_TP_TN_FP_FN(t == cid, d == cid) for cid in self.get_cats_idxs()}
 
     def compute_metrics(self, interp):
         """Apply metrics functions on test set predictions
