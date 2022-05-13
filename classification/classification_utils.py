@@ -37,7 +37,7 @@ def cls_perf(perf, inp, targ, cls_idx, cats, axis=-1, precomp={}):
             TP_TN_FP_FN = precomp[cls_idx] if precomp else metrics.get_cls_TP_TN_FP_FN(targ == cls_idx, inp == cls_idx)
         return torch.tensor(perf(*TP_TN_FP_FN)).float()
     else:
-        cls_res = [cls_perf(perf, inp, targ, c, cats, axis) for c in range(len(cats))]
+        cls_res = [cls_perf(perf, inp, targ, c, cats, axis, precomp) for c in range(len(cats))]
         return torch.stack(cls_res).mean()
 
 

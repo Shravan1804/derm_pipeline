@@ -200,7 +200,7 @@ class ImageClassificationTrainer(ImageTrainer):
         """
         precomp = {}
         d, t = fv.flatten_check(interp.decoded, interp.targs)
-        for cid in [None, *self.get_cats_idxs()]:
+        for cid in self.get_cats_idxs():
             precomp[-1 if cid is None else cid] = metrics.get_cls_TP_TN_FP_FN(t == cid, d == cid)
         return precomp
 
