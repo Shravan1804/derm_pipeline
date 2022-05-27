@@ -110,9 +110,9 @@ class ImageClassificationTrainer(ImageTrainer):
         :param metrics_fn: dict, contains generated metrics function names as keys and metrics functions as values
         """
         cat_perf = partial(classif_utils.cls_perf, cats=self.args.cats)
-        signature = f'{self.get_cat_metric_name(perf_fn, cat)}(inp, targ)'
-        code = f"def {signature}: return cat_perf(metrics.{perf_fn}, TensorBase(inp), TensorBase(targ), {cat_id}).to(inp.device)"
-        exec(code, {"cat_perf": cat_perf, 'metrics': metrics, 'TensorBase': fv.TensorBase}, metrics_fn)
+        signature = f'{self.get_cat_metric_name(perf_fn, cat)}(inp, targ, prm=dict())'
+        code = f"def {signature}: return cat_perf(metrics.{perf_fn}, inp, targ, {cat_id}, precomp=prm).to(inp.device)"
+        exec(code, {"cat_perf": cat_perf, 'metrics': metrics}, metrics_fn)
 
     def ordered_test_perfs_per_cats(self):
         """Returns custom metrics ordered per category order and metrics type
@@ -246,15 +246,24 @@ class ImageClassificationTrainer(ImageTrainer):
         labels[corr] = np.array([p for p in decoded[corr]])
         return wl_items, fv.L(labels.tolist())
 
-    def compute_metrics(self, interp):
+    def precompute_metrics(self, interp):
+        """Precomputes values useful to speed up metrics calculations (e.g. class TP TN FP FN)
+        :param interp: namespace with predictions, targets, decoded predictions
+        :return: dict, with precomputed values. Keys are category id.
+        """
+        d, t = fv.flatten_check(interp.decoded, interp.targs)
+        return {cid: metrics.get_cls_TP_TN_FP_FN(t == cid, d == cid) for cid in self.get_cats_idxs()}
+
+    def compute_metrics(self, interp, print_summary=False, with_ci=True):
         """Apply metrics functions on test set predictions
         :param interp: namespace with predictions, targs, decoded preds, test set predictions
         :return: same namespace but with metrics results dict
         """
-        interp = super().compute_metrics(interp)
-        d, t = fv.flatten_check(interp.decoded, interp.targs)
-        print(skm.classification_report(t, d, labels=list(interp.dl.vocab.o2i.values()),
-                                        target_names=[str(v) for v in interp.dl.vocab]))
+        interp = super().compute_metrics(interp, print_summary, with_ci)
+        targs, dec = interp.targs.flatten(), interp.decoded.flatten()
+        interp.metrics['cm'] = classif_utils.conf_mat(targs, dec, self.args.cats)
+        if print_summary:
+            print(skm.classification_report(targs, dec, target_names=self.args.cats, labels=self.get_cats_idxs()))
         return interp
 
 

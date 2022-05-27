@@ -46,6 +46,7 @@ class ImageSegmentationTrainer(ImageTrainer):
         """
         # static method super call: https://stackoverflow.com/questions/26788214/super-and-staticmethod-interaction
         parser = super(ImageSegmentationTrainer, ImageSegmentationTrainer).get_argparser(desc, pdef, phelp)
+        parser.add_argument('--include-no-bg', action='store_true', help="Also evaluate metrics after masking bg")
         parser.add_argument('--plot-no-bg', action='store_true', help="Include perfs without bg cat in plots")
         parser.add_argument('--coco-metrics', action='store_true', help="Also computes coco metrics")
         parser.add_argument('--rm-small-objs', action='store_true', help="Remove objs smaller than --min-size")
@@ -57,6 +58,8 @@ class ImageSegmentationTrainer(ImageTrainer):
         """Sets up training, check args validity.
         :param args: command line args
         """
+        if not args.include_no_bg:
+            args.plot_no_bg = False
         args.exp_name = "img_segm_" + args.exp_name
         super(ImageSegmentationTrainer, ImageSegmentationTrainer).prepare_training(args)
 
@@ -69,6 +72,7 @@ class ImageSegmentationTrainer(ImageTrainer):
         self.NO_BG = '_no_bg'    # used to differentiate metrics ignoring background
         super().__init__(args, stratify, full_img_sep, **kwargs)
         self.loss_axis = 1
+        self.ci_bootstrap_n = 5
         if self.args.coco_metrics:
             # conditional import because object detection requires the icevision library
             from object_detection.object_detection_utils import CustomCocoEval, segm_dataset_to_coco_format
@@ -112,6 +116,10 @@ class ImageSegmentationTrainer(ImageTrainer):
         """
         return f'{super().get_cat_metric_name(perf_fn, cat)}{"" if bg is None else self.NO_BG}'
 
+    def get_mask_bg_choices(self):
+        """Returns a tuple with choices whether to mask background or not in metric"""
+        return (None, self.args.bg) if self.args.include_no_bg else (None,)
+
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn):
         """Generates metrics functions for the individual categories and background inclusion/exclusion
         :param perf_fn: function, metrics to apply, e.g. precision
@@ -119,10 +127,10 @@ class ImageSegmentationTrainer(ImageTrainer):
         :param cat: str, label of category for which to compute metric
         :param metrics_fn: dict, contains generated metrics function names as keys and metrics functions as values
         """
-        for bg in [None, self.args.bg]:
-            cat_perf = partial(segm_utils.cls_perf, cls_idx=cat_id, cats=self.args.cats, bg=bg)
-            signature = f'{self.get_cat_metric_name(perf_fn, cat, bg)}(inp, targ)'
-            code = f"def {signature}: return cat_perf(metrics.{perf_fn}, inp, targ).to(inp.device)"
+        for bg in self.get_mask_bg_choices():
+            cat_perf = partial(segm_utils.cls_perf, cidx=cat_id, cats=self.args.cats, bg=bg)
+            signature = f'{self.get_cat_metric_name(perf_fn, cat, bg)}(inp, targ, prm=dict())'
+            code = f"def {signature}: return cat_perf(metrics.{perf_fn}, inp, targ, precomp=prm).to(inp.device)"
             exec(code, {"cat_perf": cat_perf, 'metrics': metrics}, metrics_fn)
 
     def ordered_test_perfs_per_cats(self):
@@ -131,7 +139,7 @@ class ImageSegmentationTrainer(ImageTrainer):
         """
         ordered = []
         for perf_fn in self.args.metrics_base_fns:
-            for bg in [None, self.args.bg]:
+            for bg in self.get_mask_bg_choices():
                 mns = [self.get_cat_metric_name(perf_fn, cat, bg) for cat in self.get_cats_with_all()]
                 ordered.append((mns, perf_fn + ("" if bg is None else self.NO_BG)))
         return ordered
@@ -164,16 +172,26 @@ class ImageSegmentationTrainer(ImageTrainer):
             agg_perf = {k: v for k, v in agg_perf.items() if self.NO_BG not in k}
         super().plot_custom_metrics(ax, agg_perf, show_val, title)
 
-    def compute_metrics(self, interp):
+    def precompute_metrics(self, interp):
+        """Precomputes values useful to speed up metrics calculations (e.g. class TP TN FP FN)
+        :param interp: namespace with predictions, targets, decoded predictions
+        :return: dict, with precomputed values. Keys are tuple of category id and whether to mask bg.
+        """
+        d, t = fv.flatten_check(interp.decoded, interp.targs)
+        return {(cid, bg): metrics.get_cls_TP_TN_FP_FN(t == cid, d == cid) for cid in self.get_cats_idxs()
+                for bg in self.get_mask_bg_choices()}
+
+    def compute_metrics(self, interp, print_summary=False, with_ci=True):
         """Apply metrics functions on test set predictions. If requested, will also compute object detection metrics
         :param interp: namespace with predictions, targs, decoded preds, test set predictions
         :return: same namespace but with metrics results dict
         """
         interp.targs = interp.targs.as_subclass(torch.Tensor)   # otherwise issues with fastai PILMask custom class
-        interp = super().compute_metrics(interp)
+        interp = super().compute_metrics(interp, print_summary, with_ci)
         targs, dec = interp.targs.flatten(), interp.decoded.flatten()
-        print(skm.classification_report(targs, dec, target_names=self.args.cats,
-                                        labels=[i for i, v in enumerate(self.args.cats)]))
+        interp.metrics['cm'] = segm_utils.pixel_conf_mat(targs, dec, self.args.cats)
+        if print_summary:
+            print(skm.classification_report(targs, dec, target_names=self.args.cats, labels=self.get_cats_idxs()))
         if self.args.coco_metrics:
             to_coco = partial(segm_dataset_to_coco_format, cats=self.args.cats, bg=self.args.bg)
             with common.elapsed_timer() as elapsed:

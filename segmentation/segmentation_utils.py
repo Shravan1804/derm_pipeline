@@ -65,27 +65,31 @@ def load_img_and_mask(img_path, mask_path):
     return cimg.load_img(img_path), cimg.load_img(mask_path)
 
 
-def cls_perf(perf, inp, targ, cls_idx, cats, bg=None, axis=1):
+def cls_perf(perf, inp, targ, cidx, cats, bg=None, axis=1, precomp={}):
     """Function used to compute classification performance
     If bg not None then computes perf without background
     :param perf: function to call on inp and targ
     :param inp: tensor, predictions
     :param targ: tensor, ground truth
-    :param cls_idx: int, category id to compute performance for
+    :param cidx: int, category id to compute performance for
     :param cats: list, categories
+    :param bg: int, index of background cat. Will be masked if set
     :param axis: int, axis on which to perform argmax to decode prediction
+    :param precomp: dict, precomputed values to speed-up metrics computation
     :return: tensor, performance results
     """
     targ = targ.as_subclass(torch.Tensor)
-    if cls_idx is not None:
-        if cls_idx == bg: return torch.tensor(0).float()
+    if cidx is not None:
+        if cidx == bg: return torch.tensor(0).float()
         if axis is not None: inp = inp.argmax(dim=axis)
         if bg is not None:
             mask = targ != bg
             inp, targ = inp[mask], targ[mask]
-        return torch.tensor(perf(*metrics.get_cls_TP_TN_FP_FN(targ == cls_idx, inp == cls_idx))).float()
+        TP_TN_FP_FN = precomp[(cidx, bg)] if precomp else metrics.get_cls_TP_TN_FP_FN(targ == cidx, inp == cidx)
+        return torch.tensor(perf(*TP_TN_FP_FN)).float()
     else:
-        cls_res = [cls_perf(perf, inp, targ, c, cats, bg, axis) for c in range(0 if bg is None else 1, len(cats))]
+        cidxs = [c for c in range(len(cats)) if bg is None or c != bg]
+        cls_res = [cls_perf(perf, inp, targ, c, cats, bg, axis, precomp) for c in cidxs]
         return torch.stack(cls_res).mean()
 
 

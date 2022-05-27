@@ -81,7 +81,9 @@ class FastaiTrainer:
         parser.add_argument('--reduce-lr-on-plateau', action='store_true', help="Reduce lr during training")
         parser.add_argument('--no-plot', action='store_true', help="Will not plot test results (e.g. too many classes)")
         parser.add_argument('--no-plot-val', action='store_true', help="Will not print vals inside plot area")
-        parser.add_argument("--metrics-base-fns", type=str, nargs='+', default=['precision', 'recall'], help="metrics")
+        parser.add_argument("--metrics-base-fns", type=str, nargs='+', default=['precision', 'recall', 'F1'],
+                            choices=['accuracy', 'precision', 'recall', 'F1', 'specificity', 'sensitivity', 'ppv',
+                                     'npv'], help="metrics")
 
         parser.add_argument('--proc-gpu', type=int, default=0, help="Id of gpu to be used by process")
         parser.add_argument("--gpu-ids", type=int, nargs='+', default=GPUManager.default_gpu_device_ids(),
@@ -102,8 +104,8 @@ class FastaiTrainer:
         :param custom: custom string to be added in experiment log dirname
         :return: str, experiment log dir
         """
-        d = f'{common.now()}_{args.model}_bs{args.bs}_epo{args.epochs}_seed{args.seed}' \
-            f'_world{args.num_machines * len(args.gpu_ids)}'
+        d = f'{common.now()}_{args.model}_bs{args.bs}_epo{args.epochs}_lr{args.lr}_seed{args.seed}'
+        d += f'_world{args.num_machines * len(args.gpu_ids)}'
         if not args.no_norm: d += '_normed'
         d += '_RMSProp' if args.RMSProp else '_Adam'
         d += '_fp32' if args.full_precision else '_fp16'
@@ -160,6 +162,8 @@ class FastaiTrainer:
         :param args: command line args
         :param stratify: bool, whether to stratify data when splitting
         """
+        self.PERF_CI = '__ci'
+        self.ci_bootstrap_n = 100
         self.MODEL_SUFFIX = '_model'
         self.args = args
         self.stratify = stratify
@@ -376,7 +380,7 @@ class FastaiTrainer:
                 interp = SimpleNamespace()
                 interp.preds, interp.targs, interp.decoded = learn.get_preds(dl=dl, with_decoded=True)
             interp.dl = dl
-            interp = self.compute_metrics(interp)
+            interp = self.compute_metrics(interp, print_summary=True)
             if self.args.wandb:
                 import wandb
                 wandb.log({f'test_{k}': v for (k, v) in interp.metrics.items()})
@@ -384,30 +388,52 @@ class FastaiTrainer:
             GPUManager.clean_gpu_memory(dl)
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(interp)
 
-    def compute_metrics(self, interp):
+    def print_metrics_summary(self):
+        """Prints summary of metrics"""
+        raise NotImplementedError
+
+    def precompute_metrics(self, interp):
+        """Precomputes values useful to speed up metrics calculations (e.g. class TP TN FP FN)
+        :param interp: namespace with predictions, targets, decoded predictions
+        :return: dict, with precomputed values
+        """
+        return {}
+
+    def compute_metrics(self, interp, print_summary=False, with_ci=True):
         """Computes custom metrics and add results to interp object. Should return interp.
         :param interp: namespace with predictions, targets, decoded predictions
+        :param with_ci: bool, compute confidence interval as well
+        (used for confidence interval)
         :return: namespace with metrics results
         """
-        interp.metrics = {mn: mfn(interp.preds, interp.targs) for mn, mfn in self.cust_metrics.items()}
+        prm = self.precompute_metrics(interp)
+        interp.metrics = {mn: mfn(interp.preds, interp.targs, prm) for mn, mfn in self.cust_metrics.items()}
+        if with_ci:
+            with common.temporary_np_seed(self.args.seed):
+                interp = self.compute_metrics_with_ci(interp)
+        if print_summary:
+            self.print_metrics_summary(interp.metrics)
         return interp
 
-    def compute_metrics_with_ci(self, interp, ci_p=.95, n=20):
+    def compute_metrics_with_ci(self, interp, ci_p=.95):
         """Computes metrics with non-parametric confidence interval
         :param interp: namespace with predictions, targets, decoded predictions
         :param ci_p: float, requested CI
         :param n: int, number of repetitions
         :return: tuple with list of repetition metrics results and resulting CI
         """
-        bs = interp.preds.shape[0]
-        all_metrics = [self.compute_metrics(interp).metrics]
-        for _ in tqdm(range(n)):
+        if not hasattr(interp, 'metrics'):
+            interp = self.compute_metrics(interp, with_ci=False)
+        all_metrics = [interp.metrics]
+        bs = interp.targs.shape[0]
+        for _ in tqdm(range(self.ci_bootstrap_n)):
             idxs = np.random.randint(0, bs, bs)
-            sample = SimpleNamespace()
-            sample.preds, sample.targs, sample.decoded = interp.preds[idxs], interp.targs[idxs], interp.decoded[idxs]
-            all_metrics.append(self.compute_metrics(sample).metrics)
-        with_ci = {mn: (res, non_param_ci([am[mn] for am in all_metrics], ci_p)) for mn, res in interp.metrics.items()}
-        return all_metrics, with_ci
+            s = SimpleNamespace()
+            s.preds, s.targs, s.decoded, s.dl = interp.preds[idxs], interp.targs[idxs], interp.decoded[idxs], interp.dl
+            all_metrics.append(self.compute_metrics(s, with_ci=False).metrics)
+        for mn in list(interp.metrics.keys()):
+            interp.metrics[f'{mn}{self.PERF_CI}'] = non_param_ci([am[mn] for am in all_metrics], ci_p)
+        return interp
 
     def aggregate_test_performance(self, folds_res):
         """Merges metrics over different folds, computes mean and std.

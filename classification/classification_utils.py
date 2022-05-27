@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.pat
 from training import metrics
 
 
-def cls_perf(perf, inp, targ, cls_idx, cats, axis=-1):
+def cls_perf(perf, inp, targ, cls_idx, cats, axis=-1, precomp={}):
     """Function used to compute classification performance
     :param perf: function to call on inp and targ
     :param inp: tensor, predictions
@@ -28,14 +28,16 @@ def cls_perf(perf, inp, targ, cls_idx, cats, axis=-1):
     :param cls_idx: int, category id to compute performance for
     :param cats: list, categories
     :param axis: int, axis on which to perform argmax to decode prediction
+    :param precomp: dict, precomputed values to speed-up metrics computation
     :return: tensor, performance results
     """
     if cls_idx is not None:
         if axis is not None:
             inp = inp.argmax(dim=axis)
-        return torch.tensor(perf(*metrics.get_cls_TP_TN_FP_FN(targ == cls_idx, inp == cls_idx))).float()
+            TP_TN_FP_FN = precomp[cls_idx] if precomp else metrics.get_cls_TP_TN_FP_FN(targ == cls_idx, inp == cls_idx)
+        return torch.tensor(perf(*TP_TN_FP_FN)).float()
     else:
-        cls_res = [cls_perf(perf, inp, targ, c, cats, axis) for c in range(len(cats))]
+        cls_res = [cls_perf(perf, inp, targ, c, cats, axis, precomp) for c in range(len(cats))]
         return torch.stack(cls_res).mean()
 
 

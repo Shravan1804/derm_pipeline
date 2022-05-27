@@ -101,14 +101,6 @@ class ImageTrainer(FastaiTrainer):
         self.loss_axis = -1     # predictions argmax axis to get decoded preds
         super().__init__(args, stratify)
 
-    def compute_conf_mat(self, targs, preds):
-        """Compute confusion matrix from predictions
-        :param targs: tensor, ground truth, size B
-        :param decoded: tensor, decoded predictions, size B
-        :return: tensor, confusion metrics N x N
-        """
-        raise NotImplementedError
-
     def create_cats_metrics(self, perf_fn, cat_id, cat, metrics_fn):
         """Generates metrics functions for the individual classes
         :param perf_fn: function, metrics to apply, e.g. precision
@@ -179,6 +171,21 @@ class ImageTrainer(FastaiTrainer):
                 self.create_cats_metrics(perf_fn, cat_id, cat, metrics_fn)
         return metrics_fn
 
+    def print_metrics_summary(self, metrics):
+        """Prints summary of metrics
+        :param metrics, dict with metrics results
+        :return str of printed txt
+        """
+        metric_names, agg_keys = zip(*self.ordered_test_perfs_per_cats())
+        s = 'category;' + ';'.join(agg_keys) + '\n'
+        for cid, cat in enumerate(self.get_cats_with_all()):
+            mns = [mns[cid] for mns in metric_names if mns[cid] in metrics]
+            cis = [metrics[f'{mn}{self.PERF_CI}'] if f'{mn}{self.PERF_CI}' in metrics else None for mn in mns]
+            cis = [ci if ci is None else f"({ci[0]*100:.0f}-{ci[1]*100:.0f})" for ci in cis]
+            s += cat + ';' + ';'.join([f"{metrics[mn]:.0%} {ci}" for mn, ci in zip(mns, cis)]) + '\n'
+        print(s)
+        return s
+
     def plot_custom_metrics(self, ax, agg_perf, show_val, title=None):
         """Plots aggregated metrics results.
         :param ax: axis
@@ -187,18 +194,11 @@ class ImageTrainer(FastaiTrainer):
         :param title: str, plot title
         """
         ax.axis('on')
-        bar_perf = {mn: cat_mres for p in self.args.metrics_base_fns for mn, cat_mres in agg_perf.items() if p in mn}
+        # if p in mn because mn may be variation of perfs: e.g. in segm perf to ignore bg (precision, precision_no_bg)
+        bar_perf = {mn: cat_mres for p in self.args.metrics_base_fns for mn, cat_mres in agg_perf.items() if p in mn
+                    and self.PERF_CI not in mn}
         bar_cats = self.get_cats_with_all()
         cplot.grouped_barplot_with_err(ax, bar_perf, bar_cats, xlabel='Classes', show_val=show_val, title=title)
-
-    def compute_metrics(self, interp):
-        """Computes custom metrics and conf mat and add results to interp object. Should return interp.
-        :param interp: namespace with predictions, targets, decoded predictions
-        :return: same namespace with metrics results
-        """
-        interp = super().compute_metrics(interp)
-        interp.metrics['cm'] = self.compute_conf_mat(interp.targs, interp.decoded)
-        return interp
 
     def aggregate_test_performance(self, folds_res):
         """Merges metrics over different folds, computes mean and std.
@@ -208,14 +208,15 @@ class ImageTrainer(FastaiTrainer):
         """
         agg = super().aggregate_test_performance(folds_res)
         for mns, agg_key in self.ordered_test_perfs_per_cats():
-            # if mn in agg: in case we did no compute all metrics fns
+            # if mn in agg: in case some metrics fns were not computed
             mns = [mn for mn in mns if mn in agg]
             if len(mns) > 0:
                 agg[agg_key] = tuple(np.stack(s) for s in zip(*[agg.pop(mn) for mn in mns if mn in agg]))
         return agg
 
     def ordered_test_perfs_per_cats(self):
-        """:return list of tuples of list of metrics names (following cat order) with corresponding aggregated key"""
+        """Returns list of tuples, each tuple is the list of metrics names (following cat order) with corresponding
+        aggregated key"""
         raise NotImplementedError
 
     def plot_save_path(self, test_path, run, show_val, custom=""):

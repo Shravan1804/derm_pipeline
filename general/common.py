@@ -286,10 +286,22 @@ def set_seeds(seed, cuda_seeded=False):
 
 
 @contextlib.contextmanager
+def temporary_np_seed(seed):
+    """Credit: https://stackoverflow.com/questions/49555991/can-i-create-a-local-numpy-random-seed
+    Seed np within context then reset seed back to its original state
+    :param seed: int
+    """
+    state = np.random.get_state()
+    np.random.seed(seed)
+    try:
+        yield
+    finally:
+        np.random.set_state(state)
+
+
+@contextlib.contextmanager
 def mynullcontext(enter_result=None):
     """Python 3.6 alternative to contextlib.nullcontext() available from 3.8
-    :param enter_result:
-    :return:
     """
     yield enter_result
 
