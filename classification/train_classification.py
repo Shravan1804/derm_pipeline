@@ -216,7 +216,7 @@ class ImageClassificationTrainer(ImageTrainer):
             msplitter = lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params)
             learn = fv.Learner(dls, model, splitter=msplitter, cbs=callbacks, **learn_kwargs)
         elif "ssl" in self.args.model:
-            from self_supervised_dermatology.embedder import Embedder
+            from self_supervised_dermatology import Embedder
             ssl_model = self.args.model.replace('ssl_', '')
             model, info = Embedder.load_pretrained(ssl_model, return_info=True)
             print(f'Loaded pretrained SSL model: {info}')
@@ -225,8 +225,7 @@ class ImageClassificationTrainer(ImageTrainer):
                 ('flatten', torch.nn.Flatten()),
                 ('fc', classif_utils.LinearClassifier(info.out_dim, dls.c)),
             ]))
-            msplitter = lambda m: fv.L(train_utils.split_model(m, [m.fc])).map(fv.params)
-            learn = fv.Learner(dls, model, splitter=msplitter, cbs=callbacks, **learn_kwargs)
+            learn = fv.Learner(dls, model, cbs=callbacks, **learn_kwargs)
         else:
             model = getattr(fv, self.args.model)
             learn = fv.cnn_learner(dls, model, cbs=callbacks, **learn_kwargs)

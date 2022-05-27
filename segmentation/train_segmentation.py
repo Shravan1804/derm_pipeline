@@ -251,18 +251,14 @@ class ImageSegmentationTrainer(ImageTrainer):
             wandb.run.save()
 
         if "ssl" in self.args.model:
-            from self_supervised_dermatology.embedder import Embedder
+            from self_supervised_dermatology import Segmenter
             ssl_model = self.args.model.replace('ssl_', '')
-            model, info = Embedder.load_pretrained(ssl_model, return_info=True)
+            model, info = Segmenter.load_pretrained(
+                ssl_model, n_classes=dls.train.after_item.c, return_info=True)
             print(f'Loaded pretrained SSL model: {info}')
-            # removing last layer (i.e. adaptive pooling)
-            model = torch.nn.Sequential(*list(model.children())[:-1])
-            # infer the shape of the dataset
-            size = dls.one_batch()[0].shape[-2:]
-            # create the unet
-            unet = DynamicUnet(model, n_out=dls.train.after_item.c, img_size=size)
-            msplitter = lambda m: fv.L(m[0][:6], m[0][6:], m[1:]).map(fv.params)
-            learn = fv.Learner(dls, unet, splitter=msplitter, cbs=callbacks, **learn_kwargs)
+            #size = dls.one_batch()[0].shape[-2:]
+            #unet = DynamicUnet(model, n_out=dls.train.after_item.c, img_size=size)
+            learn = fv.Learner(dls, model, cbs=callbacks, **learn_kwargs)
         else:
             learn = fv.unet_learner(dls, getattr(fv, self.args.model), cbs=callbacks, **learn_kwargs)
         # also log the training metrics
