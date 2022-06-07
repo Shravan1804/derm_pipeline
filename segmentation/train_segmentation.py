@@ -162,7 +162,7 @@ class ImageSegmentationTrainer(ImageTrainer):
         return {(cid, bg): metrics.get_cls_TP_TN_FP_FN(t == cid, d == cid) for cid in self.get_cats_idxs()
                 for bg in self.get_mask_bg_choices()}
 
-    def compute_metrics(self, interp, print_summary=False, with_ci=True):
+    def compute_metrics(self, interp, print_summary=False, with_ci=False):
         """Apply metrics functions on test set predictions. If requested, will also compute object detection metrics
         :param interp: namespace with predictions, targs, decoded preds, test set predictions
         :return: same namespace but with metrics results dict
