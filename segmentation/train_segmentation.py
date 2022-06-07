@@ -218,7 +218,8 @@ class ImageSegmentationTrainer(ImageTrainer):
         size = self.args.input_size, self.args.input_size
         ms = [mask_utils.resize_mask(self.load_mask(m, load_mask_array=True), size) for _, m in tqdm(train_items)]
         _, class_counts = np.unique(np.stack(ms), return_counts=True)
-        assert class_counts.size == len(self.args.cats)
+        assert class_counts.size == len(self.args.cats), f"Computed class counts for {class_counts.size} classes but " \
+                                                         f"there are {len(self.args.cats)} cats"
         # this one causes issues if imbalance too high
         #return torch.FloatTensor(class_counts.max() / class_counts)
         return torch.FloatTensor(1 / np.log(class_counts))

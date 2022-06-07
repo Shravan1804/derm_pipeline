@@ -44,7 +44,7 @@ class AnatoSegmTrainer(ImageSegmentationTrainer):
                  ['non_nail', 'cuticle', 'distal_edge_plate', 'distal_groove', 'hyponychium', 'lateral_fold', 'lunula',
                   'onychodermal_band', 'plate', 'proximal_fold', 'pulp']),
         'nose': (f"nose_anatomy/nose_segm_splitted_encrypted",
-                 ['non_nose', 'canthus', 'glabella', 'nasal_ala', 'nasal_columella', 'nasal_dorsum', 'nasal_root',
+                 ['non_nose', 'glabella', 'nasal_ala', 'nasal_columella', 'nasal_dorsum', 'nasal_root',
                   'nasal_sidewall', 'nasal_sil', 'nasal_tip', 'nostril', 'soft_triangle']),
     }.items()))
 
