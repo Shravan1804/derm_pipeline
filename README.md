@@ -113,3 +113,4 @@ python derm_pipeline/training/distributed_launch.py derm_pipeline/object_detecti
     --data object_detection_data --wl-train wl_train --sl-train sl_train --sl-tests sl_test \
     --input-size 128 --bs 64 --exp-name od_demo --epochs 1 --fepochs 1 --lr .0002
 ```
+
