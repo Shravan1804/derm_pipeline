@@ -71,6 +71,9 @@ class FastaiTrainer:
         parser.add_argument('--fepochs', type=int, default=pdef.get('--fepochs', 4), help='Epochs for frozen model')
         parser.add_argument('--epochs', type=int, default=pdef.get('--epochs', 12), help='Epochs for unfrozen model')
         parser.add_argument('--RMSProp', action='store_true', help="Use RMSProp optimizer")
+        parser.add_argument('--SGD', action='store_true', help="Use SGD optimizer")
+        parser.add_argument('--weight_decay', type=float, default=None, help='Weight decay used for training.')
+        parser.add_argument('--momentum', type=float, default=None, help='Momentum used for training.')
 
         parser.add_argument('--no-norm', action='store_true', help="Do not normalizes data")
         parser.add_argument('--full-precision', action='store_true', help="Train with full precision (more gpu memory)")
@@ -90,6 +93,7 @@ class FastaiTrainer:
         parser.add_argument('--seed', type=int, default=pdef.get('--seed', 42), help="Random seed")
         parser.add_argument('--deterministic', action='store_true', help="Sets cudnn backends to deterministic")
         parser.add_argument('--debug-dls', action='store_true', help="Summarize dls then exits")
+        parser.add_argument('--wandb', action='store_true', help="If the experiment should be logged to wandb")
 
         return parser
 
@@ -183,7 +187,13 @@ class FastaiTrainer:
         """Provides experiment specific kwargs for Learner
         :return: kwargs dict
         """
-        return {'opt_func': fv.RMSProp if self.args.RMSProp else fv.Adam}
+        if self.args.RMSProp:
+            opt_func = fv.RMSProp
+        elif self.args.SGD:
+            opt_func = fv.SGD
+        else:
+            opt_func = fv.Adam
+        return {'opt_func': opt_func}
 
     def create_learner(self):
         """Create learner object, should be extended"""
@@ -325,7 +335,18 @@ class FastaiTrainer:
         train_cbs = self.get_train_cbs(run)
         print("Training model:", run)
         with GPUManager.running_context(learn, self.args.gpu_ids):
-            learn.fine_tune(self.args.epochs, base_lr=lr, freeze_epochs=self.args.fepochs, cbs=train_cbs)
+            if self.args.momentum is not None:
+                mom = [self.args.momentum,
+                       self.args.momentum,
+                       self.args.momentum]
+            else:
+                mom = None
+            learn.fine_tune(self.args.epochs,
+                            base_lr=lr,
+                            freeze_epochs=self.args.fepochs,
+                            wd=self.args.weight_decay,
+                            moms=mom,
+                            cbs=train_cbs)
         if save_model:
             model_dir = fd.rank0_first(lambda: common.maybe_create(self.args.exp_logdir, learn.model_dir))
             learn.save(os.path.join(model_dir, f'{run}{self.MODEL_SUFFIX}_lr{lr:.2e}'))
@@ -360,6 +381,9 @@ class FastaiTrainer:
                 interp.preds, interp.targs, interp.decoded = learn.get_preds(dl=dl, with_decoded=True)
             interp.dl = dl
             interp = self.compute_metrics(interp, print_summary=True)
+            if self.args.wandb:
+                import wandb
+                wandb.log({f'test_{k}': v for (k, v) in interp.metrics.items()})
             del interp.preds, interp.targs, interp.decoded, interp.dl
             GPUManager.clean_gpu_memory(dl)
             self.test_set_results[test_name][self.get_sorting_run_key(run)].append(interp)
@@ -449,4 +473,3 @@ class FastaiTrainer:
                     learn, prev_run = self.train_procedure(tr, val, f'{fold_suffix}_wl_sl', repeat_prefix, learn)
             GPUManager.clean_gpu_memory(learn.dls, learn)
         self.generate_tests_reports()
-

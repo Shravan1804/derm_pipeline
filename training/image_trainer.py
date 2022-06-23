@@ -59,6 +59,8 @@ class ImageTrainer(FastaiTrainer):
         parser.add_argument('--focal-loss-plus-dice-focal-loss', action='store_true', help="Focal loss + dice focal loss")
         parser.add_argument('--ce-loss', action='store_true', help="cross entropy loss")
         parser.add_argument('--weighted-loss', action='store_true', help="Uses weighted loss based on class distrib")
+
+        parser.add_argument('--mixup', action='store_true', help="If MixUp should be used as regularization.")
         return parser
 
     @staticmethod

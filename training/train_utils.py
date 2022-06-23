@@ -231,4 +231,3 @@ class ImageTBCb(fc.TensorBoardBaseCallback):
         for perf, v in grouped.items():
             self.writer.add_scalars(f'{self.run_info}_Metrics/{perf}', v, self.train_iter)
         self.writer.add_scalars(f'{self.run_info}_Metrics/ALL', reduced, self.train_iter)
-

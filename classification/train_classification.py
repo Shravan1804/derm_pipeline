@@ -16,12 +16,14 @@ import os
 import sys
 import collections
 from functools import partial
+from collections import OrderedDict
 
 import numpy as np
 import sklearn.metrics as skm
 
 import torch
 import fastai.vision.all as fv
+from fastai.vision.all import *
 from fastai.callback.tracker import EarlyStoppingCallback
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
@@ -119,6 +121,24 @@ class ImageClassificationTrainer(ImageTrainer):
         all_cats = self.get_cats_with_all()
         return [([self.get_cat_metric_name(f, c) for c in all_cats], f) for f in self.args.metrics_base_fns]
 
+    def compute_conf_mat(self, targs, decoded):
+        """Compute confusion matrix from predictions
+        :param targs: tensor, ground truth, size B
+        :param decoded: tensor, decoded predictions, size B
+        :return: tensor, confusion metrics N x N (with N categories)
+        """
+        if self.args.wandb:
+            import wandb
+            wandb.log({
+                "Test/Conf_mat":
+                wandb.plot.confusion_matrix(probs=None,
+                                            y_true=targs.tolist(),
+                                            preds=decoded.tolist(),
+                                            class_names=self.args.cats)
+            })
+        return classif_utils.conf_mat(fv.TensorBase(targs),
+                                      fv.TensorBase(decoded), self.args.cats)
+
     def customize_datablock(self):
         """Provides experiment specific kwargs for DataBlock
         :return: dict with argnames and argvalues
@@ -161,7 +181,14 @@ class ImageClassificationTrainer(ImageTrainer):
         :return: kwargs dict
         """
         kwargs = super().customize_learner(dls)
-        kwargs['metrics'].extend([fv.Precision(average='micro'), fv.Recall(average='micro'), fv.BalancedAccuracy()])
+        kwargs['metrics'].extend([
+            fv.Precision(average='macro'),
+            fv.Recall(average='macro'),
+            fv.BalancedAccuracy(),
+            fv.F1Score(average='macro'),
+            fv.RocAuc(average='macro'),
+            fv.MatthewsCorrCoef(),
+        ])
         return kwargs
 
     def create_learner(self, dls):
@@ -170,15 +197,41 @@ class ImageClassificationTrainer(ImageTrainer):
         :return: learner
         """
         learn_kwargs = self.customize_learner(dls)
+        callbacks = []
+        if self.args.mixup:
+            callbacks += [MixUp()]
+        if self.args.wandb:
+            import wandb
+            from fastai.callback.wandb import WandbCallback
+            callbacks += [WandbCallback(log='all', log_preds=False)]
+            # update the name of the wandb run
+            run_name = f'{self.args.model}-{wandb.run.name}'
+            wandb.run.name = run_name
+            wandb.run.save()
+
         if "efficientnet" in self.args.model:
             from efficientnet_pytorch import EfficientNet
             model = EfficientNet.from_pretrained(self.args.model)
             model._fc = torch.nn.Linear(model._fc.in_features, dls.c)
             msplitter = lambda m: fv.L(train_utils.split_model(m, [m._fc])).map(fv.params)
-            learn = fv.Learner(dls, model, splitter=msplitter, **learn_kwargs)
+            learn = fv.Learner(dls, model, splitter=msplitter, cbs=callbacks, **learn_kwargs)
+        elif "ssl" in self.args.model:
+            from self_supervised_dermatology import Embedder
+            ssl_model = self.args.model.replace('ssl_', '')
+            model, info = Embedder.load_pretrained(ssl_model, return_info=True)
+            print(f'Loaded pretrained SSL model: {info}')
+            model = torch.nn.Sequential(OrderedDict([
+                ('backbone', model),
+                ('flatten', torch.nn.Flatten()),
+                ('fc', classif_utils.LinearClassifier(info.out_dim, dls.c)),
+            ]))
+            learn = fv.Learner(dls, model, cbs=callbacks, **learn_kwargs)
         else:
             model = getattr(fv, self.args.model)
-            learn = fv.cnn_learner(dls, model, **learn_kwargs)
+            learn = fv.cnn_learner(dls, model, cbs=callbacks, **learn_kwargs)
+        # also log the training metrics
+        # then train + valid metrics are reported
+        learn.recorder.train_metrics = True
         return self.prepare_learner(learn)
 
     def correct_wl(self, wl_items_with_labels, decoded):
@@ -230,4 +283,3 @@ if __name__ == '__main__':
     ImageClassificationTrainer.prepare_training(args)
 
     common.time_method(main, args)
-

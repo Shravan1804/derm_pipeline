@@ -22,10 +22,12 @@ import sklearn.metrics as skm
 
 import torch
 import fastai.vision.all as fv
+from fastai.callback.tracker import EarlyStoppingCallback
+from fastai.vision.models.unet import DynamicUnet
 
 sys.path.insert(0, os.path.abspath(os.path.join(__file__, os.path.pardir, os.path.pardir)))
 from general import common
-from training import metrics
+from training import metrics, train_utils
 from training.image_trainer import ImageTrainer
 import segmentation.mask_utils as mask_utils
 import segmentation.segmentation_utils as segm_utils
@@ -142,6 +144,23 @@ class ImageSegmentationTrainer(ImageTrainer):
                 ordered.append((mns, perf_fn + ("" if bg is None else self.NO_BG)))
         return ordered
 
+    def compute_conf_mat(self, targs, preds):
+        """Compute pixel-wise confusion matrix from flattened predicted masks
+        :param targs: tensor, ground truth, size B x M x M
+        :param decoded: tensor, decoded predictions, size B x M x M
+        :return: tensor, confusion metrics N x N (with N categories)
+        """
+        if self.args.wandb:
+            import wandb
+            wandb.log({
+                "Test/Conf_mat":
+                wandb.plot.confusion_matrix(probs=None,
+                                            y_true=targs.flatten().tolist(),
+                                            preds=preds.flatten().tolist(),
+                                            class_names=self.args.cats)
+            })
+        return segm_utils.pixel_conf_mat(targs, preds, self.args.cats)
+
     def plot_custom_metrics(self, ax, agg_perf, show_val, title=None):
         """Plots aggregated metrics results.
         :param ax: axis
@@ -237,7 +256,33 @@ class ImageSegmentationTrainer(ImageTrainer):
         :param dls: train/valid dataloaders
         :return: learner
         """
-        learn = fv.unet_learner(dls, getattr(fv, self.args.model), **self.customize_learner(dls))
+        learn_kwargs = self.customize_learner(dls)
+        callbacks = []
+        if self.args.mixup:
+            callbacks += [MixUp()]
+        if self.args.wandb:
+            import wandb
+            from fastai.callback.wandb import WandbCallback
+            callbacks += [WandbCallback(log='all', log_preds=False)]
+            # update the name of the wandb run
+            run_name = f'{self.args.model}-{wandb.run.name}'
+            wandb.run.name = run_name
+            wandb.run.save()
+
+        if "ssl" in self.args.model:
+            from self_supervised_dermatology import Segmenter
+            ssl_model = self.args.model.replace('ssl_', '')
+            model, info = Segmenter.load_pretrained(
+                ssl_model, n_classes=dls.train.after_item.c, return_info=True)
+            print(f'Loaded pretrained SSL model: {info}')
+            #size = dls.one_batch()[0].shape[-2:]
+            #unet = DynamicUnet(model, n_out=dls.train.after_item.c, img_size=size)
+            learn = fv.Learner(dls, model, cbs=callbacks, **learn_kwargs)
+        else:
+            learn = fv.unet_learner(dls, getattr(fv, self.args.model), cbs=callbacks, **learn_kwargs)
+        # also log the training metrics
+        # then train + valid metrics are reported
+        learn.recorder.train_metrics = True
         return self.prepare_learner(learn)
 
     def correct_wl(self, wl_items_with_labels, preds):
@@ -288,4 +333,3 @@ if __name__ == '__main__':
     ImageSegmentationTrainer.prepare_training(args)
 
     common.time_method(main, args)
-
