@@ -1,4 +1,6 @@
 # Dermatology Deep Learning Pipeline
+This pipeline is presented in the thesis "Deep learning in Clinical Dermatology" available on the [edoc server](https://edoc.unibas.ch/94022/) of the University of Basel.
+
 The first goal of this pipeline is to simplify DL training procedures and enable dermatologists to ellaborate
 their own models. 
 
