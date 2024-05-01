@@ -1,27 +1,32 @@
-import os
-import sys
 import math
 
 import cv2
 import numpy as np
-from skimage import measure
-from shapely.geometry import Polygon
 from pycocotools import mask as pycoco_mask
+from shapely.geometry import Polygon
+from skimage import measure
 
-from ..general import common_plot as cplot, common
+from ..general import common
+from ..general import common_plot as cplot
 
 
 def binary_mask_to_rle(bmask):
-    """RLE encoding of binary mask
+    """
+    RLE encoding of binary mask.
+
     :param bmask: array, binary mask
     :return: dict, rle encoded mask
     """
     bmask = bmask.astype(np.uint8)
-    return pycoco_mask.encode(bmask if bmask.flags['F_CONTIGUOUS'] else np.asfortranarray(bmask))
+    return pycoco_mask.encode(
+        bmask if bmask.flags["F_CONTIGUOUS"] else np.asfortranarray(bmask)
+    )
 
 
 def non_binary_mask_to_rles(mask):
-    """Category-wise RLE encoding of non binary mask
+    """
+    Category-wise RLE encoding of non binary mask.
+
     :param mask: array, non binary mask
     :return: list of tuples (cat id, rle of cat binary mask)
     """
@@ -29,33 +34,43 @@ def non_binary_mask_to_rles(mask):
 
 
 def rles_to_non_binary_mask(rles):
-    """Decodes category-wise RLE encoded to non binary mask
+    """
+    Decode category-wise RLE encoded to non binary mask.
+
     :param rles: list of tuples (cat id, rle of cat binary mask)
     :return: array, non binary mask
     """
-    return sum([k*pycoco_mask.decode(rle) for k, rle in rles])
+    return sum([k * pycoco_mask.decode(rle) for k, rle in rles])
 
 
 def maybe_simplify_poly(poly):
-    """Generated poly can be overly compley, tries to simplify it
+    """
+    Attempt to simplify generated poly.
+
     :param poly: Polygon object
     :return simplified polygon
     """
     simpler_poly = poly.simplify(1.0, preserve_topology=False)
-    if type(simpler_poly) is not Polygon:   # Multipolygon case
+    if type(simpler_poly) is not Polygon:  # Multipolygon case
         return poly
     segmentation = np.array(simpler_poly.exterior.coords).ravel().tolist()
     # CVAT requirements
-    return simpler_poly if len(segmentation) % 2 == 0 and 3 <= len(segmentation) // 2 else poly
+    return (
+        simpler_poly
+        if len(segmentation) % 2 == 0 and 3 <= len(segmentation) // 2
+        else poly
+    )
 
 
 def convert_binary_mask_to_polys(mask):
-    """Converts binary mask in polygons
+    """
+    Convert binary mask in polygons.
+
     # https://www.immersivelimit.com/create-coco-annotations-from-scratch
     :param mask: array, binary mask
     :return: list of polygons
     """
-    contours = measure.find_contours(mask, 0.5, positive_orientation='low')
+    contours = measure.find_contours(mask, 0.5, positive_orientation="low")
     polys = []
     for contour in contours:
         # Flip from (row, col) representation to (x, y)
@@ -70,56 +85,72 @@ def convert_binary_mask_to_polys(mask):
 
 
 def merge_obj_masks(obj_masks, obj_labels):
-    """Merge individual object masks into single mask
+    """
+    Merge individual object masks into single mask.
+
     :param obj_masks: list of single object masks
     :param obj_labels: list of int labels
     :return: array of merged mask
     """
     mres = np.zeros_like(obj_masks[0])
-    for ia_mask, label in zip(obj_masks, obj_labels): mres[ia_mask > 0] = label
+    for ia_mask, label in zip(obj_masks, obj_labels):
+        mres[ia_mask > 0] = label
     return mres
 
 
 def separate_objs_in_mask(mask, bg=0):
-    """Split mask array in individual object masks
+    """
+    Split mask array in individual object masks.
+
     :param mask: array, mask
     :param bg: int, background code
     :return: tuple of labels and object masks
     """
     obj_cats = np.array([t for t in np.unique(mask) if t != bg])
-    if obj_cats.size == 1 and obj_cats[0] == bg: return None
+    if obj_cats.size == 1 and obj_cats[0] == bg:
+        return None
     cat_masks = (mask == obj_cats[:, None, None]).astype(np.uint8)
     return obj_cats, tuple(cv2.connectedComponents(cmsk) for cmsk in cat_masks)
 
 
 def rm_small_objs_from_non_bin_mask(non_binary_mask, min_size, cats_idxs=None, bg=0):
-    """Remove objects smaller than threshold from non binary mask
+    """
+    Remove objects smaller than threshold from non binary mask.
+
     :param non_binary_mask: array, mask
     :param min_size: int, object size threshold
     :param cats_idxs: list, categories indices for which to remove small objects
     :param bg: int, background code
     :return: array, mask without small objects
     """
-    res = np.ones(non_binary_mask.shape, dtype=np.uint8)*bg
-    if cats_idxs is None: cats_idxs = np.unique(non_binary_mask)
+    res = np.ones(non_binary_mask.shape, dtype=np.uint8) * bg
+    if cats_idxs is None:
+        cats_idxs = np.unique(non_binary_mask)
     for c in cats_idxs:
-        if c == bg: continue  # background
+        if c == bg:
+            continue  # background
         binary_mask = rm_small_objs_from_bin_mask(non_binary_mask == c, min_size)
         res[binary_mask > 0] = c
     return res
 
 
 def rm_small_objs_from_bin_mask(binary_mask, min_size):
-    """Remove objects smaller than threshold from binary mask
+    """
+    Remove objects smaller than threshold from binary mask.
+
     :param non_binary_mask: array, mask
     :param min_size: int, object size threshold
     :return: array, binary mask without small objects
     """
     nb_obj, obj_labels = cv2.connectedComponents(binary_mask.astype(np.uint8))
-    if nb_obj < 2: return binary_mask  # only background
-    obj_ids, inverse, sizes = np.unique(obj_labels, return_inverse=True, return_counts=True)
+    if nb_obj < 2:
+        return binary_mask  # only background
+    obj_ids, inverse, sizes = np.unique(
+        obj_labels, return_inverse=True, return_counts=True
+    )
     for i, size in enumerate(sizes):
-        if size < min_size: obj_ids[i] = 0  # set this component to background
+        if size < min_size:
+            obj_ids[i] = 0  # set this component to background
 
     mask_cleaned = np.reshape(obj_ids[inverse], binary_mask.shape)
     mask_cleaned[mask_cleaned > 0] = 1
@@ -127,7 +158,9 @@ def rm_small_objs_from_bin_mask(binary_mask, min_size):
 
 
 def nb_obj_in_binary_mask(binary_mask):
-    """Counts objects in binary mask
+    """
+    Count objects in binary mask.
+
     # -1 for background. Even if the mask contains only 1s, there will be 2 objects
     # even if there are separated 0s zones, they will count only as 1 background object
     # only the separated 1s zones are counted as separated objects
@@ -138,7 +171,10 @@ def nb_obj_in_binary_mask(binary_mask):
 
 
 def nb_objs(non_binary_mask, cls_id, bg=0):
-    """Counts objects in non binary mask. Can count category specific objects or all objects.
+    """
+    Count objects in non binary mask.
+
+    Can count category specific objects or all objects.
     :param non_binary_mask: array, mask
     :param cls_id: int, category index, -1 for any categories
     :param bg: int, background code
@@ -149,7 +185,10 @@ def nb_objs(non_binary_mask, cls_id, bg=0):
 
 
 def area_objs(nbm, cls_id, bg=0):
-    """Evaluates number of object pixels. Category specific objects or all objects.
+    """
+    Evaluate number of object pixels.
+
+    Category specific objects or all objects.
     :param nbm: array, non binary mask
     :param cls_id: int, category index, -1 for any categories
     :param bg: int, background code
@@ -161,7 +200,9 @@ def area_objs(nbm, cls_id, bg=0):
 
 
 def get_obj_proportion(mask, bg=0):
-    """Computes proportion of objects over background
+    """
+    Compute proportion of objects over background.
+
     :param mask: array, non binary mask
     :param bg: int, background code
     :return: tuple with proportion of objects, unique category codes and unique category counts
@@ -171,7 +212,9 @@ def get_obj_proportion(mask, bg=0):
 
 
 def load_mask_array(mask_path):
-    """Loads mask array
+    """
+    Load mask array.
+
     :param mask_path: str, mask path
     :return: array, mask
     """
@@ -179,7 +222,9 @@ def load_mask_array(mask_path):
 
 
 def resize_mask(mask, new_size_h_w):
-    """Resize mask with nearest neighbor interpolation
+    """
+    Resize mask with nearest neighbor interpolation.
+
     :param mask: array, mask
     :param new_size_h_w: tuple of ints, (h,w)
     :return: array of resized mask
@@ -190,17 +235,21 @@ def resize_mask(mask, new_size_h_w):
 
 
 def crop_im(im, bbox):
-    """Crop image to bounding box
+    """
+    Crop image to bounding box.
+
     :param im: array, image
     :param bbox: tuple of 4 ints, wmin, hmin, wmax, hmax
     :return: array of cropped image
     """
     wmin, hmin, wmax, hmax = bbox
-    return im[hmin:hmax+1, wmin:wmax+1]
+    return im[hmin : hmax + 1, wmin : wmax + 1]
 
 
 def get_bbox(cond):
-    """Get bounding box englobing boolean mask truth values
+    """
+    Get bounding box englobing boolean mask truth values.
+
     :param cond: array, boolean mask satisfying condition
     :return: array of 4 elements, wmin, hmin, wmax, hmax
     """
@@ -213,7 +262,9 @@ def get_bbox(cond):
 
 
 def bbox_side_size(bbox):
-    """Computes width and height of bounding box
+    """
+    Compute width and height of bounding box.
+
     :param bbox: array, wmin, hmin, wmax, hmax
     :return: tuple of width and height
     """
@@ -221,28 +272,34 @@ def bbox_side_size(bbox):
 
 
 def bbox_area(bbox):
-    """Computes bounding box area
+    """
+    Compute bounding box area.
+
     :param bbox: array, wmin, hmin, wmax, hmax
     :return: int, area of bbox
     """
     w, h = bbox_side_size(bbox)
-    return w*h
+    return w * h
 
 
 def bbox_centroid(bbox):
-    """Finds centroid of bounding box
+    """
+    Find centroid of bounding box.
+
     :param bbox: array, wmin, hmin, wmax, hmax
     :return: array with centroid coordinates (x, y)
     """
     wmin, hmin, wmax, hmax = bbox
     w, h = bbox_side_size(bbox)
-    cX = wmin + math.floor(w/2)
-    cY = hmin + math.floor(h/2)
+    cX = wmin + math.floor(w / 2)
+    cY = hmin + math.floor(h / 2)
     return np.array((cX, cY))
 
 
 def bboxes_have_intersect(bbox1, bbox2):
-    """Checks if bounding boxes do intersect
+    """
+    Check if bounding boxes do intersect.
+
     # https://gamedev.stackexchange.com/questions/586/what-is-the-fastest-way-to-work-out-2d-bounding-box-intersection
     # left/right for w (x axis) wmin/wmax, top/bottom for h (y axis) hmin/hmax
     # return !(r2.left > r1.right || r2.right < r1.left || r2.top > r1.bottom || r2.bottom < r1.top);
@@ -256,7 +313,9 @@ def bboxes_have_intersect(bbox1, bbox2):
 
 
 def bboxes_intersection(bbox1, bbox2):
-    """Computes intersection of bounding boxes
+    """
+    Compute intersection of bounding boxes.
+
     :param bbox1: array, wmin, hmin, wmax, hmax
     :param bbox2: array, wmin, hmin, wmax, hmax
     :return: array, bounding box of intersection
@@ -265,22 +324,30 @@ def bboxes_intersection(bbox1, bbox2):
         return None
     wmin1, hmin1, wmax1, hmax1 = bbox1
     wmin2, hmin2, wmax2, hmax2 = bbox2
-    return np.array((max(wmin1, wmin2), max(hmin1, hmin2), min(wmax1, wmax2), min(hmax1, hmax2)))
+    return np.array(
+        (max(wmin1, wmin2), max(hmin1, hmin2), min(wmax1, wmax2), min(hmax1, hmax2))
+    )
 
 
 def bboxes_union(bbox1, bbox2):
-    """Computes union of bounding boxes
+    """
+    Compute union of bounding boxes.
+
     :param bbox1: array, wmin, hmin, wmax, hmax
     :param bbox2: array, wmin, hmin, wmax, hmax
     :return: array, bounding box of union
     """
     wmin1, hmin1, wmax1, hmax1 = bbox1
     wmin2, hmin2, wmax2, hmax2 = bbox2
-    return np.array((min(wmin1, wmin2), min(hmin1, hmin2), max(wmax1, wmax2), max(hmax1, hmax2)))
+    return np.array(
+        (min(wmin1, wmin2), min(hmin1, hmin2), max(wmax1, wmax2), max(hmax1, hmax2))
+    )
 
 
 def bboxes_overlap(bbox1, bbox2):
-    """Computes overlap area ratio of bounding boxes
+    """
+    Compute overlap area ratio of bounding boxes.
+
     :param bbox1: array, wmin, hmin, wmax, hmax
     :param bbox2: array, wmin, hmin, wmax, hmax
     :return: float, ratio of intersect over union
@@ -288,37 +355,51 @@ def bboxes_overlap(bbox1, bbox2):
     intersect = bboxes_intersection(bbox1, bbox2)
     if intersect is None:
         return 0
-    area1, area2, intersect_area = bbox_area(bbox1), bbox_area(bbox2), bbox_area(intersect)
-    return intersect_area/(area1 + area2 - intersect_area)
+    area1, area2, intersect_area = (
+        bbox_area(bbox1),
+        bbox_area(bbox2),
+        bbox_area(intersect),
+    )
+    return intersect_area / (area1 + area2 - intersect_area)
 
 
 def merge_bboxes_based_on_overlap(bboxes, max_overlap):
-    """Merge bounding boxes if their overlap ratio is greater than threshold
+    """
+    Merge bounding boxes if their overlap ratio is greater than threshold.
+
     :param bboxes: list of bounding boxes
     :param max_overlap: float, overlap ratio threshold
     :return: list of merged bounding boxes
     """
-    merged = common.merge(lst=bboxes,
-                          cond_fn=lambda a, b: bboxes_overlap(a, b) >= max_overlap,
-                          merge_fn=lambda a, b: bboxes_union(a, b))
+    merged = common.merge(
+        lst=bboxes,
+        cond_fn=lambda a, b: bboxes_overlap(a, b) >= max_overlap,
+        merge_fn=lambda a, b: bboxes_union(a, b),
+    )
     return merged
 
 
 def merge_bboxes_based_on_centroids_dist(centroids, bboxes, min_dist):
-    """Merge bounding boxes if their respective centroids distance is below a threshold
+    """
+    Merge bounding boxes if their respective centroids distance is below a threshold.
+
     :param centroids: list of bounding boxes centroids
     :param bboxes: list of bounding boxes
     :param min_dist: int, minimum distance ratio threshold
     :return: list of merged bounding boxes
     """
-    merged = common.merge(lst=list(zip(centroids, bboxes)),
-                          cond_fn=lambda a, b: np.square(a[0] - b[0]).sum() <= min_dist ** 2,
-                          merge_fn=lambda a, b: ((a[0] + b[0]) // 2, bboxes_union(a[1], b[1])))
+    merged = common.merge(
+        lst=list(zip(centroids, bboxes)),
+        cond_fn=lambda a, b: np.square(a[0] - b[0]).sum() <= min_dist**2,
+        merge_fn=lambda a, b: ((a[0] + b[0]) // 2, bboxes_union(a[1], b[1])),
+    )
     return merged
 
 
 def ensure_bbox_side_min_size(smin, smax, side_range, min_size):
-    """Grows bounding box side within range until minimum size is reached (or max range reached)
+    """
+    Grow bounding box side within range until minimum size is reached (or max range reached).
+
     :param smin: int, side min coordinate
     :param smax: int, side max coordinate
     :param side_range: tuple max side size
@@ -335,7 +416,9 @@ def ensure_bbox_side_min_size(smin, smax, side_range, min_size):
 
 
 def ensure_bbox_min_size(im_shape, bbox, min_size):
-    """Grows bounding box to minimum side size within image shape
+    """
+    Grow bounding box to minimum side size within image shape.
+
     :param im_shape: tuple, image shape (h,w)
     :param bbox: array, wmin, hmin, wmax, hmax
     :param min_size: int, minimum side size
@@ -348,7 +431,9 @@ def ensure_bbox_min_size(im_shape, bbox, min_size):
 
 
 def grow_bbox(start_bbox, wrange, hrange, total_growth, rd=2, rand=True):
-    """Grow bounding box within range on either sides up to a maximum threshold
+    """
+    Grow bounding box within range on either sides up to a maximum threshold.
+
     rd is the coords reducing/growing split index, first group is reducing, second is growing
     :param start_bbox: array, wmin, hmin, wmax, hmax
     :param wrange: tuple, (min max) x coordinates
@@ -358,8 +443,12 @@ def grow_bbox(start_bbox, wrange, hrange, total_growth, rd=2, rand=True):
     :param rand: bool, uniform or random growth
     :return: array, bbox after growth
     """
-    assert wrange[0] <= start_bbox[0] <= start_bbox[2] <= wrange[1], f"BBOX w ({start_bbox}) does not fit {wrange}"
-    assert hrange[0] <= start_bbox[1] <= start_bbox[3] <= hrange[1], f"BBOX h ({start_bbox}) does not fit {hrange}"
+    assert (
+        wrange[0] <= start_bbox[0] <= start_bbox[2] <= wrange[1]
+    ), f"BBOX w ({start_bbox}) does not fit {wrange}"
+    assert (
+        hrange[0] <= start_bbox[1] <= start_bbox[3] <= hrange[1]
+    ), f"BBOX h ({start_bbox}) does not fit {hrange}"
     coords = np.array(start_bbox)
     # start_bbox is wmin, hmin, wmax, hmax
     low = np.resize(np.array([wrange[0], hrange[0]]), coords.size)
@@ -386,14 +475,18 @@ def grow_bbox(start_bbox, wrange, hrange, total_growth, rd=2, rand=True):
 
 
 def get_centroids_with_bboxes(mask, kern=(5, 5), dilate_it=10, bg=0):
-    """First dilates mask to remove noise then extracts objects centroids with bounding boxes
+    """
+    Dilate mask to remove noise then extracts objects centroids with bounding boxes.
+
     :param mask: array, mask
     :param kern: array, kernel for dilate operations
     :param dilate_it: int, number of dilate iterations
     :param bg: int, code for background
     :return: tuple with list of centroids (cX, cY) and list of bounding boxes
     """
-    m = cv2.dilate((mask != bg).astype(np.uint8), np.ones(kern, np.uint8), iterations=dilate_it)
+    m = cv2.dilate(
+        (mask != bg).astype(np.uint8), np.ones(kern, np.uint8), iterations=dilate_it
+    )
     contours, hierarchy = cv2.findContours(m, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     centroids, bboxes = [], []
     for c in contours:
@@ -401,14 +494,18 @@ def get_centroids_with_bboxes(mask, kern=(5, 5), dilate_it=10, bg=0):
         if M["m00"] == 0:
             print("WARNING, error while computing centroid, skipping blob.")
             continue
-        centroids.append(np.array((int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))))    #(cX, cY)
+        centroids.append(
+            np.array((int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"])))
+        )  # (cX, cY)
         x, y, w, h = cv2.boundingRect(c)
-        bboxes.append(np.array([x, y, x+w, y+h]))
+        bboxes.append(np.array([x, y, x + w, y + h]))
     return centroids, bboxes
 
 
 def grow_crop_bbox_to_thresh(mask, bbox, thresh, rand, bg=0):
-    """Increases the bbox size if obj proportion above thresh (adds more background, thus reduces obj proportion)
+    """
+    Increase the bbox size if obj proportion above thresh (adds more background, thus reduces obj proportion).
+
     :param mask: array, mask
     :param bbox: array, bounding box
     :param thresh: float, object proportion threshold
@@ -420,16 +517,20 @@ def grow_crop_bbox_to_thresh(mask, bbox, thresh, rand, bg=0):
     obj_prop, u, uc = get_obj_proportion(cropped_mask, bg=bg)
     if obj_prop > thresh:
         # alpha is the background area to be added to have equality with thresh
-        alpha = uc[u != 0].sum()/thresh - uc.sum()
+        alpha = uc[u != 0].sum() / thresh - uc.sum()
         N = bbox[3] - bbox[1] + bbox[2] - bbox[0]
         # base margin is the margin to be added on all 4 sides to reach alpha
-        base_margin = max(0, math.floor((-N+math.sqrt(N**2+4*alpha))/4))
-        bbox = grow_bbox(bbox, (0, mask.shape[1]), (0, mask.shape[0]), base_margin*4, rand=rand)
+        base_margin = max(0, math.floor((-N + math.sqrt(N**2 + 4 * alpha)) / 4))
+        bbox = grow_bbox(
+            bbox, (0, mask.shape[1]), (0, mask.shape[0]), base_margin * 4, rand=rand
+        )
     return bbox
 
 
 def extract_bboxes_from_img_mask(im, mask, bboxes):
-    """Extract all bboxes from image and mask
+    """
+    Extract all bboxes from image and mask.
+
     :param im: array, image
     :param mask: array, mask
     :param bboxes: list of bboxes
@@ -442,9 +543,21 @@ def extract_bboxes_from_img_mask(im, mask, bboxes):
     return cropped_imgs, cropped_masks
 
 
-def crop_img_and_mask_to_objs(im, mask, thresh=.01, rand=True, single=True, only_bboxes=False, bg=0,
-                              min_obj_area=36, min_crop_side_size=128, max_crop_overlap=.6):
-    """Crops image and mask around objects such that object proportion fits threshold
+def crop_img_and_mask_to_objs(
+    im,
+    mask,
+    thresh=0.01,
+    rand=True,
+    single=True,
+    only_bboxes=False,
+    bg=0,
+    min_obj_area=36,
+    min_crop_side_size=128,
+    max_crop_overlap=0.6,
+):
+    """
+    Crop image and mask around objects such that object proportion fits threshold.
+
     Parameters min_obj_area, min_crop_side_size,max_crop_overlap may result in object proportion no fitting threshold
     :param im: array, image
     :param mask: array, mask
@@ -462,11 +575,13 @@ def crop_img_and_mask_to_objs(im, mask, thresh=.01, rand=True, single=True, only
         raise Exception("Provided mask does not contain any objects.")
 
     if single:
-        crop_bbox = grow_crop_bbox_to_thresh(mask, get_bbox(mask > 0), thresh, rand, bg=bg)
+        crop_bbox = grow_crop_bbox_to_thresh(
+            mask, get_bbox(mask > 0), thresh, rand, bg=bg
+        )
         if only_bboxes:
-            return crop_bbox,
+            return (crop_bbox,)
         else:
-            return (crop_im(im, crop_bbox), ), (crop_im(mask, crop_bbox), ), (crop_bbox, )
+            return (crop_im(im, crop_bbox),), (crop_im(mask, crop_bbox),), (crop_bbox,)
 
     centroids, bboxes = get_centroids_with_bboxes(mask)
     cleaned_cropped_bboxes = []
@@ -476,18 +591,29 @@ def crop_img_and_mask_to_objs(im, mask, thresh=.01, rand=True, single=True, only
         if bbox_area(bbox) < min_obj_area:
             continue
         bbox = grow_crop_bbox_to_thresh(mask, bbox, thresh, rand, bg=bg)
-        cleaned_cropped_bboxes.append(ensure_bbox_min_size(mask.shape, bbox, min_crop_side_size))
-    cleaned_cropped_bboxes = merge_bboxes_based_on_overlap(cleaned_cropped_bboxes, max_crop_overlap)
+        cleaned_cropped_bboxes.append(
+            ensure_bbox_min_size(mask.shape, bbox, min_crop_side_size)
+        )
+    cleaned_cropped_bboxes = merge_bboxes_based_on_overlap(
+        cleaned_cropped_bboxes, max_crop_overlap
+    )
 
     if only_bboxes:
         return cleaned_cropped_bboxes
     else:
-        im_crops, mask_crops = extract_bboxes_from_img_mask(im, mask, cleaned_cropped_bboxes)
+        im_crops, mask_crops = extract_bboxes_from_img_mask(
+            im, mask, cleaned_cropped_bboxes
+        )
         return im_crops, mask_crops, cleaned_cropped_bboxes
 
 
-def apply_color_map_to_mask(mask, cmap=cv2.COLORMAP_JET, normalize=True, normin=None, normax=None):
-    """RGB version of mask following specified color map. Some mask may not have all classes p present in which case,
+def apply_color_map_to_mask(
+    mask, cmap=cv2.COLORMAP_JET, normalize=True, normin=None, normax=None
+):
+    """
+    Create RGB version of mask following specified color map.
+
+    Some mask may not have all classes p present in which case,
     use normalize, normin and normax args to account for all classes. Otherwise colors will be different between masks
     :param mask: array, mask
     :param cmap: cv2 color map
@@ -506,18 +632,22 @@ def apply_color_map_to_mask(mask, cmap=cv2.COLORMAP_JET, normalize=True, normin=
     return cv2.cvtColor(cv2.applyColorMap(mask, cmap), cv2.COLOR_BGR2RGB)
 
 
-def blend_im_mask(im, mask, alpha=.4):
-    """Blend image and mask together
+def blend_im_mask(im, mask, alpha=0.4):
+    """
+    Blend image and mask together.
+
     :param im: array, image
     :param mask: array, mask
     :param alpha: float, blend weight, alpha applied to mask, 1-alpha to image
     :return: array, blended image
     """
-    return cv2.addWeighted(im, 1-alpha, mask, alpha, 0)
+    return cv2.addWeighted(im, 1 - alpha, mask, alpha, 0)
 
 
 def compute_dice(cls, pred, targ):
-    """Calculate dice score for specified class for the given masks
+    """
+    Calculate dice score for specified class for the given masks.
+
     :param cls: int, category id
     :param pred: tensor, mask
     :param targ: tensor, mask
@@ -527,50 +657,62 @@ def compute_dice(cls, pred, targ):
     targ = (targ == cls).type(targ.dtype)
     inter = (pred * targ).float().sum().item()
     union = (pred + targ).float().sum().item()
-    return 2. * inter / union if union > 0 else None
+    return 2.0 * inter / union if union > 0 else None
 
 
 def im_mask_on_ax(ax, im, mask, title=None):
-    """Plot image with mask blended
+    """
+    Plot image with mask blended.
+
     :param ax: axis
     :param im: array, image
     :param mask: array, mask
     :param title: str, plot title
     """
     cplot.img_on_ax(im, ax, title=title)
-    ax.imshow(mask, cmap='jet', alpha=0.4)
+    ax.imshow(mask, cmap="jet", alpha=0.4)
 
 
 def show_im_with_masks(im, mask, cats):
-    """Plot image along with category specific blended masks
+    """
+    Plot image along with category specific blended masks.
+
     :param im: array, image
     :param mask: array, mask
     :param cats: list, categories
     """
-    _, axs = cplot.prepare_img_axs(im.shape[0]/im.shape[1], 1, len(cats) + 1)
-    cplot.img_on_ax(im, axs[0], title='Original image')
+    _, axs = cplot.prepare_img_axs(im.shape[0] / im.shape[1], 1, len(cats) + 1)
+    cplot.img_on_ax(im, axs[0], title="Original image")
     for cls_idx, cat in enumerate(cats):
         m = (mask == cls_idx).astype(np.uint8)
         obj_prop = get_obj_proportion(m)[0]
-        cplot.img_on_ax(m, axs[cls_idx + 1], title=f'{cat} mask ({obj_prop:.{3}f}%)')
+        cplot.img_on_ax(m, axs[cls_idx + 1], title=f"{cat} mask ({obj_prop:.{3}f}%)")
 
 
-def show_im_with_crops_bboxes(im, mask, obj_threshs=[.01], ncols=4, bg=0):
-    """Plot image with object bounding boxes crops
+def show_im_with_crops_bboxes(im, mask, obj_threshs=[0.01], ncols=4, bg=0):
+    """
+    Plot image with object bounding boxes crops.
+
     :param im: array, image
     :param mask: array, mask
     :param obj_threshs: float, object proportion thresholds that bounding boxes should satisfy
     :param ncols: int, number of columns to show
     :param bg: int, background code
     """
-    nrows = math.ceil(len(obj_threshs)/ncols) * 2
-    _, axs = cplot.prepare_img_axs(im.shape[0]/im.shape[1], nrows, ncols)
+    nrows = math.ceil(len(obj_threshs) / ncols) * 2
+    _, axs = cplot.prepare_img_axs(im.shape[0] / im.shape[1], nrows, ncols)
     for r, rand in enumerate([False, True]):
         for i, t in enumerate(obj_threshs):
             im_arr = im.copy()
             m = mask.copy()
-            crop_bboxes = crop_img_and_mask_to_objs(im_arr, m, t, rand, single=False, only_bboxes=True, bg=bg)
-            for (wmin, hmin, wmax, hmax) in crop_bboxes:
+            crop_bboxes = crop_img_and_mask_to_objs(
+                im_arr, m, t, rand, single=False, only_bboxes=True, bg=bg
+            )
+            for wmin, hmin, wmax, hmax in crop_bboxes:
                 cv2.rectangle(im_arr, (wmin, hmin), (wmax, hmax), 255, 5)
-            im_mask_on_ax(axs[r*ncols + i], im_arr, m, title=f' {"Rand bbox" if rand else "Bbox"} thresh {t}')
-
+            im_mask_on_ax(
+                axs[r * ncols + i],
+                im_arr,
+                m,
+                title=f' {"Rand bbox" if rand else "Bbox"} thresh {t}',
+            )

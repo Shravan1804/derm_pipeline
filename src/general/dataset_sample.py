@@ -1,15 +1,17 @@
-import os
 import argparse
-import numpy as np
+import os
 from shutil import copy
 
+import numpy as np
 from tqdm import tqdm
 
 from ..general import common
 
 
 def main(args):
-    """Creates sample of dataset according to provided command line arguments
+    """
+    Create sample of dataset according to provided command line arguments.
+
     :param args: command line arguments
     """
     np.random.seed(args.seed)
@@ -24,22 +26,36 @@ def main(args):
     print("done")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Create a sample dataset")
-    parser.add_argument('--data', type=str, required=True, help="source dataset root directory absolute path")
-    parser.add_argument('--dest', type=str, help="directory where the dataset sample should be saved")
-    parser.add_argument('--sample', default=5, type=int, help="number of images to retrieve from each categories")
-    parser.add_argument('--seed', default=42, type=int, help="random seed")
+    parser.add_argument(
+        "--data",
+        type=str,
+        required=True,
+        help="source dataset root directory absolute path",
+    )
+    parser.add_argument(
+        "--dest", type=str, help="directory where the dataset sample should be saved"
+    )
+    parser.add_argument(
+        "--sample",
+        default=5,
+        type=int,
+        help="number of images to retrieve from each categories",
+    )
+    parser.add_argument("--seed", default=42, type=int, help="random seed")
     args = parser.parse_args()
 
-    args.data = args.data.rstrip('/')
+    args.data = args.data.rstrip("/")
     common.check_dir_valid(args.data)
 
     if args.dest is None:
-        args.dest = common.maybe_create(os.path.dirname(args.data), os.path.basename(args.data)
-                                        + f'_sample{args.sample}')
+        args.dest = common.maybe_create(
+            os.path.dirname(args.data),
+            os.path.basename(args.data) + f"_sample{args.sample}",
+        )
     else:
-        args.dest = args.dest.rstrip('/')
+        args.dest = args.dest.rstrip("/")
         common.check_dir_valid(args.dest)
 
     common.time_method(main, args)

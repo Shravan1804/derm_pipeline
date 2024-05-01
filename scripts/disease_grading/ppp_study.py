@@ -2,8 +2,8 @@
 # parallel single gpu
 # python /workspace/code/derm_pipeline/projects/disease_grading/ppp_study.py --encrypted --data /workspace/data/disease_grading/ppp_grading/ppp_study_segm_splitted_encrypted --exp-name ppp_study --logdir /workspace/logs --gpu-ids 0 --reproducible 2>&1 | tee /workspace/logs/ppp_study.txt
 
-from src.general import common
 from scripts.disease_grading.ppp import PPPTrainer
+from src.general import common
 
 
 class PPPStudyTrainer(PPPTrainer):
@@ -18,15 +18,23 @@ class PPPStudyTrainer(PPPTrainer):
 
 
 def main(args):
-    """Creates a ppp segmentation trainer
+    """
+    Create a ppp segmentation trainer.
+
     :param args: command line args
     """
     ppp_trainer = PPPStudyTrainer(args)
     ppp_trainer.train_model()
 
 
-if __name__ == '__main__':
-    defaults = {'--bs': 16, '--model': 'resnet18', '--input-size': 380, '--fepochs': 10, '--epochs': 30}
+if __name__ == "__main__":
+    defaults = {
+        "--bs": 16,
+        "--model": "resnet18",
+        "--input-size": 380,
+        "--fepochs": 10,
+        "--epochs": 30,
+    }
     parser = PPPStudyTrainer.get_argparser(pdef=defaults)
     args = parser.parse_args()
 

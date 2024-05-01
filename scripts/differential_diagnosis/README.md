@@ -65,4 +65,3 @@ Example training logs: `/raid/logs/20220511_0850_resnet34_bs32_epo30_seed42_worl
 | Ulcer                    | 0.92     |
 | Vitiligo                 | 0.63     |
 | Average                  | 0.79     |
-

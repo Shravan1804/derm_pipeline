@@ -71,4 +71,3 @@ Example training logs: `/raid/logs/20220428_1845_resnet50_bs8_epo30_seed42_world
 | Pustules    | 0.66     |
 | Brown spots | 0.65     |
 | Average     | 0.77     |
-

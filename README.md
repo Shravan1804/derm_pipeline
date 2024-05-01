@@ -2,7 +2,7 @@
 This pipeline is presented in the thesis "Deep learning in Clinical Dermatology" available on the [edoc server](https://edoc.unibas.ch/94022/) of the University of Basel.
 
 The first goal of this pipeline is to simplify DL training procedures and enable dermatologists to ellaborate
-their own models. 
+their own models.
 
 The main data source for DL applications in dermatology being patient images, the field benefits from all
 types of vision applications: classification, segmentation, object detection, etc.
@@ -18,7 +18,7 @@ The following libraries are needed alongside their dependencies:
 * fastai
 * tensorboard and tensorboardx
 * opencv
-* pillow 
+* pillow
 * matplotlib
 * numpy
 * bidict
@@ -34,7 +34,7 @@ The pipeline assumes the following data formats.
 The examples show 3 datasets: weakly labeled data (wl_train), strongly labeled data (sl_train and sl_test).
 There can be more than 3 datasets
 ### Classification
-Every datasets should have all class directories. 
+Every datasets should have all class directories.
 ```
 classification_data
 +-- sl_test

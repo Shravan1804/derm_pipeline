@@ -4,7 +4,9 @@ from ..training import metrics
 
 
 def cls_perf(perf, inp, targ, cls_idx, cats, axis=-1, precomp={}):
-    """Function used to compute classification performance
+    """
+    Compute classification performance.
+
     :param perf: function to call on inp and targ
     :param inp: tensor, predictions
     :param targ: tensor, ground truth
@@ -17,15 +19,23 @@ def cls_perf(perf, inp, targ, cls_idx, cats, axis=-1, precomp={}):
     if cls_idx is not None:
         if axis is not None:
             inp = inp.argmax(dim=axis)
-            TP_TN_FP_FN = precomp[cls_idx] if precomp else metrics.get_cls_TP_TN_FP_FN(targ == cls_idx, inp == cls_idx)
+            TP_TN_FP_FN = (
+                precomp[cls_idx]
+                if precomp
+                else metrics.get_cls_TP_TN_FP_FN(targ == cls_idx, inp == cls_idx)
+            )
         return torch.tensor(perf(*TP_TN_FP_FN)).float()
     else:
-        cls_res = [cls_perf(perf, inp, targ, c, cats, axis, precomp) for c in range(len(cats))]
+        cls_res = [
+            cls_perf(perf, inp, targ, c, cats, axis, precomp) for c in range(len(cats))
+        ]
         return torch.stack(cls_res).mean()
 
 
 def conf_mat(targs, preds, cats, normalize=True, epsilon=1e-8):
-    """Computes confusion matrix from prediction and targs
+    """
+    Compute confusion matrix from prediction and targs.
+
     source https://github.com/fastai/fastai/blob/master/fastai/interpret.py
     :param targs: tensor, ground truth size, B
     :param preds: tensor, model decoded predictions, size B
@@ -36,7 +46,8 @@ def conf_mat(targs, preds, cats, normalize=True, epsilon=1e-8):
     """
     x = torch.arange(0, len(cats))
     cm = ((preds == x[:, None]) & (targs == x[:, None, None])).long().sum(2)
-    if normalize: cm = cm.float() / (cm.sum(axis=1)[:, None] + epsilon)
+    if normalize:
+        cm = cm.float() / (cm.sum(axis=1)[:, None] + epsilon)
     return cm
 
 

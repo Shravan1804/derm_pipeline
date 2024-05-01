@@ -64,7 +64,7 @@ In the case of the eye region, labels include the abnormal semantic class that s
 | Diagnosis        | F1-score |
 |------------------|----------|
 | Average ear      | 0.80     |
-| Average eye      | 0.83     | 
+| Average eye      | 0.83     |
 | Average hand     | 0.83     |
 | Average mouth    | 0.66     |
 | Average nail     | 0.65     |
