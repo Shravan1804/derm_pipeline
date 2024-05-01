@@ -98,21 +98,43 @@ object_detection_data
 
 ### Classification
 ```
-python derm_pipeline/training/distributed_launch.py derm_pipeline/classification/train_classification.py \
+python src/training/distributed_launch.py src/classification/train_classification.py \
     --data classification_data --wl-train wl_train --sl-train sl_train --sl-tests sl_test \
     --input-size 32 --bs 64 --exp-name classif_demo --epochs 1 --fepochs 1 --lr .0002
 ```
 ### Segmentation
 Images and masks should have the same name. Mask extension should be png.
 ```
-python derm_pipeline/training/distributed_launch.py derm_pipeline/segmentation/train_segmentation.py \
+python src/training/distributed_launch.py src/segmentation/train_segmentation.py \
     --data segmentation_data --wl-train wl_train --sl-train sl_train --sl-tests sl_test \
     --input-size 32 --bs 64 --exp-name segm_demo --epochs 1 --fepochs 1 --lr .0002
 ```
 ### Object Detection
 ```
-python derm_pipeline/training/distributed_launch.py derm_pipeline/object_detection/train_object_detection.py \
+python src/training/distributed_launch.py src/object_detection/train_object_detection.py \
     --data object_detection_data --wl-train wl_train --sl-train sl_train --sl-tests sl_test \
     --input-size 128 --bs 64 --exp-name od_demo --epochs 1 --fepochs 1 --lr .0002
 ```
 
+## Dermatology Deep Learning Pipeline Applications
+This directory contains the main applications of the dermatology pipeline.
+
+### Reproducing experiments
+
+#### Running environment
+The docker image can be built using `projects/Dockerfile` and the following command:
+```
+docker build --pull --no-cache --tag fastai2 -f projects/Dockerfile .
+```
+All training commands should be run inside a docker container that can be created as follo:
+```
+docker run --gpus '"device=4"' -it --rm -v /raid/dataset:/workspace/data -v /raid/code:/workspace/code -v /raid/logs:/workspace/logs --ipc=host --name test_pipeline fastai2:latest
+```
+
+#### Experiment logging and results
+All training commands will create a log directory (usually in /raid/logs) that contains at least three subdirectories:
+* Model weights
+* Tensorboard logs recording losses and validation metrics
+* Test performance plots. One directory will be created per test set.
+
+The test performance are also printed on stdout at the end of the training.
