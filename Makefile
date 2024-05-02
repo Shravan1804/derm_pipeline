@@ -7,7 +7,7 @@ PROJECT_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/)
 include make-template/*.mk
 
 WANDB_CACHE_DIRS = -v $$PWD/wandb_config_dir:/.config/ -v $$PWD/wandb_netrc_dir:/.netrc/ -v $$PWD/wandb_cache_dir:/.cache
-DOCKER_ARGS := -v $$PWD:/workspace/ -v $(LOCAL_DATA_DIR):/data/ -v $$PWD/numba_cache_dir:/numba_cache_dir/ -v $$PWD/mpl_cache_dir:/mpl_cache_dir/ $(WANDB_CACHE_DIRS)  -p $(PORT):8888 --rm --shm-size=4G
+DOCKER_ARGS := -v $(HOME):/workspace/code -v $(LOCAL_DATA_DIR):/data/ -v $$PWD/numba_cache_dir:/numba_cache_dir/ -v $$PWD/mpl_cache_dir:/mpl_cache_dir/ $(WANDB_CACHE_DIRS)  -p $(PORT):8888 --rm --shm-size=4G
 DOCKER_CMD := docker run $(DOCKER_ARGS) --env-file=.env $(GPU_ARGS) $(DOCKER_CONTAINER_NAME) -it $(PROJECT_NAME):$(GIT_BRANCH)
 
 ###########################
@@ -84,7 +84,7 @@ run_bash: _build  ##@Docker run an interactive bash inside the docker image (def
 
 start_jupyter: _build  ##@Docker start a jupyter notebook inside the docker image (default: GPU=true)
 	@echo "Starting jupyter notebook $(shell [ '$(GPU)' = 'true' ] && echo 'with GPUs $(GPU_ID)')"; \
-	$(DOCKER_CMD) /bin/bash -c "jupyter notebook --allow-root --ip 0.0.0.0 --port 8888"; \
+	$(DOCKER_CMD) /bin/bash -c "jupyter notebook --allow-root --ip 0.0.0.0 --port $(PORT)"; \
 
 ###########################
 # SCRIPTS
