@@ -10,10 +10,6 @@ from fastai.callback.mixup import MixUp
 from tqdm import tqdm
 
 from ..general import common
-from ..object_detection.object_detection_utils import (
-    CustomCocoEval,
-    segm_dataset_to_coco_format,
-)
 from ..segmentation import mask_utils
 from ..segmentation import segmentation_utils as segm_utils
 from ..segmentation.crop_to_thresh import SEP as CROP_SEP
@@ -255,14 +251,16 @@ class ImageSegmentationTrainer(ImageTrainer):
             )
         if self.args.coco_metrics:
             to_coco = partial(
-                segm_dataset_to_coco_format, cats=self.args.cats, bg=self.args.bg
+                segm_dataset_to_coco_format,  # noqa
+                cats=self.args.cats,
+                bg=self.args.bg,
             )
             with common.elapsed_timer() as elapsed:
                 gt, dt = to_coco(interp.targs), to_coco(interp.decoded, scores=True)
                 print(
                     f"Segmentation dataset converted in {datetime.timedelta(seconds=elapsed())}."
                 )
-            cocoEval = CustomCocoEval(gt, dt, all_cats=self.ALL_CATS)
+            cocoEval = CustomCocoEval(gt, dt, all_cats=self.ALL_CATS)  # noqa
             cocoEval.eval_acc_and_summarize(verbose=False)
             (
                 self.coco_param_labels,
@@ -288,7 +286,7 @@ class ImageSegmentationTrainer(ImageTrainer):
             cocoeval = agg_perf["cocoeval"]
             show_val = not self.args.no_plot_val
             save_path = self.plot_save_path(test_path, run, show_val, custom="_coco")
-            CustomCocoEval.plot_coco_eval(
+            CustomCocoEval.plot_coco_eval(  # noqa
                 self.coco_param_labels, cocoeval, figsize, save_path, show_val
             )
 
