@@ -1,4 +1,5 @@
-FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+#FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+FROM pytorch/pytorch:1.10.0-cuda11.3-cudnn8-runtime
 
 # FIX for opencv-python
 # FIX for hanging tzdata
