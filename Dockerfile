@@ -10,11 +10,16 @@ RUN pip install --upgrade pip
 
 WORKDIR /workspace
 
+RUN mkdir /assets
+
+COPY requirements.txt /assets/requirements.txt
+RUN pip install -r /assets/requirements.txt --upgrade --no-cache-dir
+
+COPY requirements_dev.txt /assets/requirements_dev.txt
+RUN pip install -r /assets/requirements_dev.txt --upgrade --no-cache-dir
+
 COPY . /workspace/
 RUN git config --global --add safe.directory '*'
-
-RUN pip install -r /workspace/requirements.txt --upgrade --no-cache-dir
-RUN pip install -r /workspace/requirements_dev.txt --upgrade --no-cache-dir
 
 ENV PYTHONPATH "$PYTHONPATH:./"
 ENV NUMBA_CACHE_DIR=/numba_cache_dir
