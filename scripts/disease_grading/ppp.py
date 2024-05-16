@@ -54,7 +54,7 @@ class PPPTrainer(ImageSegmentationTrainer):
         :param load_mask_array: bool, optional, force mask array loading in memory
         :return: array mask if encrypted else str mask path
         """
-        # Original mask classes: ['other', 'skin', 'pustules', 'spots'']
+        # Original mask classes: ['other', 'skin', 'pustules', 'spots']
         mask = super().load_mask(item, load_mask_array=True)
         if not self.args.include_skin:
             mask[mask == 1] = 0

@@ -304,7 +304,7 @@ class ImageSegmentationTrainer(ImageTrainer):
         """Compute class weights based on train items labels pixel frequency.
 
         :param train_items: tuple of fastai lists, (items, labels)
-        :return: tensor, weight for each categories
+        :return: tensor, weight for each category
         """
         print("Computing class weights")
         size = self.args.input_size, self.args.input_size

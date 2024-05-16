@@ -510,8 +510,6 @@ class ImageTrainer(FastaiTrainer):
         :param val: tuple of valid items and labels
         :param bs: int, batch size
         :param size: int, input side size, will be resized as square
-        :param get_x: function, additional step to get item
-        :param get_y: function, additional step to get target
         :param kwargs: dict, dataloaders kwargs
         :return: train/valid dataloaders
         """
