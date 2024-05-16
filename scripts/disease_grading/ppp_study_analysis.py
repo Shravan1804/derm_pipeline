@@ -51,7 +51,6 @@ def load_data(path):
     masks = list(path.glob("*_preds.png"))
     patients = sorted(set([mask.name.split("_")[0] for mask in masks]))
     locs = sorted(set([mask.name.split("_")[1] for mask in masks]))
-    print(f"Found {len(patients)} patients with locations {locs}.")
     df = pd.DataFrame(
         [
             {
