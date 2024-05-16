@@ -1,0 +1,6 @@
+-r requirements.txt
+coverage>=6
+pytest>=7
+sphinx>=5.1.1
+sphinx_autodoc_typehints>=1.19.0
+sphinx_rtd_theme>=1.0.0

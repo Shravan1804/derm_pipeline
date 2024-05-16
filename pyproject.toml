@@ -1,0 +1,24 @@
+[project]
+name = "derm_pipeline"
+description = "Deep learning pipeline for dermatology images."
+version = "0.1.0"
+authors = [
+    { name = "Ludovic Amruthalingam", email = "ludovic.amruthalingam@hslu.ch"},
+    { name = "Fabian Gröger", email = "fabian.groeger@hslu.ch" },
+]
+
+[tool.black]
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+skip_gitignore=true
+py_version=39
+default_section = "THIRDPARTY"
+known_thirdparty=["wandb","darlinglib"]
+
+[tool.pytest.ini_options]
+# Set true to see logger ouput in test command line window
+log_cli = false
+log_cli_level = "INFO"
+log_cli_format = "%(time)s :: %(name)s :: %(message)s"

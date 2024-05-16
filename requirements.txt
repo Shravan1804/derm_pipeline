@@ -1,1 +1,21 @@
-self-supervised-dermatology  # SSL-package
+accelerate==0.29.3
+cryptography==42.0.5
+bidict==0.23.1
+dill==0.3.8
+efficientnet-pytorch==0.7.1
+fastai==2.7.15
+matplotlib==3.8.4
+numpy==1.26.4
+opencv-python==4.9.0.80
+pandas==2.2.2
+pillow==10.3.0
+pycocotools==2.0.7
+p_tqdm==1.4.0
+scikit-image==0.23.2
+scikit-learn==1.4.2
+self-supervised-dermatology==0.0.16
+shapely==2.0.4
+tensorboard==2.16.2
+tqdm==4.66.2
+torch==2.3.0
+torchvision==0.18.0
