@@ -1,8 +1,93 @@
 import io
 import itertools
+from pathlib import Path
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import seaborn as sns
+
+
+def plot_distribution_summary(
+    df: pd.DataFrame,
+    x: str,
+    row: str,
+    col: str,
+    row_order: Optional[list[str]] = None,
+    col_order: Optional[list[str]] = None,
+    use_row_as_color: bool = False,
+    xlim: Optional[tuple[int, int]] = None,
+    ylim: Optional[tuple[int, int]] = None,
+    binwidth: Optional[float] = None,
+    row_title: Optional[str] = None,
+    col_title: Optional[str] = None,
+    fig_title: Optional[str] = None,
+    save_path: Optional[Path] = None,
+) -> plt.Figure:
+    if row_title is None:
+        row_title = row
+    if col_title is None:
+        col_title = col
+    row_levels = row_order if row_order else df[row].unique()
+    nrows = len(row_levels)
+    col_levels = col_order if col_order else df[col].unique()
+    ncols = len(col_levels)
+    palette = sns.color_palette(n_colors=nrows if use_row_as_color else ncols)
+    fig, axes = plt.subplots(
+        nrows * 3,
+        ncols,
+        figsize=(4 * ncols, 4 * nrows),
+        sharex=True,
+        sharey="row",
+        gridspec_kw={"height_ratios": [0.05, 0.85, 0.1] * nrows},
+    )
+    for r, row_level in enumerate(row_levels):
+        for c, col_level in enumerate(col_levels):
+            row_col_df = df[(df[row] == row_level) & (df[col] == col_level)]
+            spacer_row, hist_row, box_row = range(r * 3, r * 3 + 3)
+            color = palette[r if use_row_as_color else c]
+
+            axes[spacer_row][c].axis("off")
+
+            sns.histplot(
+                data=row_col_df,
+                x=x,
+                ax=axes[hist_row][c],
+                color=color,
+                binwidth=binwidth,
+            )
+            axes[hist_row][c].tick_params(
+                axis="x", which="both", bottom=True, top=False, labelbottom=True
+            )
+            axes[hist_row][c].set_title(
+                f"{row_title} = {row_level}, {col_title}={col_level}"
+            )
+            if xlim:
+                axes[hist_row][c].set_xlim(xlim)
+            if ylim:
+                axes[hist_row][c].set_ylim(ylim)
+
+            sns.boxplot(
+                row_col_df,
+                x=x,
+                orient="h",
+                ax=axes[box_row][c],
+                color=color,
+                fliersize=1,
+            )
+            axes[box_row][c].set(xlabel="", ylabel="")
+            axes[box_row][c].tick_params(
+                axis="x", which="both", bottom=False, top=False, labelbottom=False
+            )
+            if xlim:
+                axes[box_row][c].set_xlim(xlim)
+    if fig_title:
+        fig.suptitle(fig_title)
+    fig.tight_layout()
+    if save_path:
+        fig.savefig(save_path, bbox_inches="tight")
+    return fig
 
 
 def zero_error_bars(vals):
