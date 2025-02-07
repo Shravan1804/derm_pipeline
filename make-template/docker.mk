@@ -91,6 +91,6 @@ ifeq ($(origin PORT), undefined)
 endif
 
 CACHE_DIRS := -v $$PWD/numba_cache_dir:/numba_cache_dir/ -v $$PWD/mpl_cache_dir:/mpl_cache_dir/
-DOCKER_ARGS := -v $$PWD:${DOCKER_SRC_DIR} -v ${LOCAL_DATA_DIR}:/data/ ${CACHE_DIRS} -p ${PORT}:8888 --rm
+DOCKER_ARGS := -v $$PWD:${DOCKER_SRC_DIR} -v ${LOCAL_DATA_DIR}:/data/ ${CACHE_DIRS} -p ${PORT}:${PORT} --rm
 GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD | tr / _)
 DOCKER_CMD := docker run ${DOCKER_ARGS} ${ENV_FILE} ${GPU_ARGS} ${DOCKER_CONTAINER_NAME} ${TTY} ${PROJECT_NAME}:${GIT_BRANCH}
