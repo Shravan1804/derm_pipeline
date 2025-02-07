@@ -1,5 +1,8 @@
 import os
+from pathlib import Path
 
+import cv2
+import numpy as np
 import torch
 
 from ..classification.classification_utils import conf_mat
@@ -119,3 +122,35 @@ def pixel_conf_mat(targs, preds, cats, normalize=True, epsilon=1e-8):
     :return: tensor, confusion matrix, size N x N
     """
     return conf_mat(targs.flatten(), preds.flatten(), cats, normalize, epsilon)
+
+
+def create_dummy_segm_dataset(
+    path,
+    n_classes,
+    dataset_name="dummy_segm_dset",
+    img_size=(64, 64),
+    n_samples=10,
+    train_ratio=0.8,
+):
+    path = Path(path) / dataset_name
+    train_size = int(n_samples * train_ratio)
+    splits = {"train": train_size, "test": n_samples - train_size}
+
+    for split, num_samples in splits.items():
+        img_dir = path / split / "images"
+        mask_dir = path / split / "masks"
+        img_dir.mkdir(parents=True, exist_ok=True)
+        mask_dir.mkdir(parents=True, exist_ok=True)
+
+        for i in range(num_samples):
+            img = np.random.randint(0, 256, (*img_size, 3), dtype=np.uint8)
+            mask = np.random.randint(0, n_classes, img_size, dtype=np.uint8)
+
+            # Save image and mask
+            img_path = img_dir / f"image_{i:03}.jpg"
+            mask_path = mask_dir / f"image_{i:03}.png"
+
+            cv2.imwrite(str(img_path), img)
+            cv2.imwrite(str(mask_path), mask)
+
+    print(f"Dummy segmentation dataset created at {path}")
